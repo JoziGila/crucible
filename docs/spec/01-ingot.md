@@ -7,7 +7,7 @@ Ingot is Crucible's design language: pure, strict and statically typed, with uni
 | ING owns | Others own |
 | --- | --- |
 | Syntax, grammar, formatting, editions | Operation semantics and behavior versions (ANV, FLX) |
-| Types: `Quantity<D>`, `Tol<T>`, `Approx<T>`, `Truth`, `Expr<T>`, records, enums, traits | `ErrorBound`, `ErrorBudget` and `CheckOutcome` layouts in `base`; `Field` (FLX) |
+| Types: `Quantity<D>`, `Tol<T>`, `Approx<T>`, `Truth`, `Expr<T>`, `CheckOutcome` (in `base`), records, enums, traits | `ErrorBound` and `ErrorBudget` layouts in `base`; `Field` (FLX) |
 | `OpSite`; query syntax and lowering; the decision rule for `Truth` and checks | `EntityId`, lineage and `anvil::resolve` (ANV) |
 | Evaluation semantics, `Failure` and `Abort` in the language, per-call limits | Scheduling, caching, labels, evaluation-wide limits and the determinism policy (KLN); mechanisms (PLT) |
 | The interpreter, the Ingot IR and the deferred code generator | The kernel IR (FLX, `kernels`); the determinizer (PLT) |
@@ -258,7 +258,7 @@ type Velocity = Quantity<L / T>
 
 Rotational kinds follow the strong angular system of contract section 5: `Torque` is J/rad, `MomentOfInertia` kg·m²/rad², `RotationalStiffness` J/rad² and `AngularVelocity` rad/s. `Nm` is newton metre per radian, and energy is `J` or `[N*m]`. Power τω, work τθ, τ = Iα and ½Iω² type-check without casts, and the type checker verifies that each `Network` port type's power expression is a power.
 
-An oscillation's angular frequency is an `AngularFrequency` (T⁻¹) and a phase is dimensionless, so ω = √(k/I), the reactance ωL in ohms and `cos(omega * t)` type-check. A rotation becomes a phase only through the constant `radian` or a std function such as `electrical_angle(theta, poles)`. The mp-units page gives angular frequency in rad/s; Ingot keeps rad/s for rotation only (CCR-ING-12).
+An oscillation's angular frequency is an `AngularFrequency` (T⁻¹) and a phase is dimensionless, so ω = √(k/I), the reactance ωL in ohms and `cos(omega * t)` type-check. A rotation becomes a phase only through the constant `radian` or a std function such as `electrical_angle(theta, poles)`. The mp-units page gives angular frequency in rad/s; Ingot keeps rad/s for rotation only (contract section 5).
 
 **Decision D-ING-3:** Plane angle is a base dimension, never cancelled implicitly, and rotational kinds follow the strong angular system: torque in J/rad, moment of inertia in kg·m²/rad², rotational stiffness in J/rad². Oscillation angular frequency is a kind of T⁻¹ and phase is dimensionless. *Why:* with torque in N·m, the laws of rotation each carried a stray radian (R3-29), and angular frequency in rad/s would put one into ωL. *Rejected:* angle dimensionless as in the SI (`3000rpm` would silently become 314 Hz); torque in N·m beside a base angle, the round 1 choice; implicit cancellation at annotations. (revised in round 2)
 
@@ -309,7 +309,7 @@ Absolute temperature is a point, as in mp-units' affine space and Pint's offset 
 
 `Tol<P>` and `Approx<P>` for an affine `P` carry their deviations and bounds in `P::Delta`. `Point3` follows the same rules, and gauge pressure is written `p_atm + 2bar`.
 
-Quantities are stored in coherent SI units as binary64, and source keeps literals as written. Display profiles map dimensions to units per package, user or view without changing values. Values print as the shortest round-tripping decimal [unverified: Ryū; paper not opened], and generated literals keep the unit at their position.
+Quantities are stored in coherent SI units as binary64, and source keeps literals as written. Display units (UIX) map quantity kinds to units per package, user or view, and a `RenderProfile` carries them into Snapshots; neither changes values. Values print as the shortest round-tripping decimal [unverified: Ryū; paper not opened], and generated literals keep the unit at their position.
 
 ### Records, enums, traits and collections
 
@@ -375,7 +375,7 @@ A `Field<D, V>` takes a product domain written as a tuple, `Field<(Body, Time), 
 | Symmetric | `4mm ± 0.1mm` | 3.9 mm to 4.1 mm |
 | Deviations | `10mm ±(-0.1mm, +0.2mm)` | 9.9 mm to 10.2 mm; signs mandatory |
 | Limits | `tol(9.9mm..=10.2mm)` | Nominal at the mid-limit |
-| Fit code | `fit(10mm, H7)` | ISO 286-1:2010 tables in `std::mech::fits` (MEC) |
+| Fit code | `fit(10mm, H7)` | ISO 286-1:2010 tables in `std::standards::iso286` (MEC) |
 | Basic | `basic(30mm)` | Theoretically exact, toleranced by a GD&T control |
 
 Inverted limits fail with `ING4001` and a deviation of the wrong dimension with `ING4002`; a dimensionless deviation is relative only as a `%` or `ppm` literal.
@@ -392,7 +392,7 @@ Each tolerance site (a `±` expression, `tol(…)` or `fit(…)`) owns a noise s
 | `a * b`, `sqrt(a)`, other smooth functions | First-order term per symbol, plus a remainder bounding the rest over the joint box |
 | `a < b` and other comparisons | `ING4101`; fixes offer `a.upper() < b.lower()`, `a.nominal < b.nominal` and `yield_of(…)` |
 
-Rounding enters the remainder, so `.limits()` is a guaranteed enclosure in binary64. Statistics are explicit calls that print their assumed distributions: `.rss(k:)` propagates to first order as in JCGM 100:2008, and `.monte_carlo(n:, rng:)` follows JCGM 101:2008. Sites declare distributions with `.statistical(Normal(cp: 1.33))` or an MFG process capability, else `std::tol::default_distribution` applies (normal, limits at ±3σ), and `group:` correlates parts from one reel or fixture.
+Rounding enters the remainder, so `.limits()` is a guaranteed enclosure in binary64. Statistics are explicit calls that print their assumed distributions: `.rss(k:)` propagates to first order as in JCGM 100:2008, and `.monte_carlo(n:, rng:)` follows JCGM 101:2008. Sites declare distributions with `.statistical(Normal(cp: 1.33))` or an MFG process capability, else MEC's `std::mech::tol::default_distribution` applies (D-MEC-28: uniform within the limits, or normal from a process profile's Cp and Cpk), and `group:` correlates parts from one reel or fixture.
 
 A symbol stands for one manufactured characteristic:
 
@@ -409,8 +409,9 @@ A pin in a bore shows a linear stack:
 
 ```
 pub feature pin_joint(bore_d: Length = 10mm, gap_min: Length = 4um) -> Assembly {
-    let bore = fit(bore_d, H7)                   // 10.000 to 10.015 mm [unverified: ISO 286-2 values]
-    let pin = fit(bore_d, g6)                    // 9.986 to 9.995 mm [unverified: ISO 286-2 values]
+    let cp1 = Normal(cp: 1.0)                    // centred processes, limits at ±3σ
+    let bore = fit(bore_d, H7).statistical(cp1)  // 10.000 to 10.015 mm [unverified: ISO 286-2]
+    let pin = fit(bore_d, g6).statistical(cp1)   // 9.986 to 9.995 mm [unverified: ISO 286-2]
     let h = instance(block_with_bore(d: bore), fixed: true)
     let s = instance(pin_part(d: pin))
     let clearance = bore - pin                   // affine in two symbols
@@ -420,7 +421,7 @@ pub feature pin_joint(bore_d: Length = 10mm, gap_min: Length = 4um) -> Assembly 
 }
 ```
 
-`clearance.limits()` is exactly 5 µm to 29 µm. Default distributions give σ = 2.5 µm for the bore and 1.5 µm for the pin, so the upper 3σ limit is 17 µm + 3 × 2.92 µm = 25.75 µm. The bore and pin faces receive their fit codes as PMI by forwarding.
+`clearance.limits()` is exactly 5 µm to 29 µm. With Cp = 1.0, σ is 2.5 µm for the bore and 1.5 µm for the pin, so the upper 3σ limit is 17 µm + 3 × 2.92 µm = 25.75 µm; MEC's uniform default would give 32.1 µm, above the worst case. The bore and pin faces receive their fit codes as PMI by forwarding.
 
 ### GD&T controls as types
 
@@ -450,7 +451,7 @@ Rules that need resolved geometry, such as datum degrees of freedom, run at buil
 
 Arithmetic propagates each source separately with outward rounding, keeping the product term (|xy − x̃ỹ| ≤ |x̃|·e_y + |ỹ|·e_x + e_x·e_y). Bounds in one norm add, different norms never combine, and a part's kind is the weakest of its inputs. Division by an enclosure containing zero fails with `ING6104`.
 
-One rule decides every comparison of approximate values, in `if`, `match` guards, query `where:` and `require` alike. For `x < y` with the evidence level `e` (`Estimated` unless a check declares `Guaranteed`):
+One rule decides every comparison of approximate values, in `if`, `match` guards, query `where:` and `require` alike. For `x < y` with the declared evidence `e`, a bound kind (`Estimated` unless a check declares `Guaranteed`):
 
 | Outcome | Condition |
 | --- | --- |
@@ -727,7 +728,7 @@ Every node ends in a value or a typed `Failure`, and every Evaluation ends or ab
 
 A call's steps include the plain functions it calls, while feature and `#[memo]` calls are nodes with their own limits. An outcome therefore never depends on the caller's remaining budget or on the cache, and an operation call charges 100 steps plus 1 per marshalled element. Effective limits are a function of source and manifest only, and they enter the node key.
 
-Kiln adds two evaluation-wide limits as Aborts: 10,000 nested node demands, so `f(n) = f(n + 1)` aborts with `DemandDepthExhausted`, and a fuel governor per Evaluation from its budget. An organization ceiling below a requested limit refuses the Evaluation at admission with the Abort `FuelCeilingExceeded`, never a cached `FuelExhausted`. A host out of memory below the semantic limit raises the Abort `ResourceExhausted`.
+Kiln adds two evaluation-wide limits as Aborts: 10,000 nested node demands, so `f(n) = f(n + 1)` aborts with `DemandDepthExhausted`, and a fuel governor per Evaluation from its `Budget` (AGT). An organization ceiling below a requested limit refuses the Evaluation at admission with the Abort `FuelCeilingExceeded`, never a cached `FuelExhausted`. A host out of memory below the semantic limit raises the Abort `ResourceExhausted`.
 
 **Decision D-ING-23:** Per-call limits come from source and manifest only and enter the node key; evaluation-wide limits and policy ceilings act only as Aborts. *Why:* a limit clamped by policy made two organizations cache different results for one key (R3-12), and per-call limits alone let a self-calling feature build an unbounded chain of nodes (R3-04). *Rejected:* organization ceilings inside the limit; per-call limits as the only bound; wall-clock limits (nondeterministic, so they exist only as cancellation).
 
@@ -827,7 +828,7 @@ An evaluation `Failure` adds the feature call chain, the entities involved and a
 
 ### Checks
 
-`require` declares a check: a predicate with a severity, a fidelity, an evidence level and a source. It never changes the value it attaches to, and its predicate runs as a separate check node after the geometry it reads.
+`require` declares a check: a predicate with a severity, a fidelity, the bound kind it accepts as evidence and a source. It never changes the value it attaches to, and its predicate runs as a separate check node after the geometry it reads.
 
 ```
 require stress < 0.6 * sy, severity: Error, fidelity: SignOff, evidence: Estimated,
@@ -839,7 +840,7 @@ part.require(part.mass() < 120g, severity: Warning)       // attaches to the Par
 | --- | --- | --- |
 | `severity` | `Error` | `Error` blocks protected merges and releases; `Warning` and `Info` report |
 | `fidelity` | `SignOff` | The fidelity a release or protected merge evaluates; lower outcomes are provisional |
-| `evidence` | `Estimated` | The weakest bound kind that may decide: `Estimated` or `Guaranteed` |
+| `evidence` | `Estimated` | The weakest bound kind that may decide: `Estimated` or `Guaranteed`; never a model's Evidence level (COV) |
 | `name` | From the predicate's source | Identity across edits; Kiln's diff and merge match checks by it |
 | `because` | none | Rationale for reports and agents |
 
@@ -953,7 +954,7 @@ The SDK's quantity types come from the prelude's kind table, so dimensions survi
 | WIT | Ingot |
 | --- | --- |
 | `bool`, `s8` to `s64`, `u8` to `u32`; `u64` | `Bool`, `Int`; `u64` fails with `ING6101` above 2⁶³ − 1 |
-| A `u64` named `seed`; ECO's `fidelity` enum | `Seed`; omitted, filled by the host, because code cannot observe fidelity |
+| A `u64` named `seed`; a `fidelity` enum (KLN's `Fidelity`) | `Seed`; omitted, filled by the host, because code cannot observe fidelity |
 | `f32`, `f64`; `crucible:units` aliases | `Real`; `Length`, `Force`, `Temperature` (kelvin, converted in the wrapper) |
 | `string`, `list`, `option`, `result`, `tuple` | `ExternalText` for Wasm component strings; `[T]`, `Option`, `Result`, tuples |
 | `record`, `variant`, `enum`, `flags` | `record`, `enum`, `enum`, `Set<Enum>` |
@@ -996,7 +997,7 @@ The Wasm component's error estimate becomes the statistical part of the Field's 
 
 ## Packages and versions
 
-A package is a directory with `ingot.toml` and modules under `src/`, rooted at `src/lib.ingot`; a design repository's root is `src/main.ingot`, whose `pub` items are its outputs. Items are private to their module, visible package-wide with `pub(package)`, or public with `pub` and part of the semantic-version interface. A `use` path starts with a dependency, `package`, `self` or `super`.
+A package is a directory with `ingot.toml` and modules under `src/`, rooted at `src/lib.ingot`; a design repository's root is `src/main.ingot`, whose `pub` items are its outputs. A module's items are private to it, visible package-wide with `pub(package)`, or public with `pub` and part of the semantic-version interface. A `use` path starts with a dependency, `package`, `self` or `super`.
 
 Imports are acyclic (`ING1301`), as in KCL, and two globs supplying one name make it ambiguous (`ING1201`).
 
@@ -1022,6 +1023,7 @@ At publish the registry diffs the public interface and refuses a minor or patch 
 | Remove or rename a public item, parameter, field, role or coordinate system; change a parameter's dimension, kind or type; add a parameter without a default; narrow a range; add a variant to an exhaustive enum | Major |
 | Change a default value, or the entity names a public feature produces on the package's test designs | Minor, labelled output-changing (D-ECO-14) |
 | Add a defaulted parameter, an item, a role or a variant to a `#[non_exhaustive]` enum; widen a range | Minor |
+| Change private code so that test-design outputs change but entity names do not | Patch, labelled output-changing (D-ECO-14) |
 | Change only documentation, metadata or private code that leaves test-design outputs and names unchanged | Patch |
 
 `ingot.lock` is sorted TOML written only by tools. ING owns `[language]`, the language behavior version fixing evaluation semantics, the cost table, the n-ary lowering rule and std numerics. `[operations]` pins operation versions (KLN and the owners), and `[[package]]`, `[[asset]]` and `[[external]]` pin the rest by SHA-256 (ECO); compiler releases may change diagnostics and speed, never values, failures or fuel.
@@ -1080,7 +1082,7 @@ A feature's signature generates its dialog, its documentation page and its agent
 
 | Block | Head | Children |
 | --- | --- | --- |
-| File; item | Inner attributes; attributes, docs and signature | Items; members, with the closing brace as tail |
+| File; item | Inner attributes; attributes, docs and signature | Top-level items; members, with the closing brace as tail |
 | Parameter, field, variant; table row | The whole text | None |
 | Statement; arm | Text up to the first nested block; the arm's opener | Arms; statements, with the closer as tail |
 
@@ -1189,27 +1191,30 @@ Figures are targets on contract section 13.3's reference laptop.
 
 | To | Provides | Types |
 | --- | --- | --- |
-| KLN | Front-end stages; module code hashes; split node outputs; call protocol with program order; literal overrides; limits in keys; text-derived sites; block grammar with block-local parsing; free-text span classes; variant regions for the 150% BOM | `OpSite`, `Feature`, `Check` |
+| KLN | Front-end stages; module code hashes; split node outputs; call protocol with dependency recording and program order; literal overrides; limits in keys; text-derived sites; block grammar with block-local parsing; free-text span classes; variant regions for the 150% BOM; `ING6401` only at the fidelity ceiling | `OpSite`, `Feature`, `Check` |
 | ANV | `OpSite`s; `QueryPlan`s with anchored ranks; named sub-entities of sketch helpers; data-flow copy marks; `InputSensitivity`; the `Truth` rule for filters; GD&T attributes | `Query`, `Tol<T>` |
-| FLX | Product- and parameter-domain `Field` types; `Complex<Q>`, `im`, `.absolute()`, `select`; `Expr<T, Out>` and record results; `Approx`, `Truth` and the decision rule; `goals:` and `wrt:` as ordinary arguments | `Field<D, V>`, `Expr<T>`, `Approx<T>` |
-| MEC | Features, builder blocks, symbolic constraints, families, roles, `Tol<T>` with fits, typed aspects, keyed iteration and `skip:` keys, `#[interface]` | `Feature`, `Tol<T>`, `Query` |
-| ELX | `network { … }` with set-like accumulation; port power expressions checked by the type checker; `Tol` correlation groups; `CatalogSelection` re-resolution; `#[configuration]` | `Tol<T>`, `Network` |
-| COV, MFG | Records, enums, `Map`, `Range` as interval, `Decimal` and `Money<C>`, `require`, kinds for parameter domains | `Quantity<D>`, `Check` |
-| UIX | Language service; `EntityId`-to-span map; dialog metadata and handles; phase 1 edit-plan ranking; minimal `SourcePatch`es; `crucible/reveal` | `SourceSpan`, `Feature` |
-| AGT | Diagnostics with fixes; the formatter; metadata for tool schemas; `ExternalText`; free-text span classes; `CheckOutcome` values | `Check`, `Feature` |
-| ECO | Manifest language keys; lockfile `[language]`; modules and editions; semantic-version rules; binding conventions | `Feature` |
-| PLT | The interpreter on every target; verified generated modules from phase 2 at the earliest | `PlatformClass` |
+| FLX | Product- and parameter-domain `Field` types and syntax; `Complex<Q>`, `im`, `.absolute()`, `select`; `Expr<T, Out>` and record results; `Approx`, `Truth` and the decision rule; `goals:` and `wrt:` as ordinary arguments | `Field<D, V>`, `Expr<T>`, `Approx<T>` |
+| MEC | Features, builder blocks, symbolic constraints, families, roles, `Tol<T>` with fits and symbols, typed aspects, keyed iteration and `skip:` keys, `#[interface]`, `#[configuration]` | `Feature`, `Tol<T>`, `Query` |
+| ELX | `network { … }` with set-like accumulation; port power expressions checked by the type checker; `Tol` correlation groups; `CatalogSelection` re-resolution; `#[configuration]`; `#[interface]` records; `#[waive]`; data modules with one item per line | `Tol<T>`, `Network` |
+| COV | Records, `Range` as interval, kinds for typed regime functions, `require`, `CheckOutcome` with `conditional_on`, the `Truth` decision rule | `Quantity<D>`, `Check` |
+| MFG | Records, enums, `Map`, kinds for quantity-type Field domains, `Decimal` and `Money<C>`, `require` | `Quantity<D>`, `Check` |
+| UIX | Language service in-app and over stdio; `EntityId`-to-`OpSite`-and-span map; dialog metadata and handles; literal overrides; phase 1 edit-plan ranking, dependence and forward-mode derivatives; minimal `SourcePatch`es; `#[was]` renames; `crucible/reveal` | `SourceSpan`, `Feature` |
+| AGT | Diagnostics with fixes as `SourcePatch`es; the formatter; metadata, doc comments and description templates for tool schemas; `ExternalText`; free-text span classes; `CheckOutcome` values and the decision rule; `#[was]`; `ING-L-FragileSelector` | `Check`, `Feature` |
+| ECO | Manifest language keys; lockfile `[language]`; modules and editions; semantic-version rules, including the entity-name row; binding and wrapper conventions | `Feature` |
+| PLT | The interpreter on every target; generated modules for verification from phase 2 at the earliest; the feature-call memory model | `PlatformClass` |
 
 ### Ingot requires
 
 | From | Requirement |
 | --- | --- |
-| KLN | Suspending scheduler; keys with `OpSite`, code hashes and limits; split outputs with their own change markers; Aborts; demand-depth and fuel limits; `Differentiable` and reverse traversal; span integrity in `repo`; block ids mapped onto text identities |
-| ANV | `anvil::resolve` with notes, `RankSwap` and compiling fixes; role vocabularies with per-parameter surface or extent use; copy and mirror roles; split policy `Fail` for GD&T; certified sketch solves; canonical geometric order; `shape_velocity` from phase 2 |
-| FLX | Regularized reductions with `ErrorBudget`s; calibrated `Estimated` bounds; singular sets; tangent and adjoint rules; `away_from` regions |
-| PLT | `detmath` for native and wasm32; the determinizer and `wasm-host`; text normalization; the browser memory table |
-| ECO | Registry, signing, publish-time interface diff, Wasm component bundles, the RFC process |
-| MEC | GD&T records and validators per dialect; std features with roles and keyed generators; `std::mech::refgeom` |
+| KLN | Suspending scheduler; keys with `OpSite`, code hashes and limits; split outputs with their own change markers; Aborts; demand-depth and fuel limits; `Pending` on `Undecided` below the fidelity ceiling; `Differentiable` and reverse traversal; span integrity in `repo`; block ids mapped onto text identities |
+| ANV | The operations catalog with versions and tangent rules; `anvil::resolve` with notes, `RankSwap` and compiling fixes; role vocabularies with per-parameter surface or extent use; copy and mirror roles; split policy `Fail` for GD&T; certified sketch solves; canonical geometric order; `shape_velocity` from phase 2 |
+| FLX | The operations catalog; spaces, measures, `solve` and form checks; regularized reductions with `ErrorBudget`s; calibrated `Estimated` bounds; singular sets; tangent and adjoint rules; `away_from` regions |
+| COV | `std::physics` and `std::materials`; envelope record syntax needs |
+| ELX | Builder semantics for `network { … }`; data modules for `Schematic` and `Layout`; `CatalogSelection` over pinned definitions and offers |
+| PLT | `detmath` for native and wasm32; Wasm executors, the determinizer, `wasm-host` and verification of generated modules; text normalization; the browser memory table |
+| ECO | Registry, signing, publish-time interface diff, Wasm component bundles, `crucible:` WIT packages and worlds, the RFC process |
+| MEC | GD&T records and validators per dialect; std features with roles and keyed generators; `std::mech::refgeom`; `std::standards::iso286`; `std::mech::tol::default_distribution` (D-MEC-28) |
 | AGT | `SourcePatch` application; `read.*` and `inspect.describe` returning free-text handles |
 
 ## Oracles
@@ -1230,7 +1235,7 @@ All oracles live under `oracles/ingot/` (protected). The corpus is std, the gold
 | ING-O-10 | Recorded GUI sessions | Minimal patches; every comment kept; every `OpSite` outside the touched statements kept |
 | ING-O-11 | Query lowering | Equal queries hash equal; unanchored rank selectors raise `ING-L-FragileSelector`; `Tol` filter arguments fail |
 | ING-O-12 | Drag specialization on golden-product drag scripts | Residual and full programs bit-identical |
-| ING-O-13 | Minimal re-evaluation over 500 scripted edits, fuel-only edits included (shared with Kiln's minimality oracle) | Re-executed nodes equal the reference set; none after fuel-only edits |
+| ING-O-13 | Minimal re-evaluation over 500 scripted edits, fuel-only edits included (shared with KLN-O-MIN-1) | Re-executed nodes equal the reference set; none after fuel-only edits |
 | ING-O-14 | Differential fuzzing of the code generator: interpreter against compiled code, optimized against unoptimized | No divergence per release |
 | ING-O-15 | Programs with random holes | Hole-independent bindings equal the complete program's |
 | ING-O-16 | Derivatives on smooth programs; dependence sets; phase 1 ranking on drag scripts | Taylor order 2 ± 0.1; dependence exact; provenance literal ranked first |
@@ -1266,6 +1271,8 @@ All oracles live under `oracles/ingot/` (protected). The corpus is std, the gold
 | 4 | GP6: large symbolic forms and parameter-domain forms in use (FLX) |
 | 5 and later | Proposed: a mechanized soundness proof of the dimension and tolerance calculus, and a second interpreter for aerospace and medical certification |
 
+Ingot's types for shared physics capabilities arrive early, but each capability takes its phase from contract section 13.4: DFN cells, for example, are phase 5.
+
 ## Open questions
 
 1. **Kind granularity.** std starts with the kind pairs in "Dimensions" and adds kinds only on evidence from user errors.
@@ -1274,11 +1281,10 @@ All oracles live under `oracles/ingot/` (protected). The corpus is std, the gold
 4. **Affine arithmetic at scale.** Stacks over 10⁵ sites may need symbol condensation; phase 2 measures the threshold and how to report it.
 5. **ELX data modules.** Layouts of 10⁶ items may parse too slowly as Ingot; the fallback is a binary sidecar keyed by statement identity.
 6. **`Decimal` resolution.** Is 10⁻⁹ enough for every currency and pricing rule MFG needs?
-7. **Default distributions.** MFG may prefer process-specific defaults, which make results depend on the process profile.
-8. **Feature granularity.** Which std helpers are `fn` and which `feature`; MEC, FLX and ELX review the split before phase 1 freezes std.
-9. **Jacobian types.** `Mat<R, C>` error messages need design with FLX.
-10. **Literal sites under live edits.** A concurrent rename of a binding during a drag loses the override's site and ends the drag with a notice; UIX confirms.
-11. **Findings declined in part.**
+7. **Feature granularity.** Which std helpers are `fn` and which `feature`; MEC, FLX and ELX review the split before phase 1 freezes std.
+8. **Jacobian types.** `Mat<R, C>` error messages need design with FLX.
+9. **Literal sites under live edits.** A concurrent rename of a binding during a drag loses the override's site and ends the drag with a notice; UIX confirms.
+10. **Findings declined in part.**
     - R2-06: calls get no CRDT identity, because contract section 5 derives call identity from name and occurrence; inserting a same-name call renames later same-name calls in its statement.
     - R3-33: one instance per worker with state machines applies to the code generator; the interpreter reaches the same isolation with heap frames.
     - R6-33: ING sets only its own ratios; Wasm component and user-form ratios belong to PLT, ECO and FLX.
@@ -1287,9 +1293,9 @@ All oracles live under `oracles/ingot/` (protected). The corpus is std, the gold
 
 ## Contract change requests
 
-- **CCR-ING-11. Pending branches.** Contract section 5's `Truth` says `if` on `Undecided` "fails loudly"; add "at the Evaluation's fidelity ceiling; below it the node's status is `Pending` until the next fidelity decides". *Reason:* R3-14; otherwise every branch on a Flux result fails at `Interactive`.
-- **CCR-ING-12. Rotation and phase.** Add to contract section 5's `Quantity<D>`: oscillation angular frequency is a kind of T⁻¹ and phase is dimensionless; a rotation becomes a phase only through `radian`. *Reason:* with angular frequency in rad/s, ω = √(k/m) and the reactance ωL are ill-typed, and the 50-formula oracle needs them.
-- **CCR-ING-13. `OpSite` as a frame path.** Contract section 5 defines statement and call identity; add that an `OpSite` is the path of frames (statement, call, keys) from the Evaluation's root, `fn` calls included. *Reason:* two calls of one helper must name their entities apart (R3-05).
+- CCR-ING-11, pending branches: accepted in contract v5; contract section 5 (`Truth`).
+- CCR-ING-12, rotation and phase: accepted in contract v5; contract section 5 (`Quantity<D>`).
+- CCR-ING-13, `OpSite` as a frame path: accepted in contract v5; contract section 5 (`OpSite`).
 
 ## Sources
 
