@@ -1,8 +1,8 @@
 # Crucible spec
 
-Crucible is one Rust platform where people and agents design, simulate, manufacture and release physical products from a single typed model. This repository is its specification: a binding architecture contract, twelve subsystem specs, an adversarial review and the revision work in progress. Crucible, Ingot, Anvil, Flux and Kiln are working names.
+Crucible is one Rust platform where people and agents design, simulate, manufacture and release physical products from a single typed model. This folder is its specification: a binding architecture contract, twelve subsystem specs, an adversarial review and the revision work in progress. Crucible, Ingot, Anvil, Flux and Kiln are working names.
 
-The published view is the Claude Doc [Crucible — Platform Spec](https://claude.ai/code/artifact/bb8a8fb2-1060-40c5-98b7-fe5ef6148a0c). This repository is the source of truth; the doc is published from it.
+The published view is the Claude Doc [Crucible — Platform Spec](https://claude.ai/code/artifact/bb8a8fb2-1060-40c5-98b7-fe5ef6148a0c). This folder is the source of truth; the doc is published from it.
 
 ## Reading order
 
@@ -67,15 +67,15 @@ tools/                   check.py (spec check), extract.py (cross-tab extracts),
 | `review` | Six adversarial reviews: 295 findings, 23 of them Critical |
 | `contract-v4` | Contract v4 with the review rulings, the round 2 brief and the revision packets |
 
-`git show round-1:spec/<file>.md` prints a tab's first draft.
+`git show round-1:docs/spec/<file>.md` prints a tab's first draft.
 
 ## Tools
 
 ```
-python3 tools/check.py spec/06-mechanical.md --base round-1   # contract rules, skeleton, oracles, decisions, cuts
-python3 tools/check.py --all -q                                 # every tab
-python3 tools/extract.py                                        # decisions, change requests, interfaces, open questions
-python3 tools/findings.py                                       # re-parse review/ into review/findings.json
+python3 docs/tools/check.py docs/spec/06-mechanical.md --base round-1   # contract rules, skeleton, oracles, decisions, cuts
+python3 docs/tools/check.py --all -q                                      # every tab
+python3 docs/tools/extract.py                                             # decisions, change requests, interfaces, open questions
+python3 docs/tools/findings.py                                            # re-parse docs/review/ into docs/review/findings.json
 ```
 
-Python 3.9 or later, standard library only.
+Run them from the repository root. Python 3.9 or later, standard library only.

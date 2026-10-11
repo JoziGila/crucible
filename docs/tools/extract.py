@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Collect decisions, contract change requests, interfaces and open questions from every tab.
 
-    python3 tools/extract.py        writes build/extracts/{decisions,ccr,interfaces,open-questions}.md
+    python3 docs/tools/extract.py        writes docs/build/extracts/{decisions,ccr,interfaces,open-questions}.md
 
 Use it for the ruling step, the consistency pass and the Decisions log.
 """
@@ -36,7 +36,7 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     for name, chunks in parts.items():
         (OUT / f"{name}.md").write_text("\n\n".join(chunks) + "\n")
-        print(f"build/extracts/{name}.md")
+        print(f"docs/build/extracts/{name}.md")
 
 
 if __name__ == "__main__":

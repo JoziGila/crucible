@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Parse the adversarial review reports (review/R*.md) into review/findings.json.
+"""Parse the adversarial review reports (docs/review/R*.md) into docs/review/findings.json.
 
-    python3 tools/findings.py       rewrites review/findings.json and prints counts by severity and tab
+    python3 docs/tools/findings.py       rewrites docs/review/findings.json and prints counts by severity and tab
 
 Each finding starts with a heading: ### R<n>-<nn> · <Critical|Major|Minor> · Targets: <TAB>, <TAB>
 """

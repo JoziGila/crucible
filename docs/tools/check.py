@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Check spec tabs against the writing rules in contract.md (sections 2, 10 and 11).
+"""Check spec tabs against the writing rules in docs/contract.md (sections 2, 10 and 11).
 
-    python3 tools/check.py spec/06-mechanical.md            one or more tabs
-    python3 tools/check.py --all                            every file in spec/
-    python3 tools/check.py spec/06-mechanical.md --base round-1
-                                                            also report what was cut since a git revision
+    python3 docs/tools/check.py docs/spec/06-mechanical.md     one or more tabs
+    python3 docs/tools/check.py --all                          every file in docs/spec/
+    python3 docs/tools/check.py docs/spec/06-mechanical.md --base round-1
+                                                               also report what was cut since a git revision
 
 Errors set the exit status to 1. Warnings are advice; fix them where the fix reads better.
-A deliberate quotation of a forbidden term is allowed by a line in tools/allow.txt.
+A deliberate quotation of a forbidden term is allowed by a line in docs/tools/allow.txt.
 """
 import argparse
 import pathlib
@@ -374,7 +374,7 @@ def check(path, base=None):
     if base:
         rel = path.resolve().relative_to(ROOT).as_posix()
         try:
-            old = subprocess.run(["git", "-C", str(ROOT), "show", f"{base}:{rel}"], capture_output=True, text=True, check=True).stdout
+            old = subprocess.run(["git", "-C", str(ROOT), "show", f"{base}:./{rel}"], capture_output=True, text=True, check=True).stdout
         except subprocess.CalledProcessError:
             r.notes.append(f"{rel} does not exist at {base}")
             return r, text
@@ -398,7 +398,7 @@ def check(path, base=None):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("files", nargs="*", type=pathlib.Path)
-    ap.add_argument("--all", action="store_true", help="check every file in spec/")
+    ap.add_argument("--all", action="store_true", help="check every file in docs/spec/")
     ap.add_argument("--base", help="git revision to compare against (for example round-1)")
     ap.add_argument("-q", "--quiet", action="store_true", help="print errors and the summary only")
     args = ap.parse_args()
