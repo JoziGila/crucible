@@ -12,26 +12,22 @@ The spec has finished round 2: every subsystem tab was revised against the bindi
 - Every tab follows contract sections 10 and 11: the skeleton, one capability table at the end of each design section, inline decisions with stable numbers, 12,000 to 18,000 words excluding Sources (ING and ANV up to 20,000), and a calm present-tense voice.
 - Each fact lives in the tab that owns it. Other tabs state the consequence in one line and point to the owner.
 - Research: cite only pages you opened, mark unverified claims [unverified], and never invent version numbers, dates, statistics or customer names.
-- After editing a tab, `python3 docs/tools/check.py docs/spec/<file>.md --base round-1` must report zero errors before the commit.
+- After editing a tab, `python3 docs/tools/check.py docs/spec/<file>.md --base round-3` must report zero errors before the commit.
 - The Claude Doc is a published view of committed text (`docs/revision/publish.md`). `docs/build/` is scratch and ignored by git.
 
 ## Where things stand (2026-10-11)
 
-- Round 2 is closed (tag `round-2`); round 3 is under way. Contract v6 is binding: rulings on round 1 (section 14), the first review (15), round 2's change requests (16) and the second review (17), and one shared phase table (13.4).
+- Round 3 is closed (tag `round-3`). Contract v6.1 is binding: rulings on round 1 (section 14), the first review (15), round 2's change requests (16), and the second review and round 3's change requests (17), with one shared phase table (13.4).
 - Crucible is built by agents with one founder (contract 13.2): no staffing, hires, engineer-years or calendar months anywhere in the spec.
-- All twelve subsystem tabs are v2, consistent with each other, and pass the check. The Overview is v2, and the Adversarial review and Decisions log tabs are written. Every tab is published in the Claude Doc.
+- All twelve subsystem tabs are v3, consistent with each other, and pass the check; every `[unverified]` claim is checked or cut. The Overview, Adversarial review and Decisions log are current. Every tab is published in the Claude Doc.
+- About a dozen open questions remain in the tabs, each waiting on an outside input.
 - The repository is public at github.com/JoziGila/crucible (`origin`). Commit with the personal identity already configured.
 
-## Plan for round 3
+## Next
 
-Decided 2026-10-11: review the v2 text again first, then revise each tab once.
-
-1. **Second adversarial review.** Six reviewers, R7 to R12, on `docs/review/brief.md`, with round 1's angles: R7 physics (FLX, COV), R8 geometry (ANV, MEC), R9 architecture and taste (KLN, ING, the contract, coherence across tabs), R10 engineering practice (MFG, ELX, MEC, KLN's PLM), R11 security and legal (AGT, ECO, KLN), R12 feasibility (PLT, UIX, contract 13). Reports go to `docs/review/R<n>-<lens>.md`; `python3 docs/tools/findings.py` then rebuilds `findings.json`.
-2. **Packets.** One per tab in `docs/revision/packets/`: the new findings that target it, its open questions with the reviewers' proposed answers, its `[unverified]` claims with the reviewers' verified list, and its known items (MFG and PLT: the machine gateway app; ELX: the firmware-flashing Act; every tab with diagrams: one sentence that reads each).
-3. **Contract rulings** on findings that target CONTRACT, and on the two pending requests, before the tabs are revised; bump to v6.
-4. **Revise the twelve tabs** on a round 3 brief in `docs/revision/brief.md`, one agent per tab.
-5. **Rule on new change requests, then a consistency pass** as in round 2.
-6. **Summary tabs and publishing.** Extend the Adversarial review tab with the second review, regenerate the Decisions log, update the Overview, publish every changed tab, and tag `round-3`.
+1. **Third adversarial review** of the v3 text (R13 to R18) on `docs/review/brief.md`. The spec is ready to build when a review finds no Critical findings and only Minor ones; otherwise run round 4 the way round 3 ran (packets, contract rulings, one revision per tab, an audited consistency pass, summary tabs, publish, tag).
+2. **Outside inputs** the open questions wait on: counsel's freedom-to-operate opinion on the SSI patent and the trademark clearance, phase 0 measurements, and the first calibration build. The founder arranges counsel and the partner agreements in contract 13.2.
+3. **Phase 0** then starts in this repository: the founder signs each golden product's pass/fail criteria, the oracle role writes and locks the tests, and builder agents work against them.
 
 ## Running revisions with subagents
 
@@ -45,7 +41,7 @@ Decided 2026-10-11: review the v2 text again first, then revise each tab once.
 ## Commands
 
 ```
-python3 docs/tools/check.py docs/spec/06-mechanical.md --base round-1   # one tab, plus anything cut since round 1
+python3 docs/tools/check.py docs/spec/06-mechanical.md --base round-3   # one tab, plus anything cut since round 3
 python3 docs/tools/check.py --all -q                                      # every tab, errors only
 python3 docs/tools/extract.py                                             # docs/build/extracts: decisions, requests, interfaces, open questions
 git show round-1:docs/spec/06-mechanical.md                               # a tab's first draft

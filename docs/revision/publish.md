@@ -8,24 +8,24 @@ Publishing needs the Claude Docs tools (`guide`, `read`, `update`, `batch`). If 
 
 Container for every call: `{"kind":"project","id":"bb8a8fb2-1060-40c5-98b7-fe5ef6148a0c"}`. Pending block ids are full ids (the outline view abbreviates `mb936hgtven.15` to `.15`).
 
-| Doc tab | Repo file | Tab file id | Prose node id | State on 2026-10-11 |
+| Doc tab | Repo file | Tab file id | Prose node id | State |
 | --- | --- | --- | --- | --- |
-| Overview | `docs/spec/00-overview.md` | `cd99b18e-5c88` | `650a6e1d-d481` | Published (round 2). Widgets `541263cc-6217` (architecture), `5752d02f-60a3` (roadmap) |
+| Overview | `docs/spec/00-overview.md` | `cd99b18e-5c88` | `650a6e1d-d481` | Published (round 3). Widgets `541263cc-6217` (architecture), `5752d02f-60a3` (roadmap) |
 | Subsystem specs | index of the twelve tabs | `113d0e89-a884` | `f7446683-6382` | Published |
-| Ingot language | `docs/spec/01-ingot.md` | `a7d27ecb-b645` | `2ce2e496-cb52` | Published (round 2) |
-| Anvil geometry kernel | `docs/spec/02-anvil.md` | `1ca33b99-5780` | `6167cdda-af0b` | Published (round 2). Widgets `b823678b-5f57` (lattice), `41c025a6-515f` (two-stage operation) |
-| Flux physics engine | `docs/spec/03-flux.md` | `60fe18e0-b55b` | `20fac20b-7ecb` | Published (round 2) |
-| Physics coverage and materials | `docs/spec/04-coverage.md` | `2cd43e57-2f23` | `960ad32b-62d7` | Published (round 2) |
-| Kiln, repository and PLM | `docs/spec/05-kiln-repo-plm.md` | `239dfa78-766a` | `0239c2e0-2299` | Published (round 2) |
-| Mechanical design | `docs/spec/06-mechanical.md` | `7a011aa1-848c` | `85446926-a811` | Published (round 2) |
-| Manufacturing | `docs/spec/07-manufacturing.md` | `c68d75b3-c828` | `49f64c61-1557` | Published (round 2) |
-| Electronics and systems | `docs/spec/08-electronics-systems.md` | `fc2ec3b8-0935` | `d653a3ba-9b55` | Published (round 2) |
-| Agents | `docs/spec/09-agents.md` | `a6f677b5-4d2d` | `cc3af25b-9467` | Published (round 2) |
-| UI and interaction | `docs/spec/10-ui.md` | `86708451-ba38` | `2db4aa8f-a611` | Published (round 2) |
-| Interop and ecosystem | `docs/spec/11-interop-ecosystem.md` | `84c37544-9d54` | `3b551788-4815` | Published (round 2) |
-| Platform and performance | `docs/spec/12-platform-performance.md` | `c4ec8f14-d594` | `b60a1de5-077c` | Published (round 2) |
-| Adversarial review | `docs/spec/13-adversarial-review.md` | `e4ae4c32-ca51` | `68c9752c-b279` | Published (round 2) |
-| Decisions log | `docs/spec/14-decisions-log.md` | `cba5bdcd-a313` | `f5f266e1-b97b` | Published (round 2) |
+| Ingot language | `docs/spec/01-ingot.md` | `a7d27ecb-b645` | `2ce2e496-cb52` | Published (round 3) |
+| Anvil geometry kernel | `docs/spec/02-anvil.md` | `1ca33b99-5780` | `6167cdda-af0b` | Published (round 3). Widgets `b823678b-5f57` (lattice), `41c025a6-515f` (two-stage operation) |
+| Flux physics engine | `docs/spec/03-flux.md` | `60fe18e0-b55b` | `20fac20b-7ecb` | Published (round 3) |
+| Physics coverage and materials | `docs/spec/04-coverage.md` | `2cd43e57-2f23` | `960ad32b-62d7` | Published (round 3) |
+| Kiln, repository and PLM | `docs/spec/05-kiln-repo-plm.md` | `239dfa78-766a` | `0239c2e0-2299` | Published (round 3) |
+| Mechanical design | `docs/spec/06-mechanical.md` | `7a011aa1-848c` | `85446926-a811` | Published (round 3) |
+| Manufacturing | `docs/spec/07-manufacturing.md` | `c68d75b3-c828` | `49f64c61-1557` | Published (round 3) |
+| Electronics and systems | `docs/spec/08-electronics-systems.md` | `fc2ec3b8-0935` | `d653a3ba-9b55` | Published (round 3) |
+| Agents | `docs/spec/09-agents.md` | `a6f677b5-4d2d` | `cc3af25b-9467` | Published (round 3) |
+| UI and interaction | `docs/spec/10-ui.md` | `86708451-ba38` | `2db4aa8f-a611` | Published (round 3) |
+| Interop and ecosystem | `docs/spec/11-interop-ecosystem.md` | `84c37544-9d54` | `3b551788-4815` | Published (round 3) |
+| Platform and performance | `docs/spec/12-platform-performance.md` | `c4ec8f14-d594` | `b60a1de5-077c` | Published (round 3) |
+| Adversarial review | `docs/spec/13-adversarial-review.md` | `e4ae4c32-ca51` | `68c9752c-b279` | Published (round 3) |
+| Decisions log | `docs/spec/14-decisions-log.md` | `cba5bdcd-a313` | `f5f266e1-b97b` | Published (round 3) |
 
 ## First publish of a tab with a pending block
 

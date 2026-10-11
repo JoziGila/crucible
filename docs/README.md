@@ -27,34 +27,34 @@ The published view is the Claude Doc [Crucible — Platform Spec](https://claude
 
 ## Status
 
-Round 2 is closed (tag `round-2`): every tab is revised against contract v5 and the review findings that target it, the tabs agree with each other, and every tab is published in the Claude Doc.
+Round 3 is closed (tag `round-3`). Contract v6.1 is binding. Every subsystem tab is v3: revised against both adversarial reviews, consistent with the other tabs, with every `[unverified]` claim checked or cut, and published in the Claude Doc. About a dozen open questions remain, each waiting on an outside input such as counsel's opinion, the first calibration build or later-phase data.
 
-| Tab | Version | Words excluding Sources | Review findings (Critical) | In the doc |
+| Tab | Version | Words excluding Sources | Findings (Critical): first review · second review | In the doc |
 | --- | --- | --- | --- | --- |
-| Overview | v2 | 6,600 | n/a | v2 |
-| ING | v2 | 19,600 | 47 (6) | v2 |
-| ANV | v2 | 20,000 | 61 (8) | v2 |
-| FLX | v2 | 17,900 | 66 (7) | v2 |
-| COV | v2 | 17,800 | 33 (5) | v2 |
-| KLN | v2 | 17,900 | 79 (12) | v2 |
-| MEC | v2 | 17,900 | 45 (2) | v2 |
-| MFG | v2 | 17,800 | 41 (3) | v2 |
-| ELX | v2 | 17,400 | 36 (4) | v2 |
-| AGT | v2 | 17,800 | 42 (7) | v2 |
-| UIX | v2 | 17,900 | 42 (3) | v2 |
-| ECO | v2 | 17,900 | 48 (1) | v2 |
-| PLT | v2 | 17,800 | 61 (2) | v2 |
-| Adversarial review | v1 | 7,800 | n/a | v1 |
-| Decisions log | v1 | 380 decisions | n/a | v1 |
+| Overview | v3 | 7,000 | n/a | v3 |
+| ING | v3 | 19,900 | 47 (6) · 47 (5) | v3 |
+| ANV | v3 | 19,900 | 61 (8) · 55 (4) | v3 |
+| FLX | v3 | 18,000 | 66 (7) · 58 (4) | v3 |
+| COV | v3 | 17,700 | 33 (5) · 37 (1) | v3 |
+| KLN | v3 | 18,000 | 79 (12) · 96 (6) | v3 |
+| MEC | v3 | 18,000 | 45 (2) · 64 (2) | v3 |
+| MFG | v3 | 17,900 | 41 (3) · 56 (3) | v3 |
+| ELX | v3 | 18,000 | 36 (4) · 23 (1) | v3 |
+| AGT | v3 | 17,900 | 42 (7) · 56 (7) | v3 |
+| UIX | v3 | 17,900 | 42 (3) · 32 (1) | v3 |
+| ECO | v3 | 17,700 | 48 (1) · 51 (2) | v3 |
+| PLT | v3 | 17,800 | 61 (2) · 58 (3) | v3 |
+| Adversarial review | v2 | 10,700 | n/a | v2 |
+| Decisions log | v2 | 441 decisions | n/a | v2 |
 
-A finding can target several tabs, so the column sums to more than the 295 findings.
+A finding can target several tabs, so the columns sum to more than the 295 and 278 findings.
 
 ## Layout
 
 ```
-contract.md              binding architecture contract (v6)
+contract.md              binding architecture contract (v6.1)
 spec/                    the doc's tabs, one file each; diagrams/ holds widget sources
-review/                  six adversarial reviews, their brief and findings.json
+review/                  twelve adversarial reviews (two rounds of six), the current brief and findings.json
 revision/                round 2 brief, one findings packet per tab, publishing notes, work in progress
 tools/                   check.py (spec check), extract.py (cross-tab extracts), findings.py
 ```
@@ -67,6 +67,8 @@ tools/                   check.py (spec check), extract.py (cross-tab extracts),
 | `review` | Six adversarial reviews: 295 findings, 23 of them Critical |
 | `contract-v4` | Contract v4 with the review rulings, the round 2 brief and the revision packets |
 | `round-2` | Contract v5, all twelve tabs revised and consistent, the overview, the adversarial review and the decisions log, all published |
+| `second-review` | Second adversarial review of the v2 spec: 278 findings, 16 of them Critical |
+| `round-3` | Contract v6.1 with an agent-built program, all twelve tabs at v3 and consistent, every claim verified or cut, the summary tabs updated, all published |
 
 `git show round-1:docs/spec/<file>.md` prints a tab's first draft.
 
