@@ -157,7 +157,7 @@ Std ships detectors for common prose conditions: separation, by wall-shear sign 
 
 Zone Fields are identical within the canonical class. Another class may differ only within twice the declared cross-class tolerance of a bound, reported as `NearBound`. Release decisions use canonical zones (R1-45). Assessment cost targets under 2% of solve time.
 
-[[DIAGRAM: Validity flow: "Inputs and Material" → "A priori screen" → "Flux solve" → "Regime variable Fields" → "Zone Field" → "Checks" → "UIX hatching" and "Release gate". Side arrows: screen –Refuse→ "Typed error with escalation list"; checks –Extrapolated or Flag→ "Human waiver in the change order". An "ErrorBudget" box fed by "Flux estimators (η99)", "Material uncertainty" and "Validation metric and inflation" attaches to the result Fields and tags checks with conditional_on.]]
+[[DIAGRAM diagrams/04-coverage-validity-flow.jsx: validity flow · screen, solve, zones, checks and the ErrorBudget]]
 
 ### Policy by zone
 
@@ -592,7 +592,7 @@ The record syntax is illustrative; ING defines record and range syntax.
 
 Agents can draft packages, oracles and envelope changes; they cannot assign evidence levels, merge envelope widenings or approve reviews.
 
-[[DIAGRAM: Physics package acceptance, left to right: "Author (person or agent)" → "Package: models, envelopes, oracles, licences" → "Static checks (ECO pipeline, COV checks)" → "Evidence pass, canonical and target GPU classes" → "E0 to E2" → "Protected validation Evidence records" → "E3" → "Two human domain reviewers" → "Coverage map in api". Typed-error arrows return from the static checks and the evidence pass to the author.]]
+[[DIAGRAM diagrams/04-coverage-package-acceptance.jsx: physics package acceptance · checks, evidence levels and human review]]
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |

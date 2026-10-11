@@ -146,7 +146,7 @@ Custom constraints are ordinary functions returning `Expr<T>`, and comparing two
 5. **Certify.** A Krawczyk test on the scaled system proves a box whose radius is the `Guaranteed` bound and certifies a unique solution on the branch. Otherwise the bound is `Estimated` (residual over an estimated smallest singular value), and one above the smallest entity tolerance fails with `IllConditioned { block, condition }`.
 6. **Remainder.** Under-determined parts minimize weighted displacement from the seeds, which SolveSpace reports gives "less surprising" drags. Redundant but consistent equations are warnings; equations that cannot vanish are conflicts.
 
-[[DIAGRAM: constraint solve pipeline. Boxes: Ingot sketch block (seeds, constraints) → Lower (unknowns on manifolds, scaled residuals) → Reduce (rigid clusters, forward substitution) → Dulmage–Mendelsohn decomposition → three branches: well-determined blocks (LM on canonical linalg, then Krawczyk certification), under-determined part (minimum displacement from seeds), over-determined part (consistency test) → Diagnosis (modular rank, kernel, minimal conflict sets, generic vs accidental) → Solve report and solved Body with Approx bounds. Side arrow from Anvil evaluators into the LM box.]]
+[[DIAGRAM diagrams/06-mechanical-constraint-solve-pipeline.jsx: constraint solve pipeline · six steps, three branches]]
 
 During a drag the moved entity gets a weighted soft target, each frame is one warm-started solve, and release writes the solved seeds to source. Builds never warm-start, and `linalg` fixes blocking, lane order and reduction trees without FMA, so results are bit-identical across the canonical class at any thread count.
 
@@ -992,7 +992,7 @@ Deviations, stated: homotopy continuation finds all solutions, but Crucible trac
 
 ## Interfaces with other subsystems
 
-[[DIAGRAM: MEC data flow. Boxes: Skeletons and interface records → Parts (sketches, part features, sheet metal, weldments, composites, molded parts, lattices) → Assembly (mates, fasteners, routes, BOM-only items) → three outputs: Flux (typed joints, mass properties, member axes and mid-surfaces, laminates, skin-model samples), MFG (FlatPattern, HoleSpec, ThreadSpec, Weld, plies, core and cavity, characteristics, harness geometry), and Drawings and model views → AP242 and QIF in io/. Under all boxes, one bar labelled anvil::solve_constraints and analyze_constraints feeding sketches, mates, live rules, completeness, routing and posture.]]
+[[DIAGRAM diagrams/06-mechanical-data-flow.jsx: MEC data flow · design to Flux, MFG and drawings on one solver]]
 
 MEC uses the operations that ANV's capability tables mark for it, with ANV's names and phases, and no MEC feature ships before the operations it calls.
 

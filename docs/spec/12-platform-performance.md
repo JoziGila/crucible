@@ -26,7 +26,7 @@ PLT owns the mechanisms below the product: OS services and shells, the compute r
 
 `cargo xtask check-layers` fails CI when a crate outside `apps/` depends on an OS-binding crate (`windows`, `objc2*`, `web-sys`, `winit`, `accesskit_*` and the like) or uses `cfg(target_os)`; ISA dispatch through `target_arch` stays allowed in `simd`, `detmath` and `gpu`.
 
-[[DIAGRAM: crate layering. Boxes top to bottom: apps/desktop, web, mobile, server, cli; then api; then kiln, cas, repo, anvil-*, flux-*, ingot-*; then base, field, kernels; then runtime, simd, detmath, gpu, wasm-host, linalg; then platform-api. A separate box apps/platform beside the stack. Solid arrows "depends on" point downward; a dashed arrow "implements, injected at startup" runs from apps/platform to platform-api.]]
+[[DIAGRAM diagrams/12-platform-crate-layering.jsx: crate layering · dependencies point down, one crate binds the OS]]
 
 ### Library choices
 
@@ -236,7 +236,7 @@ The `runtime`, `simd`, `gpu` and `linalg` crates execute what Kiln schedules, an
 
 Desktop UI and engine processes share memory-mapped rings for tessellations and Field samples and exchange `api` messages over a local socket. On Linux a higher `oom_score_adj` makes the kernel stop the engine rather than the window. Licensed translators run outside evaluation in a sandboxed translator host (contract section 7.7), and external MCP servers that agent sessions start over stdio run in the same OS sandbox (D-PLT-31) with only their pipes and user-granted folders.
 
-[[DIAGRAM: process and thread model per target. Columns: Desktop, Browser, iPadOS and Android, Server. Desktop: "UI process" and "Engine process" (IO runtime, foreground and background pools, GPU queue thread, Wasmtime) joined by "shared-memory rings + api socket", plus "Wasm sandbox workers" and "Translator host". Browser: "Main thread", "Engine worker" with "Compute workers 1..N", "Heavy worker" and an opaque-origin "Wasm sandbox". iPadOS and Android: one process with UI, engine and pool threads, plus a "WKWebView worker" on iPadOS. Server: untrusted microVMs, trusted builders per (tenant, label set), attestation service.]]
+[[DIAGRAM diagrams/12-platform-process-model.jsx: process and thread model · four targets]]
 
 ### Threads and pools
 

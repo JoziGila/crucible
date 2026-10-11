@@ -59,7 +59,7 @@ ELX's domain types are built from the core types: geometry stays in Bodies and r
 
 **Decision D-ELX-2:** Every use of a catalog part in a network is an Instance of the Part its definition package describes. The bare board is a Part, and the assembled board is an Assembly whose Instance placements are the footprint placements. Sub-network uses are hierarchy nodes of the `Network`; they add Assembly levels only when the designer declares a sub-assembly, such as a daughterboard. *Why:* one derived BOM view covers mechanical and electrical items, and moving a part in layout is the same edit as in the assembly. *Rejected:* a separate symbol-instance concept, which duplicates Instance and needs a sync step.
 
-[[DIAGRAM: Electrical source model. Authored: network source, Schematic and Layout modules, Stackup, pinned catalog definitions and offers. Derived: Network and net partition, copper and laminate Bodies, bare-board Part, assembled board, product Assembly with MEC's enclosure. Arrows: editors and agents write the authored files; Kiln builds the Network and checks schematic_matches_network; Network, Layout and Stackup yield Bodies, then Part, then Assembly; enclosure geometry flows back into outline and locked placements.]]
+[[DIAGRAM diagrams/08-electronics-source-model.jsx: electrical source model · what editors write and what Kiln derives]]
 
 ### Writing a network
 
@@ -445,7 +445,7 @@ MFG owns the factory handoff (R3-25, R4-24, R4-27): package choice, panels, sten
 
 Every analysis is an Ingot feature that builds a Flux problem or calls a solver Wasm component. It returns Fields with an `ErrorBudget` and a `ValidityEnvelope` at `Interactive` or `SignOff` fidelity, and Kiln re-runs only the analyses an edit touches. Screening results carry a screening label and never stand as compliance.
 
-[[DIAGRAM: Electrical analysis dataflow. Left: Network, Layout, Stackup, catalog-part models. Middle: derived copper and laminate Bodies, cross-section cache. Right: RLGC, channels, PDN, IR drop, EMC screening, board thermal and circuit simulation, producing Fields with budgets and checks for CI. Feedback: part power into board thermal; temperature back into simulation and IR drop. External Ops (IBIS-AMI, ngspice) sit on the untrusted-worker side.]]
+[[DIAGRAM diagrams/08-electronics-analysis-dataflow.jsx: electrical analysis dataflow · 7 analyses from one board model]]
 
 ### Signal integrity
 

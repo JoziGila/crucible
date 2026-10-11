@@ -752,7 +752,7 @@ Spans live in a side table, so an edit above a function leaves its IIR unchanged
 4. **Program order.** Each call records its program-order index. When several calls fail, the outcome is the earliest in program order, and speculative work after it never changes a result.
 5. **Overrides.** A request may carry literal overrides keyed by `LiteralSite` (statement identity, call identity, argument slot). Kiln treats them as input cells, so a drag evaluates new values without editing source (UIX); a wrongly typed override fails with `ING6502`.
 
-[[DIAGRAM: Ingot pipeline. Left column "Front end (Kiln nodes)": source text → lossless tree → typed AST → names, types, units, tolerances → IIR (spans in a side table) → module code hashes. Middle column "Executor": IIR → reference interpreter in the canonical class; a dashed box "code generator, phase 2 at the earliest" with a dashed "differential oracle" arrow. Right column "Kiln": interpreter issues Op, resolve, feature and check calls as pending handles → Kiln schedules Anvil, Flux and Wasm component Ops → values return at observation edges → node outputs: result, accumulators, metadata. Bottom arrows: "literal overrides (drag)" into the executor; "statement, call and keys → OpSite" from the tree into Kiln calls.]]
+[[DIAGRAM diagrams/01-ingot-pipeline.jsx: Ingot pipeline · front end, executor and Kiln]]
 
 ### Fidelity, drags, holes and derivatives
 

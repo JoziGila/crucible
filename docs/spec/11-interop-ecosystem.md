@@ -58,7 +58,7 @@ The CAS encoding of `Body`, `Part`, `Assembly`, `Field`, `Material`, PMI and `Hi
 
 A build that lacks a needed External input fails with `ExternalInputMissing { asset, translator, options }`. The fix, `crucible import assets/gearbox.CATProduct` or one click, runs the tool and records the result in a Proposal. A translator upgrade does the same and shows the geometry overlay.
 
-[[DIAGRAM: Translation flow. Sources on the left: open-format Asset, licensed-format Asset, live source. Middle: importer Wasm component (evaluation), external tool on the vendor SDK (tool context), connector Wasm component (connector context); the last two write "External input in CAS, pinned in ingot.lock". Right: the Kiln Op `read(...)` takes the importer and the External input and outputs Imported plus TranslationReport. A dashed line marks the tool and connector contexts as never running at evaluation time.]]
+[[DIAGRAM diagrams/11-interop-translation-flow.jsx: translation flow · three sources, one evaluation context]]
 
 ### Translation report
 
@@ -628,7 +628,7 @@ The pipeline runs in order, and a failure at any step returns a typed error with
 7. Run test vectors on every engine (ECO-O-6).
 8. Sign the index entry and append it to the log.
 
-[[DIAGRAM: Publish pipeline, left to right: CI or client with OIDC trusted publishing → signer and namespace check → hermetic rebuild → determinize (PLT) → scanners and export classification → domain acceptance checks → interface, output and entity-name diffs → test vectors on all engines → sign and append to log. Each box branches to "typed error, nothing published". Below, desktop, iPadOS and browser clients verify signer identity, TUF metadata and log inclusion.]]
+[[DIAGRAM diagrams/11-interop-publish-pipeline.jsx: publish pipeline · eight steps, one failure exit, verifying clients]]
 
 | Layer | Mechanism | Proves |
 | --- | --- | --- |

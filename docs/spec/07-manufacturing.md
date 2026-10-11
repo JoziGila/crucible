@@ -100,7 +100,7 @@ The EU Machinery Regulation applies from 20 January 2027 with cyber-safety provi
 
 Offsets come from a vendor connector or operator entry, and from phase 3 from MTConnect `ToolOffsets` and `WorkOffsets` or OPC UA [MTConnect 2.5 Part 3]. The gateway captures edits by DNC receive or a vendor connector, and from phase 3 by watching `ProgramEdit` and `ProgramHeader` [MTConnect 2.5 Part 3]. It uploads an edited program and opens a Proposal with its semantic NC diff, and parts made from it get an as-built deviation.
 
-[[DIAGRAM: Program release flow. Boxes left to right: Design Part → Setup (machine, fixture, stations) → Workingsteps (target Query, strategy, tool) → strategy Wasm components → post engine with Ingot hooks → NC text and BlockMap → simulation of the posted text under the controller's motion semantics and independent re-interpretation → program subject → human Approval → manufacturing change order → send_to_machine Act → gateway (hash, offsets, re-simulation) → control memory; a person at the control starts the cycle. Red arrows from every check back to Workingsteps: "typed MfgError with fixes". Dashed arrow from the control's edits to a Proposal: "edit capture".]]
+[[DIAGRAM diagrams/07-manufacturing-program-release.jsx: program release flow · 13 steps from design to control memory]]
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -621,7 +621,7 @@ ECO specifies the `erp-connector` and `mes-connector` worlds in `crucible:connec
 
 Routing steps reference MBOM Instances without copying them. The digital twin is the design plus as-planned, as-run and as-measured records per serial, and calibration is always a Proposal.
 
-[[DIAGRAM: Factory feedback loop. Boxes: released design and plans in repo (as-planned) → machine gateway (MTConnect and OPC UA reads, offset reads, edit capture) → signed External inputs (as-run) and Evidence records from QIF (as-measured) → comparison per serial (deviation Fields, cycle-time and tool-life residuals) → calibration Proposal with held-out error before and after → human Approval → updated cutting data, distortion calibration, capability profiles and cost rates → next evaluation. Side arrow from the comparison to nonconformance and SPC events.]]
+[[DIAGRAM diagrams/07-manufacturing-factory-feedback.jsx: factory feedback loop · as-planned, as-run and as-measured back to the model]]
 
 AOUSD announced OpenUSD Core Specification 1.0 on 17 December 2025 [AOUSD Core 1.0]. USD is an export target, never the source of truth.
 

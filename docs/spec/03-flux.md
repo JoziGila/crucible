@@ -35,7 +35,7 @@ About 80 operations, each `flux::name@version` with a determinism grade, are orc
 | General methods (D-COV-11) | `bvh_build`, `bvh_query`, `neighbor_list`, `segmented_reduce`, `random_stream`, `fmm_apply`, `hmatrix_build`, `hmatrix_apply`, `fft_solve`, `port_modes`, `fast_sweep` |
 | Post-processing | `probe`, `reaction`, `isosurface`, `streamlines`, `display_evaluator`, `display_samples`, `report_data` |
 
-[[DIAGRAM: Flux pipeline, left to right: Ingot form or Network → flux-forms (types, units, derivatives) → plan and mark_reduction (SolvePlan per region) → kernels (canonical CPU, Wasm SIMD, WGSL) → assemble and solve (Kiln Ops, CAS) → estimate ⇄ adapt → Fields with ErrorBudget and validity zones. Outputs: checks (Pass, Fail, Undecided), display evaluators, Field-driven Anvil operations. A dashed adjoint arrow runs right to left under the solve boxes.]]
+[[DIAGRAM diagrams/03-flux-pipeline.jsx: Flux pipeline · 7 stages, 1 adaptive loop, 3 consumers]]
 
 ### Rust API
 
@@ -397,7 +397,7 @@ Reduced regions couple to solids and each other through `dI` interfaces. Rigid c
 | Granular flow, splashing, fragmentation | DEM, SPH, MPM or peridynamics |
 | Lumped systems | Network compiler and DAE solver |
 
-[[DIAGRAM: Per-region discretization: a Part (bolted block, thin wall, swept member, lattice zone) → flux::mark_reduction (t/L_local ≤ 0.2, d/L_local ≤ 0.2) → four boxes: Solid (immersed octree), Shell (Reissner–Mindlin on mid_surface), Beam (Timoshenko or Vlasov on member_axes), Lattice (beam lattice + homogenization). Double arrows labelled dI (rigid at Interactive, Nitsche at SignOff) join Solid to Shell and to Beam. A base bar: one SolvePlan, one multigrid hierarchy, one ErrorBudget per goal; side note: model-form part from 3D patch re-solves.]]
+[[DIAGRAM diagrams/03-flux-per-region-discretization.jsx: per-region discretization · 4 models, 2 dI couplings]]
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
