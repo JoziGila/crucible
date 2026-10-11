@@ -105,10 +105,10 @@ Agents work on branches and deliver **Proposals**: a branch, a rationale and a C
 ## Roadmap
 
 <p align="center">
-  <img src=".github/assets/roadmap.svg" alt="Phases 0 to 7 over about 19 years, with golden products GP1 to GP16" width="100%">
+  <img src=".github/assets/roadmap.svg" alt="Phases 0 to 7 in order, each closed by golden products GP1 to GP16" width="100%">
 </p>
 
-Phase 1 is the wedge: code-CAD and 3D printing, closed by a machined bracket and a printed lattice bracket. Phases 5 to 7 are proposals, each started only with a physical test partner and an approved plan. Every desktop OS is a first-class target: Windows, macOS, Linux and the browser, with identical features.
+Phase 1 is the wedge: code-CAD and 3D printing, closed by a machined aluminium bracket and a metal-printed lattice bracket, each load-tested. Phases end at gates, not dates: Crucible is built by agent swarms against tests they cannot edit, directed by one founder, with outside shops and labs for everything physical. Phases 5 to 7 are proposals, each started only with a physical test partner. Every desktop OS is a first-class target: Windows, macOS, Linux and the browser, with identical features.
 
 ## Read the spec
 
