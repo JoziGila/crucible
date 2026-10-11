@@ -8,7 +8,6 @@ Six adversarial reviewers attacked the round 1 drafts and found 295 problems, 23
 2. Your packet, `docs/revision/packets/<TAB>.md`: the round 1 edits, the round 2 contract changes for your tab, and every finding that targets your tab.
 3. Your round 1 draft, `docs/spec/<file>.md`. It is also kept at the `round-1` tag: `git show round-1:docs/spec/<file>.md`.
 4. The lead, one design section and the tail sections of `docs/spec/02-anvil.md` or `docs/spec/03-flux.md`, for shape and voice. Do not copy their content; point to them where they own a fact.
-5. Ingot only: `docs/revision/wip/01-ingot.partial.md` is a partial revision (lead, scope and the start of lexical syntax) written after reading the packet. Continue from it or replace it.
 
 ## 2. Revise
 

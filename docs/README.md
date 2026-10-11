@@ -32,7 +32,7 @@ Round 2 is in progress: each tab is revised against contract v4.2 and the review
 | Tab | Version | Words excluding Sources | Review findings (Critical) | In the doc |
 | --- | --- | --- | --- | --- |
 | Overview | pre-review | 5,600 | n/a | Pre-review version |
-| ING | v1; partial v2 in `revision/wip/` | 30,300 | 47 (6) | No |
+| ING | v2 | 19,600 | 47 (6) | No |
 | ANV | v2 | 19,900 | 61 (8) | v2 |
 | FLX | v2 | 17,900 | 66 (7) | No |
 | COV | v1 | 17,500 | 33 (5) | No |
