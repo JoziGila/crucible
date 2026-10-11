@@ -1,4 +1,4 @@
-# Ingot design language (ING)
+# Ingot language (ING)
 
 Ingot is Crucible's design language: pure, strict and statically typed, with units, dimensions, tolerances, approximation error and geometric references as types, so unit and dimension errors never reach evaluation. Features compile through a typed dataflow IR into WebAssembly that runs identically on every Tier 1 target, while every operation call becomes a node in Kiln's memoized graph. The visual editor, the code editor and agents all edit one lossless syntax tree, so each edit is a minimal, comment-preserving, mergeable source change.
 

@@ -1,4 +1,4 @@
-# Kiln, CAS, `repo` and lifecycle
+# Kiln, repository and PLM (KLN)
 
 Kiln evaluates Ingot as a memoized graph keyed by content and pinned operation versions, so an edit recomputes only what it affects, with identical bits on every Tier 1 machine. The CAS stores everything under SHA-256 identities, and `repo` records each edit as an immutable Change that merges by syntax tree, feature, check and geometry. Lifecycle, identity, policy and audit records share that signed store and behave the same on a laptop, a team server, the cloud and an air-gapped site.
 

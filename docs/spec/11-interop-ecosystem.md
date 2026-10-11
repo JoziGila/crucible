@@ -1,4 +1,4 @@
-# Interoperability and ecosystem (ECO)
+# Interop and ecosystem (ECO)
 
 Crucible reads and writes the open standards of every engineering domain through sandboxed, deterministic translators, and it reaches proprietary formats only through licensed translators whose results are pinned like any other dependency. Everything anyone adds to Crucible, the core team included, ships through one signed package registry as Ingot packages or Wasm components that behave identically on every platform, including the browser. An open-source core, a neutral governance path and open formats guarantee that no design and no extension is ever trapped.
 

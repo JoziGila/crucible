@@ -1,0 +1,3 @@
+# Deliberate quotations of forbidden terms, one per line: <file name> <exact phrase on the allowed line>
+# Example: 11-interop-ecosystem.md "software bill of materials" (never SBOM)
+# Say why in the commit message that adds a line.

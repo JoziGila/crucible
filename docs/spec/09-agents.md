@@ -1,4 +1,4 @@
-# Agents
+# Agents (AGT)
 
 Agents use the same typed `api` as people: one method catalog, served over MCP 2026-07-28 and native Rust, Python and TypeScript SDKs. Agents edit only branches and deliver Proposals that build, pass every Check and carry signed provenance. The server, not the model, enforces safety: untrusted content cannot trigger consequential actions, and every irreversible real-world action needs a human to approve the exact action.
 

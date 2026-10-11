@@ -1,4 +1,4 @@
-# Electronics, mechatronics and system modeling
+# Electronics and systems (ELX)
 
 Electrical intent in Crucible is a typed Ingot program. Circuits are code with stored schematic views, boards are Parts whose copper is versioned data, and every analysis returns Fields and Checks with a stated validity envelope. One model holds schematic, layout, enclosure, firmware, harness and requirements, so nothing needs a sync step.
 

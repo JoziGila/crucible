@@ -1,3 +1,5 @@
+# Anvil geometry kernel (ANV)
+
 Anvil is one geometry kernel over four representations (exact B-rep, implicit, mesh and subdivision surface) with one tolerance model, one provenance model and one operation contract. Linear decisions use exact predicates; decisions on curved geometry use certified enclosures, decided in rounds against frozen tolerances; constructions are floating point with per-entity tolerances and per-face error bounds. Every operation is versioned, deterministic and label-invariant, returns `HistoryRecord`s, and lets the GPU order, prune or preview work but never decide a result.
 
 ## Kernel structure and operation contract
