@@ -1,1617 +1,895 @@
-# Anvil geometry kernel (ANV)
+Anvil is one geometry kernel over four representations (exact B-rep, implicit, mesh and subdivision surface) with one tolerance model, one provenance model and one operation contract. Linear decisions use exact predicates; decisions on curved geometry use certified enclosures, decided in rounds against frozen tolerances; constructions are floating point with per-entity tolerances and per-face error bounds. Every operation is versioned, deterministic and label-invariant, returns `HistoryRecord`s, and lets the GPU order, prune or preview work but never decide a result.
 
-Anvil is one kernel over four representations (exact B-rep, implicit, mesh and subdivision surface) that share one tolerance model, one provenance model and one operation contract. Topological decisions come from exact or certified predicates; constructions are floating point with per-entity tolerances and a reported `ErrorBound`. Every operation is versioned, returns `HistoryRecord`s and gives bit-identical results on every Tier 1 CPU; the GPU may prune, order and preview work but never decides a result.
+## Kernel structure and operation contract
 
-## Scope and kernel structure
+Anvil owns geometry types; the `Body` with its topology, tolerances, attributes, encoding and identities; naming, lineage and `anvil::resolve`; and every geometric operation, including conversions, meshing, constraint solving, `anvil-planar` and `DisplayPackage` production. Ingot owns `OpSite`s and queries, Kiln caching and Aborts, Flux physics and refinement decisions, MEC constraint semantics, `io/` formats and UIX rendering.
 
-### What Anvil owns
+The capability tables closing each design section form the operations catalog and operation-to-phase table that contract 7.1 makes canonical; MEC, MFG and ELX copy their rows.
 
-| Anvil owns | Anvil does not own |
-| --- | --- |
-| Geometry types, evaluation and intersection for curves, surfaces, implicit expressions, meshes and subdivision cages | Physics, error estimation and refinement decisions (Flux) |
-| The `Body` value in all four representations, its topology, tolerances, attributes and encoding | Design intent, feature semantics and entity selection syntax (Ingot, std) |
-| `EntityId`, `HistoryRecord`, lineage and the resolution of provenance `Query`s against them | Caching, scheduling and cancellation policy (Kiln) |
-| Every geometric operation, including volume meshing, mesh adaptation and geometric constraint solving | Sizing and metric Fields (Flux produces them; Anvil consumes them) |
-| Representation conversions with `ErrorBound`s | File formats such as STEP AP242 and 3MF (`io/`), which call Anvil to build and heal Bodies |
-| The `GeometryQuery` service for immersed and fitted simulation | Rendering (UIX); Anvil supplies display tessellations and GPU evaluation kernels |
-
-The constraint solver sits here because the Mechanical tab decided it (D-MEC-3): it needs Anvil's evaluators inside every Newton iteration. Volume meshing sits here for the reasons in D-ANV-12.
-
-### Crates and dependencies
+### Crates
 
 | Crate | Contents | Depends on |
 | --- | --- | --- |
-| `anvil-geom` | Numbers and predicates (exact, filtered, interval, affine), `ErrorBound`, `Tolerance`, `EntityId`, curves and surfaces with evaluation, local intersection solvers, approximation and fitting | PLT `detmath`, `simd`, `gpu`, `runtime`; `sha2` |
-| `anvil-topo` | Cellular B-rep topology, per-entity tolerances, attributes, `HistoryRecord`, lineage, `Query` resolution, the body checker, the Body encoding for B-reps | `anvil-geom` |
-| `anvil-mesh` | Surface meshes, volume meshes (simplicial, hex-dominant, prismatic, curved high-order), subdivision cages and limit evaluation, mesh algorithms | `anvil-geom`, `anvil-topo`, `flux-field` |
-| `anvil-implicit` | Expression DAG, tapes, interval, affine and gradient evaluators, sparse brick cache, the compiled path to Flux's kernel IR, implicit meshing | `anvil-geom`, `anvil-topo`, `anvil-mesh`, `flux-field` |
-| `anvil-ops` | The `Body` enum, the operation registry and every operation contract, Booleans for every representation pair, conversions, `GeometryQuery` | all of the above |
+| `anvil-geom` | Predicates, intervals, affine forms, tolerances, curves and surfaces with evaluation, local solvers, fitting | `base`, `detmath`, `simd`, `runtime`, `gpu`, `linalg`, `kernels` |
+| `anvil-topo` | Cellular topology, attributes, certificates, `EntityId`, `HistoryRecord`, lineage, `anvil::resolve`, `check_body`, the encoding | `anvil-geom` |
+| `anvil-planar` | Integer-coordinate 2D geometry with lines and arcs | `anvil-geom` |
+| `anvil-mesh` | Surface, point-set and volume meshes, subdivision cages | `anvil-topo`, `field` |
+| `anvil-implicit` | Expression DAG, tapes, evaluators, brick cache, implicit meshing | `anvil-mesh`, `field`, `kernels` |
+| `anvil-ops` | The `Body` enum, every operation's `OpImpl`, Booleans, conversions, `GeometryQuery` | all of the above |
 
-**Decision D-ANV-1:** Anvil keeps the five contract crates in the order `anvil-geom` → `anvil-topo` → `anvil-mesh` → `anvil-implicit` → `anvil-ops`, places `flux-field` between `anvil-topo` and `anvil-mesh` as the Flux tab proposes, and compiles every Anvil crate with `forbid(unsafe_code)`. SIMD and GPU work goes through the PLT `simd` and `gpu` crates, and GPU kernels are WGSL or CubeCL sources passed to those crates. *Why:* subdivision cages are polygon meshes, so they live in `anvil-mesh` without a sixth crate; implicit expressions may reference meshes and B-reps as leaves, so `anvil-implicit` sits above both; the `ErrorBound` type must sit in the lowest crate so geometry-level code can report errors (CCR-ANV-1). *Rejected:* a separate `anvil-subd` crate (one more boundary for a type that shares the mesh half-edge structure); `unsafe` SIMD inside Anvil (the contract confines `unsafe` to SIMD, GPU and FFI crates, and PLT already owns them).
+**Decision D-ANV-1:** Anvil has six crates in the order `anvil-geom` → `anvil-topo` → `anvil-planar` → `anvil-mesh` → `anvil-implicit` → `anvil-ops`, above `base`, `field` and `kernels`, all `forbid(unsafe_code)`, with SIMD and GPU work through PLT's crates and compute kernels in the shared kernel IR. *Why:* contract 12 places `base`, `field` and `kernels` below Anvil and confines `unsafe`; cages share the mesh half-edge structure. *Rejected:* a separate `anvil-subd` crate (a boundary with no new structure); `unsafe` SIMD inside Anvil. (revised in round 2)
 
 ### Kernel rules
 
-1. **Bodies are immutable values.** An operation reads Bodies and returns new Bodies. Unchanged storage is shared, so a local edit costs memory proportional to the change.
-2. **Operations are pure.** Output depends only on arguments, input Bodies, Fields and the operation's behavior version. There are no clocks, no randomness and no dependence on thread count.
-3. **Budgets are counted, never timed.** Each operation carries fuel limits in deterministic units (subdivision depth, iterations, element counts). Exhausted fuel returns `BudgetExceeded`; Kiln's cancellation returns no result rather than a different one.
-4. **Decisions are certified.** A topological decision (which side, which order, coincident or not) comes from an exact predicate, or from a certified interval predicate resolved by the tolerance model. A floating-point guess never decides topology.
-5. **Approximations state their error.** Every conversion, fit and approximate construction returns an `ErrorBound` with a guarantee kind.
-6. **The GPU proposes; the CPU decides.** GPU results prune work with exact integer tests, order it, or feed previews. A canonical output is identical with and without a GPU.
-7. **No silent fallbacks.** A fallback method (for example an implicit blend when the rolling-ball blend fails) runs only when the caller opted in, and the result says so.
-8. **Each question is asked once.** Within an operation, every predicate about a pair of entities is computed once and memoized, so later phases cannot contradict earlier ones. Manifold's mesh Booleans follow the same rule: each computation builds on earlier ones instead of asking one question two ways [Manifold wiki].
-
-## Body and representations
-
-### The Body value
-
-A `Body` is one immutable value with five parts:
-
-| Part | Meaning |
-| --- | --- |
-| `repr` | One of `BRep`, `Implicit`, `Mesh`, `SubD` (shared, reference-counted storage) |
-| `frame` | A translation on a fixed grid, near the Body's bounding-box center; coordinates are stored relative to it (rotations belong to Instance placements) |
-| `resolution` | The Body's smallest meaningful length ρ, scale-relative by default (see the tolerance model) |
-| `regions` | The 3-cells of the Body, each `Material` (with its material reference), `Void` or `Exterior`; a fluid domain is a material region whose material is a fluid |
-| `meta` | Encoding version, lineage summary, per-face conversion error bounds (D-ANV-21), and representation-specific flags |
-
-A Part wraps a Body with identity, as the contract states. Anvil never stores item numbers or names; it stores region material references and kernel attributes only.
-
-### The four representations
-
-| Representation | What is exact | Typical sources | Strengths | Limits |
-| --- | --- | --- | --- | --- |
-| `BRep` | Analytic and NURBS surfaces and curves, procedural surfaces (offset, swept, blend, subdivision limit), facet faces | Features, STEP import, conversions | Exact dimensions, faces and edges to select, GD&T, drawings, CAM | Intersections and blends are hard; imported data needs healing |
-| `Implicit` | A typed expression DAG whose zero set is the boundary; leaves may be exact distances to B-reps and meshes, or Fields | Lattices, topology optimization, field-driven design, offsets, shrinkwraps | Booleans cannot fail and offsets are robust; lattices with millions of cells stay small | No explicit edges; distance may be a bound rather than exact; evaluation costs grow with expression size |
-| `Mesh` | Combinatorial topology (manifold by construction); vertex coordinates carry a precision ε | Scans, 3D printing, tessellations, simulation | Fast, simple, universal exchange | Piecewise linear; curvature only approximated |
-| `SubD` | A Catmull-Clark cage with semi-sharp creases; the limit surface is defined exactly | Industrial design, organic forms | Smooth freeform with few controls | G1 at extraordinary vertices; class-A work needs conversion |
-
-### Representation lattice and mixed operations
-
-The contract requires mixed-representation Booleans without conversion. Anvil achieves this with inclusions that lose nothing:
-
-1. A Mesh is a B-rep whose faces are facet faces (one face per face group, triangles as geometry). Parasolid's Convergent Modeling already operates on "a mix of facet B-rep surfaces and classic B-rep surfaces" in one model [Parasolid convergent modeling].
-2. A SubD is a B-rep whose faces carry exact subdivision-limit surfaces, one per cage face.
-3. A B-rep or Mesh is an Implicit leaf: its exact signed distance, with sign from the generalized winding number so imperfect inputs still classify robustly [Jacobson et al. 2013; Spainhour and Weiss 2025].
-
-The result of a mixed operation is the join of its operands in this lattice: Mesh ⊕ Mesh is a Mesh; Mesh ⊕ BRep, SubD ⊕ BRep and Mesh ⊕ SubD are B-reps whose faces keep their native geometry; anything ⊕ Implicit is an Implicit. The caller may request another output with `into:`, which runs an explicit conversion and returns its `ErrorBound`.
-
-**Decision D-ANV-2:** Mixed-representation operations return the least representation in the lattice Mesh ⊂ BRep, SubD ⊂ BRep, BRep ⊂ Implicit that contains both operands without loss. *Why:* no operand is approximated, faces from exact operands stay exact and keep their EntityIds, and any later conversion is explicit and bounded. *Rejected:* converting everything to meshes first (destroys exact faces and dimensions); converting everything to implicits (loses edges and face identity for B-rep users); refusing mixed operations (violates the contract decision).
-
-[[DIAGRAM: Representation lattice. Four boxes: Mesh, SubD, BRep (sub-labels: exact faces, facet faces, subdivision-limit faces), Implicit (sub-labels: expression DAG, B-rep leaves, mesh leaves, Field leaves). Solid arrows labelled "lossless inclusion": Mesh → BRep, SubD → BRep, BRep → Implicit, Mesh → Implicit. Dashed arrows labelled "convert with ErrorBound": BRep → Mesh (Guaranteed), Implicit → Mesh (Guaranteed), Implicit → BRep (Guaranteed for facets, Estimated for fitted faces), Mesh → BRep fitted (Estimated), BRep → SubD (Estimated), SubD → BRep NURBS (Guaranteed).]]
-
-### Fidelity levels
-
-Each operation runs at one of two fidelities, the geometry side of the contract's interactive and sign-off modes. `Exact` produces the canonical result that Kiln caches, checks consume and releases record.
-
-`Preview` may use coarser tolerances, cheaper surrogates (for example an implicit offset in place of a blend) and the GPU; its outputs carry `Guarantee::Estimated`, are marked as previews, and never reach checks, exports or the shared cache. Flux's interactive mode may consume preview geometry for a sub-second update and then carries the preview's bound in its geometry error; sign-off consumes only `Exact` geometry.
-
-Kiln streams previews first and replaces them with exact results, which serves the contract's coarse-drag-preview target of 100 ms. A preview never changes an exact result, because exact evaluation never reads preview outputs.
-
-## Numbers, tolerances and predicates
-
-### Number kinds
-
-| Kind | Used for | Determinism |
-| --- | --- | --- |
-| `f64` | All stored coordinates and parameters; constructions | IEEE 754 basic operations are correctly rounded in Rust, and its strict IEEE semantics rule out implicit contraction and reassociation [RFC 3514] |
-| Expansions (Shewchuk) | Exact signs of linear predicates | Exact |
-| `Interval` | Certified enclosures for curved geometry and implicit evaluation | Exact rules, see below |
-| `Affine` (reduced affine forms) | Tighter enclosures for correlated expressions (implicits, patch bounds) | Exact rules |
-| Big integers and rationals | Exact rank in `analyze_constraints`, rare exact constructions in tests | Exact |
-| `u32`/`u64` | Indices, counts, grid correlation (D-MFG-12) | Exact |
-
-Lengths are meters and angles are radians inside Anvil. Ingot `Quantity` values are converted at the operation boundary, where the compiler has already checked dimensions.
-
-### Resolution, frames and scale
-
-Every Body has a resolution ρ, the smallest length the kernel distinguishes for that Body. It is scale-relative and a power of two:
-
-ρ_scale(D) = 2^(⌈log₂ D⌉ − 30), where D is the diagonal of the Body's bounding box in meters.
-
-Coordinates are stored relative to the Body frame, which sits on the frame-grid point nearest the bounding-box center. For any Body larger than 2 µm, coordinates stay below D in magnitude, so the spacing of `f64` values is at most 2^(⌈log₂ D⌉ − 53) and ρ is at least 2²³ times that spacing. That factor is the numeric headroom every construction may consume before it affects a decision. Below 2 µm the frame offset dominates the coordinates, so smaller Bodies lose one bit of headroom per halving of D (at least 2¹³ remain for a 1 nm Body).
-
-Anvil's code contains no absolute length constant other than the frame grid, so a Body whose frame is at the origin behaves identically when scaled by any power of two (oracle ANV-O-SCALE-1).
-
-An operation's result takes ρ_out = max(ρ of every input, ρ_scale(D_out)). An explicit `resolution:` argument may lower ρ to the floor 2^(⌈log₂ D⌉ − 40).
-
-| Body | D | Default ρ | Growth cap τ_cap = 2¹⁰ρ | Floor |
-| --- | --- | --- | --- | --- |
-| MEMS accelerometer die | 0.5 mm | 2⁻⁴⁰ m ≈ 0.91 pm | ≈ 0.93 nm | 2⁻⁵⁰ m |
-| Watch gear | 10 mm | 2⁻³⁶ m ≈ 15 pm | ≈ 15 nm | 2⁻⁴⁶ m |
-| Machined bracket (golden product 1) | 0.1 m | 2⁻³³ m ≈ 0.12 nm | ≈ 0.12 µm | 2⁻⁴³ m |
-| Drone (golden product 6) | 1 m | 2⁻³⁰ m ≈ 0.93 nm | ≈ 0.95 µm | 2⁻⁴⁰ m |
-| Wind turbine blade | 100 m | 2⁻²³ m ≈ 0.12 µm | ≈ 0.12 mm | 2⁻³³ m |
-| Ship hull | 300 m | 2⁻²¹ m ≈ 0.48 µm | ≈ 0.49 mm | 2⁻³¹ m ≈ 0.47 nm |
-
-A Body frame is a translation whose coordinates are integer multiples of 2⁻²⁰ m (about 0.95 µm). Differences between two frame origins are then exact in `f64` while every coordinate satisfies |origin| < 2³² m, so rebasing a point from one frame to another costs one rounding. A part modeled at georeferenced coordinates 500 km from the origin keeps the precision of a part at the origin.
-
-**Decision D-ANV-3:** Resolution is per Body, scale-relative (2⁻³⁰ of the bounding-box diagonal, rounded to a power of two) and stored with frames on a fixed 2⁻²⁰ m grid. *Why:* the contract requires nanometers to hundreds of meters with scale-relative tolerances; ρ is not a global tolerance but a per-Body floor, and every decision uses the tolerances of the entities involved; a fixed absolute value such as the default tolerance of about 5·10⁻⁹ m that Parasolid used in 1995 [Jackson 1995] is coarse for MEMS and wastes headroom for ships; power-of-two values keep scaling exact and make ρ change only when D crosses a power of two. *Rejected:* one global tolerance (forbidden by the contract and wrong across scales); ρ derived from the exact diagonal (changes with every edit and makes near-degenerate decisions flicker); per-assembly resolution (couples unrelated parts).
-
-Operations across Bodies of very different scale follow three rules:
-
-1. **Same Body.** A Boolean of a 1 µm comb drive tool with a 300 m plate takes the plate's ρ (0.48 µm). Features smaller than λ = 2⁴ρ fail with `BelowResolution { size, resolution, floor }`; the fix lowers the plate's resolution toward its floor (0.47 nm), where the headroom is still at least 2¹³.
-2. **Across Instances.** Distance, clearance and interference between Instances run in the frame of the Instance with the smaller ρ, after world-space culling with conservative boxes. Decisions use max(ρ_a, ρ_b) plus entity tolerances.
-3. **Never silently.** A result whose ρ exceeds an input's ρ reports `Note::ResolutionCoarsened { from, to }`.
-
-### Per-entity tolerances
-
-Each vertex, edge and face carries a tolerance τ ≥ ρ. Entities built exactly by Anvil have τ = ρ, which is not stored.
-
-Imported, healed or approximated entities store τ explicitly. Following Parasolid's local-tolerance model [Jackson 1995], incident entities satisfy τ(vertex) ≥ τ(edge) ≥ τ(face), and a tolerant edge keeps the parameter-space curves of its faces inside a tube of radius τ around one master curve.
-
-| Quantity | Symbol | Default | Rule |
-| --- | --- | --- | --- |
-| Resolution | ρ | 2^(⌈log₂ D⌉ − 30) | Per Body, see above |
-| Entity tolerance | τ_x | ρ | Monotone along incidence; never below ρ |
-| Growth cap | τ_cap | 2¹⁰ρ | An operation may raise a tolerance to at most max(τ of the involved input entities, τ_cap); beyond that it fails with `ToleranceGrowth { entity, needed, cap }` |
-| Healing limit | τ_heal | max(10 × the file's declared uncertainty, 2¹⁰ρ) | Up to 2²⁰ρ with an explicit argument |
-| Minimum size | λ | 2⁴ρ | Smaller slivers merge within tolerance or fail with `BelowResolution` |
-| Mesh precision | ε | Accumulated rounding bound per Mesh | As in Manifold [Manifold wiki]; exceeding τ_cap triggers `PrecisionExhausted` with a remesh fix |
-
-### Formal semantics of a toleranced Body
-
-For an entity x with stored geometry G_x and tolerance τ_x, its tolerance region is N(x) = { p : dist(p, G_x) ≤ τ_x }. For a face, G_x is the trimmed surface; for an edge, its curve; for a vertex, its point. A Body is valid when four conditions hold:
-
-1. **Incidence.** For each vertex v of edge e, the curve endpoint lies in N(v). For each edge e of face f, the image of the coedge's parameter curve on f's surface lies in N(e), and so does e's curve where e stores one.
-2. **Separation.** For any two entities x and y, every point of G_x within τ_x + τ_y of G_y lies in the tolerance region of an entity in the shared closure of x and y. Entities with disjoint closures are therefore farther apart than τ_x + τ_y. This excludes self-intersection up to tolerance, including faces that share a ring edge but cross elsewhere.
-3. **Combinatorics.** Loops are closed and consistently oriented; each bounded region is enclosed by closed shells; the radial order of faces around every edge agrees with the certified angular order; the Euler–Poincaré relation holds for every shell.
-4. **Regularity.** Curves and surfaces are regular on the domains in use, except at declared surface singularities such as cone apexes; parameter curves stay in their surface's domain or its periodic cover.
-
-The body checker (`anvil::check_body`) verifies all four with certified computations and returns every violation with the entities involved. Every operation's oracle runs it on outputs.
-
-### Certified decisions
-
-A topological question about curved geometry reduces to the sign or size of a quantity q, such as a distance or an oriented angle. Anvil computes an enclosure [lo, hi] of q and decides against the tolerance τ that applies (the sum of the entities' tolerances for coincidence, as in Jackson 1995):
-
-1. If hi ≤ τ, the entities are **coincident** (or the point is **on**).
-2. If lo > τ, they are **separated**, with a certified sign.
-3. Otherwise Anvil refines the enclosure by subdivision or interval Newton steps, up to the operation's fuel.
-4. If refinement reaches width below ρ/2⁸ and the enclosure still straddles τ, Anvil declares coincidence and grows the entities' tolerances to hi, within the growth cap. If the cap or the fuel is exhausted first, the operation fails with `Ambiguous { entities, enclosure }`.
-
-Step 4 replaces a floating-point guess with a recorded tolerance growth (`Note::ToleranceGrown` on the result). It is deterministic because the enclosure computation has a fixed operation order. Merged entities take max(τ_x, τ_y, certified Hausdorff bound), which covers both, as Parasolid does when joining entities of different tolerance [Jackson 1995].
-
-**Decision D-ANV-4:** Topological decisions on curved geometry use certified enclosures with a three-way tolerance rule and recorded tolerance growth; linear decisions use exact predicates. *Why:* the contract mandates adaptive exact predicates for topology and floating-point constructions; exact algebraic predicates on NURBS and procedural surfaces are impractical, while certified enclosures plus explicit tolerance growth never contradict themselves and leave an audit trail. *Rejected:* fixed epsilon comparisons (inconsistent decisions are the classic cause of invalid B-reps); exact algebraic arithmetic for curved geometry (degrees explode for blends and offsets); silent tolerance growth without a cap (tolerances creep until models break).
-
-### Exact and filtered predicates
-
-| Family | Inputs | Method | Used by |
-| --- | --- | --- | --- |
-| Linear predicates | `f64` points: orient2d, orient3d, incircle, insphere, comparisons of distances and dot products | Static filter, then interval filter, then exact expansion arithmetic [Shewchuk 1997] | Meshes, polygon arrangements, planar sketches, convex hulls |
-| Indirect predicates | Implicit points: line-plane, three-plane and two-point linear-combination intersections | Filtered evaluation on the generating primitives, so the point is never rounded [Attene 2020; Diazzi et al. 2023] | Mesh arrangements, mesh Booleans, constrained Delaunay tetrahedrization |
-| Certified curved predicates | Curves, surfaces, implicit expressions | Interval and affine enclosures, Bernstein bounds, Krawczyk or interval Newton, with the decision rule above | B-rep Booleans, blends, classification, intersections |
-
-Shewchuk's adaptive predicates do only as much work as a correct sign needs, and his code is public domain [Shewchuk 1997]. Attene's indirect predicates take the primitives that define a constructed point and resolve the predicate exactly with filters and expansions, and he reports that they beat lazy exact representations [Attene 2020]. Anvil generates the filtered Rust code for both families from symbolic predicate descriptions at build time and checks the generated code into `anvil-geom`.
-
-**Decision D-ANV-5:** Anvil implements its own predicate generator for linear and indirect predicates, porting Shewchuk's public-domain method and Attene's indirect-predicate scheme. *Why:* the generator emits safe Rust with canonical evaluation order, and the same source drives native and Wasm builds; indirect predicates make mesh arrangements exact without rational coordinates. *Rejected:* binding C++ libraries (FFI, platform variance, licenses: Attene's CDT code is GPL or LGPL by build option [MarcoAttene/CDT]); rational arithmetic throughout (on a 1.2-million-triangle Boolean, arbitrary-precision mesh arrangements took 141 s where EMBER took 34 ms [EMBER 2022]).
-
-### Intervals without rounding modes
-
-Rust treats inline assembly that changes the floating-point control state as undefined behavior [RFC 3514], so Anvil cannot switch rounding modes. Intervals use error-free transformations instead. TwoSum and TwoProduct compute the exact rounding error of a sum or product, and division and square root use the exact remainders a − q·b and a − s².
-
-When the error is nonzero, the bound moves one step outward with `next_up` or `next_down` (stabilization release unverified). TwoProduct uses `mul_add` where the CPU has FMA and Dekker splitting elsewhere. Both give the exact error term, so the bits are identical on every target.
-
-Transcendental functions come from the PLT `detmath` crate, which is correctly rounded on every Tier 1 target. Their interval extension widens the correctly rounded result by one ulp on each side. Rust's own `sin` and `exp` have "non-deterministic" precision by documentation [Rust f64 docs], so Anvil never calls them.
-
-### Symbolic perturbation
-
-Exact ties inside mesh algorithms, such as four cocircular points in a constrained Delaunay triangulation, are broken by Simulation of Simplicity [Edelsbrunner and Mücke], as Lévy does for unique triangulations [Lévy 2024]. The perturbation order is the canonical vertex order of the encoded Body (face-group EntityId, then local index), never memory order.
-
-Boolean semantics of touching or coplanar faces are not left to perturbation. The cellular arrangement classifies coplanar facets explicitly, then regularizes.
-
-The results match the cases Manifold documents for its perturbation rule: touching cubes merge in a union, an equal-height difference cuts through, and A − A is empty [Manifold wiki]. These three cases are Boolean oracles.
-
-## B-rep data structures
-
-### Cellular topology
-
-Anvil uses one cellular boundary representation for manifold solids, sheets, wires, non-manifold bodies and multi-region bodies. A manifold solid is the common special case and gets fast paths, but it is not a separate type.
-
-| Entity | Holds | Invariants |
-| --- | --- | --- |
-| Region | Role: `Exterior`, `Material(MaterialRef)` or `Void`; its shells | Exactly one `Exterior` region per Body; every bounded region is enclosed by shells |
-| Shell | A connected set of face sides bounding one region | Closed for the outer boundary of a bounded region; open shells are sheets, free in `Exterior` or embedded in a region |
-| Face | Surface reference, sense, loops, and two sides (front, back), each bounding one region | Front and back regions are equal only for sheet faces: a free sheet in `Exterior`, or an embedded sheet (a crack) inside a region |
-| Loop | A cycle of coedges on one face | Outer loop first; material lies left of the loop in (u, v) when the sense is positive |
-| Coedge | One use of an edge by a loop: next, previous, radial next, sense, parameter curve | Radial cycle ordered by certified dihedral angle around the edge |
-| Edge | Curve reference, parameter interval, tolerance, start and end vertex (none for ring edges) | Every radial cycle alternates face sides consistently with the regions it separates |
-| Vertex | Point and tolerance | τ(vertex) ≥ τ of every incident edge |
-
-Radial cycles carry the non-manifold cases. An edge with four coedges joins two solids along a line; a wire edge has no coedges; an acorn vertex has no edges. A multi-material part is one Body with several `Material` regions that share internal faces, so the interface between a steel insert and its overmolded polymer is one face with steel on one side and polymer on the other.
-
-**Decision D-ANV-6:** Anvil uses one cellular B-rep (regions, shells, faces with two sides, loops, coedges with radial cycles, edges, vertices) for all B-rep bodies, with material assigned per region. *Why:* multi-material parts, conformal multi-region meshing for Flux and mixed Booleans that keep internal interfaces all need shared faces between regions; one structure avoids converting between a manifold kernel and a non-manifold kernel. *Rejected:* a manifold-only half-edge B-rep with non-manifold cases in a side structure (two code paths and lossy conversions); a combinatorial 3-map for every Body (heavier for the common single-solid case).
-
-Two topology rules reduce naming noise:
-
-1. **No seam edges.** Loops on periodic surfaces live in the surface's universal cover, with an integer winding per loop. A full cylindrical face between two circular edges has two loops and no seam. STEP export inserts seams where the target schema requires them.
-2. **No degenerate edges.** Surface singularities, such as a sphere pole or a cone apex, are interior singular points of the face, not edges. They remain selectable as points through `face.singular_points()`.
-
-*Why:* seams and degenerate edges are artifacts of a parameterization. They create entities that users never modeled, and they move when parameters change, which breaks queries.
-
-### Geometry types
-
-Every geometry type implements exact evaluation with derivatives to third order (G3 analysis needs them), a certified bound over any parameter box, and conversion to NURBS with a stated error. Procedural types also keep a cached NURBS approximation with a certified `ErrorBound`. Algorithms use it for bounds and seeding, then refine on the exact definition.
-
-| Curve | Exact definition | Phase |
-| --- | --- | --- |
-| Line | Point and unit direction | 0 |
-| Circle, ellipse | Center, axes, radii | 0 (circle), 1 (ellipse) |
-| Parabola, hyperbola | Vertex frame and focal parameters | 1 |
-| Helix | Axis, radius, pitch, handedness, taper angle | 2 |
-| NURBS | Degree ≤ 25 (a design limit; imports above it are approximated with a reported error), clamped or periodic knots, positive weights | 0 |
-| Planar offset | Base curve, signed distance, plane normal | 1 |
-| Intersection | Two surfaces and a branch; fitted B-spline and two parameter curves; refinement by projection onto the true intersection | 1 |
-| Blend spine and contact | The spine is the intersection of two offset supports; each contact curve is the spine's foot-point curve on one support; both procedural with fitted B-splines | 1 |
-| Curve on surface | Surface and a 2D curve in its parameter space | 0 |
-| Polyline | Points; used by facet faces | 0 |
-
-| Surface | Exact definition | Phase |
-| --- | --- | --- |
-| Plane | Frame | 0 |
-| Cylinder, cone, sphere, torus | Frame and radii; self-intersecting tori (lemon and apple) allowed with their singular points marked | 0 |
-| General quadric | Ellipsoid, elliptic paraboloid and hyperboloid, elliptic cylinder and cone | 2 |
-| NURBS | Degree ≤ 25 in each direction, rational, periodic flags | 0 |
-| Offset | Base surface and signed distance; invalid where the distance reaches a principal radius of curvature, which `check_body` reports | 1 |
-| Linear extrusion, revolution | Curve and direction, curve and axis | 0 |
-| General sweep | Profile, path, frame rule (fixed, Frenet, rotation-minimizing, guide curve, fixed binormal), scale and twist laws as Fields | 1 |
-| Rolling-ball blend | Two supports, spine, radius law (constant or Field), cross-section (circular, conic with ρ value, curvature-continuous) | 1 (constant), 2 (variable) |
-| Vertex blend | n-sided patch over a setback polygon [Várady publication list] | 1 (three edges, equal radii), 3 (any valence) |
-| Subdivision limit | Cage face, its one-ring and crease data | 3 |
-| Facet | A face group of triangles | 1 |
-
-**Decision D-ANV-7:** Offset, intersection, sweep, blend and subdivision-limit geometry stays procedural, with exact evaluation plus a cached, certified NURBS approximation. *Why:* procedural geometry is exact, small and regenerates from its inputs, so a blend between an offset and a cylinder does not accumulate approximation error at each step; the cached approximation keeps the polynomial machinery (Bernstein bounds, subdivision) available. *Rejected:* converting every construction to NURBS immediately (error compounds across features and models grow); procedural-only geometry (no cheap bounds for intersection).
-
-**Decision D-ANV-8:** B-rep face geometry is always parametric; implicit surfaces never appear as B-rep faces. *Why:* every B-rep algorithm (trimming, tessellation, blending, export) relies on (u, v) domains; mixed operations with implicits already produce `Implicit` Bodies by the representation lattice. *Rejected:* implicit face geometry (every surface-surface pair would need an implicit-parametric variant, and STEP cannot carry it).
-
-### Parameter spaces and trimming
-
-Each surface declares its domain, periodicity per direction and singular points. Each coedge stores a parameter curve on its face's surface.
-
-Parameter curves are reparameterized to share the edge curve's parameter: for every t, |S(pc(t)) − C(t)| ≤ τ_edge. This "same parameter" rule lets tessellation place shared edge vertices at the same t from both sides, which makes the display mesh watertight by construction.
-
-Point-in-face classification works in parameter space with exact predicates on polyline proxies and certified refinement near the boundary. On periodic surfaces it counts winding in the universal cover. Trimming loops must be closed within the vertex tolerances, non-self-intersecting beyond the edge tolerances, and nested consistently; `check_body` verifies all three.
-
-### Attributes
-
-Design attributes are typed plain values attached to entities by Ingot features, such as `HoleSpec`, `ThreadSpec`, `Weld` and surface finish (the Mechanical tab keys them by `EntityId` on a Body). Anvil stores them in a side table keyed by `EntityId`. Each attribute class declares how it propagates, and Anvil applies the policy inside every operation.
-
-| Event | Policies | Default |
-| --- | --- | --- |
-| Split | `Copy`, `Drop`, `Divide(by: area or length)` | `Copy` |
-| Merge | `KeepIfEqual`, `Union`, `Drop`, `Fail` | `KeepIfEqual` |
-| Transform | `Transform` (for vector-valued attributes), `Keep` | `Keep` |
-| Delete | Dropped, with the attribute listed in the `Deleted` record | — |
-
-Attribute changes appear as `Modified { aspects: Attributes }` history. A `Fail` merge policy turns a merge into `AttributeConflict { entities, class }`, which suggests an explicit choice in the feature.
-
-### Memory layout
-
-| Layer | Layout | Why |
-| --- | --- | --- |
-| Builders inside an operation | Arenas with generational keys (slot index plus version), like `slotmap`, which prevents reuse of stale keys [slotmap docs] | Operations insert and delete freely without dangling handles |
-| Finished Body | One persistent search tree per entity kind, keyed by row order; leaves hold up to 1,024 rows in structure-of-arrays layout, each leaf an `Arc` slice | SIMD-friendly scans; a new Body version shares every untouched leaf with its predecessor |
-| Row order | Morton code of the entity's box center on the Body's grid of cell size 2¹⁰ρ (2²⁰ cells per axis), then `EntityId` | Spatial locality, and an order that depends only on content and scales with the Body |
-| Leaf boundaries | Content-defined: a row ends a leaf when a hash of its EntityId has its low 8 bits zero, with minimum and maximum leaf sizes | The same content always produces the same leaves, whatever edit history led to it, so leaf hashes are canonical |
-| Handles | (leaf, slot) pairs, valid only within one Body version | Cheap; never stored and never exposed through `api` |
-| Geometry | One pool per geometry type; NURBS headers plus flat knot and homogeneous control-point buffers (x·w, y·w, z·w, w) | Batched evaluation; identical geometry is stored once |
-| Acceleration | Per-face boxes and normal cones in columns; a bounding-volume hierarchy built on demand with binned surface-area heuristic, fixed bin count and `EntityId` tie-breaks | Deterministic culling for intersection, distance and classification |
-
-A local edit, such as one fillet on a 10,000-face part, rewrites only the leaves it touches and their paths to the roots. Kiln can therefore keep many Body versions in memory, which the 2-second rebuild target relies on.
-
-### Persistence and versioning
-
-The Body encoding is a canonical binary form. Its content hash in the CAS is a SHA-256 Merkle hash: each leaf's canonical bytes are hashed, each section hashes its leaf hashes in row order, and the header hashes the section hashes. Re-hashing after a local edit therefore costs time proportional to the change, and equal content always gives equal hashes.
-
-1. **Header.** An 8-byte magic number, encoding version (major, minor), representation, frame, resolution and a section table.
-2. **Sections.** Topology tables, geometry pools, `EntityId`s, tolerances, attributes, lineage summary, accumulated `ErrorBound`, and representation-specific sections (mesh buffers, subdivision cage, implicit DAG). Each section has a type tag, a length and a required flag.
-3. **Canonical values.** Little-endian fixed-width integers; IEEE binary64 floats with −0.0 normalized to +0.0; no NaN or infinity; rows in the canonical order above.
-4. **Compression.** Storage may compress leaves; hashes cover uncompressed bytes, so compression settings never change identity.
-5. **Text form.** A line-oriented canonical text form with hexadecimal floats, used by oracle golden files and review diffs.
-
-Versioning follows four rules:
-
-1. A minor version adds optional sections or columns with defaults. Older readers skip unknown optional sections.
-2. An unknown required section fails with `EncodingError::Unsupported { needed }`, never a partial read.
-3. A major version changes layout. Anvil keeps a reader for every major version ever released and upgrades on read in memory.
-4. Writers write only the current version, except the adapter that feeds retired operation versions running as Wasm components, which writes the major version each component was built with.
-
-Body encodings are derived artifacts, rebuilt from Ingot source and pinned operation versions, so readability is the only long-term duty. Releases may still embed encodings next to STEP AP242 files for long-term archiving and viewer-only access.
-
-**Decision D-ANV-9:** The Body encoding is a canonical, sectioned binary form with content-defined leaves and a SHA-256 Merkle content hash, with read support for every major version forever. *Why:* Kiln and the CAS key on content hashes, so the encoding must be canonical; Merkle hashing over content-defined leaves keeps hashing and storage proportional to each edit; sections give additive evolution without breaking old readers; a text twin makes oracle goldens reviewable. *Rejected:* serializing in-memory structs directly (layout changes would change hashes); a self-describing generic format such as JSON for primary storage (slow, not canonical without extra rules); STEP as native storage (loses procedural geometry, tolerances, lineage and attributes).
-
-## Implicit representation
-
-An `Implicit` Body is a typed expression DAG f: ℝ³ → ℝ whose region f ≤ 0 is the solid. Implicits carry lattices, field-driven geometry, topology-optimized shapes, shrinkwraps and every mixed operation with an implicit operand. nTop shows the industrial value of this representation and calls it lightweight for fast iteration [nTop whitepaper].
-
-It also shows the cost of changing a kernel's numerics: implicit geometry regenerated in its 5.0 kernel may differ slightly from earlier results [nTop 5.0 notice]. Anvil's behavior versions exist to prevent exactly that.
-
-### Expression DAG
-
-| Node family | Nodes | Lipschitz rule |
-| --- | --- | --- |
-| Coordinates and constants | x, y, z, typed constants with units | 1, 0 |
-| Arithmetic | +, −, ×, ÷, neg, abs, sqrt, square, min, max, clamp, select | Interval bound of the local gradient |
-| Transcendental | sin, cos, exp, ln, atan2, pow (from `detmath`) | Interval bound of the derivative |
-| Primitives with exact distance | half-space, sphere, box, rounded box, cylinder, cone, torus, capsule, ellipsoid (bound only) | 1 |
-| CSG | union (min), intersection (max), difference, smooth union and intersection (polynomial blend with radius k) | 1 if inputs are 1-Lipschitz |
-| Transforms | rigid, uniform scale (exact), non-uniform scale, shear, twist, bend, taper, Field-driven warp | Product with the bound of the inverse Jacobian |
-| Distance operators | offset (f − d), shell (\|f\| − t/2), round | Lipschitz constant unchanged; an offset of an `Exact` input is `Bound(1)` with the correct zero set; other kinds need redistancing (below) |
-| Domain operators | linear and polar repetition with cell clamping, mirror, extrude and revolve of a 2D implicit | 1 for exact repetitions |
-| Lattices | TPMS families (gyroid, Schwarz P, Schwarz D, diamond, Neovius, Lidinoid), strut graphs with node blends, stochastic foams | Bound per family |
-| Leaves | B-rep or Mesh Body (exact signed distance), Field leaf (`Field<Body, Length>` or density), cached brick grid | 1 for distance leaves; from Field metadata otherwise |
-
-The DAG is hash-consed: identical subexpressions are stored once, and the DAG's hash is its content hash. Constants are part of the hash, so a parameter edit produces a new DAG that shares every unchanged subgraph.
-
-### Distance kinds and Lipschitz bounds
-
-Every node carries a distance kind, propagated statically:
-
-| Kind | Meaning | Allowed uses |
-| --- | --- | --- |
-| `Exact` | f equals the signed distance to the boundary | All operations, including offsets by any amount |
-| `Bound(L)` | f has the correct sign and \|f(p)\| ≤ L·dist(p, boundary) | Classification, Booleans, sphere tracing with step \|f\|/L, meshing; offsets only after redistancing |
-| `Lipschitz(L)` | f has the correct sign and \|f(p) − f(q)\| ≤ L·\|p − q\| | As `Bound(L)` |
-| `SignOnly` | Correct sign; no slope bound (C0 warps that break Lipschitz continuity) | Classification by interval arithmetic only; slow queries are reported |
-
-Min of exact distances is exact outside and a bound inside; max is the reverse. Smooth unions of 1-Lipschitz inputs remain 1-Lipschitz but not exact. A transform with Jacobian J has local Lipschitz constant bounded by the interval enclosure of ‖J⁻¹‖ over the query box.
-
-Offsets need exact distance, because offsetting a bound moves the surface by the wrong amount. `anvil::offset` on a non-exact implicit therefore redistances first.
-
-It builds the narrow band |f| < |d| + margin in the brick cache, computes exact distances to the certified zero set, and returns the offset with a `Guaranteed` bound equal to the zero-set certification error plus the band interpolation error. The caller may instead accept `approximate: true`, which offsets the bound directly and reports `Guarantee::Estimated`.
-
-**Decision D-ANV-10:** Implicit nodes carry a statically propagated distance kind and Lipschitz constant, and operations that need exact distances redistance in a narrow band instead of trusting bounds. *Why:* lattices, smooth blends and warps rarely yield exact distances; tracking the kind lets classification and meshing stay certified while offsets stay correct; this is the condition Lipschitz pruning relies on [Barbier et al. 2025]. *Rejected:* assuming every implicit is a true SDF (offsets and clearances become silently wrong); restricting implicits to exact-distance constructions (excludes smooth blends, TPMS and Field-driven geometry).
-
-### Evaluation
-
-Expressions compile to a tape: a register-allocated linear program over the DAG, as in Fidget, which register-allocates its tape into bytecode with 256 registers [Fidget]. Anvil evaluates the same tape with four evaluators:
-
-| Evaluator | Input | Output | Use |
-| --- | --- | --- | --- |
-| Point (batched) | Points in blocks of 8 lanes | f(p) | Sampling, ray stepping, meshing |
-| Gradient | Points | f and ∇f by forward-mode differentiation | Normals, dual-contouring vertices, Newton steps |
-| Interval | Boxes | Enclosure of f and, optionally, ∇f; min/max choices | Culling, classification, local Lipschitz bounds, pruning |
-| Affine (reduced) | Boxes | Affine form of f | Tighter enclosures where intervals overestimate |
-
-Interval evaluation records which branch of each min and max is active over the box, and the tape is then pruned to the active branches for that region. Keeter's renderer reports average tape length dropping about 17× for tiles and 216× for subtiles on a text benchmark [Keeter 2020]. Smooth blends defeat choice-based pruning, which made Keeter's bear-head sculpt the slowest case (about 88 ms per frame at 1024³) [Keeter 2020].
-
-Anvil therefore also prunes smooth blends: in a polynomial smooth union with radius k, a branch whose lower bound exceeds the other branch's upper bound by at least k cannot affect the result in that region. Anvil bounds each branch over a cell from one evaluation at the cell center plus the branch's Lipschitz constant; Lipschitz pruning builds its region-equivalent pruned trees on the same property, for hard and smooth CSG [Barbier et al. 2025].
-
-Interval bounds can be loose near surfaces, and Keeter suggests reduced affine arithmetic as the remedy [Keeter 2020]; Sharp and Jacobson report that variants of affine arithmetic are highly effective for range analysis [Sharp and Jacobson 2022]. Anvil runs interval arithmetic first and switches a box to reduced affine arithmetic when the interval is ambiguous and its width exceeds four times the box diameter times the node's Lipschitz bound.
-
-**Decision D-ANV-11:** The canonical CPU evaluator is a SIMD bytecode interpreter with interval and Lipschitz tape pruning; a compiled path lowers tapes to the shared kernel IR that Flux uses and emits Wasm SIMD modules, with bit-identical results. *Why:* Fidget measures a 31× JIT advantage for brute-force evaluation but only about 25% (6 ms versus 4.6 ms) once pruning is used [Fidget], and the fastest Prospero result is a NEON interpreter at 0.29 ms [Prospero]; an interpreter runs where JIT is impossible (iPadOS) and inside the browser; reusing Flux's kernel IR gives one code generator with D-FLX-8's fixed operation order. *Rejected:* a native JIT per architecture (a second CPU code path, an attack surface, and no gain once pruned); per-expression shader compilation for the GPU (Keeter measures 1 to 7 ms of CPU tape generation per model change, while CUDA kernel generation in the Prospero challenge took about 2 seconds [Prospero]).
-
-The compiled path compiles tapes at run time into Wasm SIMD modules, which the PLT Wasm runtime turns into native code where JIT is allowed and interprets with Pulley where it is not (iPadOS, per the PLT tab). GPU evaluation follows the massively parallel rendering scheme: a WGSL tape interpreter evaluates tiles hierarchically, splitting each into 64 children (two warps) with interval classification and per-tile pruning [Keeter 2020].
-
-WGSL names three floating-point types, `f32`, `f16` (behind the `f16` extension) and AbstractFloat [WGSL]; it offers no runtime 64-bit float [unverified]. GPU results therefore serve previews, culling and work ordering only; certified answers come from CPU `f64` evaluation of the same tape.
-
-### Sparse brick cache
-
-Repeated queries on one implicit, such as meshing, slicing, simulation queries and clearance checks, share a sparse cache. The cache stores 8³ bricks of `f64` values and gradients at a power-of-two spacing h, only in the narrow band where interval evaluation cannot exclude the surface.
-
-Each brick is keyed by (DAG hash, brick coordinate, h) and stored in the CAS, so a team shares it. Trilinear reads from the cache report an interpolation error bound from the node's Lipschitz constant and h, and callers that need more accuracy evaluate the tape directly.
-
-### Field leaves
-
-A Field leaf samples a Flux `Field` through its `Sampler` with a requested accuracy. The returned error adds to the implicit's `ErrorBound`, and the Field's representation supplies a Lipschitz bound (from element gradients for discrete Fields, or by interval evaluation for analytic Fields). `anvil::implicit_from_field` turns `Field<Body, Density>` into an implicit Body at an iso-value, which serves topology optimization and the Flux region extraction `f.region(where: f > 250MPa)`. Its distance kind is `Lipschitz(L)` from the Field's bound, and its `ErrorBound` is the Field's sampling error divided by a certified lower bound of the gradient magnitude near the iso-surface. Failure: `FieldOutOfRange`; `NoIsoSurface` when the Field never crosses the iso-value; `FlatIsoSurface { region }` where the gradient bound reaches zero, so the surface position cannot be bounded. Oracle: ANV-O-IMP-4 (analytic Fields with known iso-surfaces, such as a radial Field whose iso-surface is a sphere). Phase 1.
-
-### Lattices from Fields
-
-`anvil::lattice` builds lattice geometry inside a design region from Fields:
-
-| Input | Type | Effect |
-| --- | --- | --- |
-| Region | Body | Where the lattice exists; trimmed exactly by intersection |
-| Family | TPMS kind, strut topology (BCC, FCC, octet, Kelvin, custom graph) or stochastic Voronoi foam | Cell geometry |
-| Cell size | `Field<Body, Length>` | Graded cell size |
-| Thickness | `Field<Body, Length>` | Wall or strut thickness |
-| Orientation | `Field<Body, Rotation>` or a conformal map from `anvil::parameterize` | Aligned and conformal lattices |
-| Skin | Optional thickness and face selection | Lattice fused to a shell |
-
-History: each lattice role (`wall`, `strut`, `node`, `skin`) is a DAG node with an EntityId, so faces of a converted lattice are selectable by role (`lattice.faces(role: skin)`).
-
-`anvil::lattice` is the general primitive that the contract's section 4 leaves room for: the cell families above, graded and oriented by Fields. Specialized lattice generators, such as new cell families, stochastic or conformal design algorithms and vendor libraries, are Wasm components that emit strut graphs or implicit expressions and hand them to `anvil::lattice` or to implicit operations. Neither path is privileged.
-
-A lattice with millions of cells stays an expression of a few hundred nodes, because domain repetition evaluates in constant time per point. Strut graphs above about 10⁴ struts use a spatial hash of struts as a leaf, so a point evaluates only nearby struts. Each strut lattice also exposes its graph (nodes, beams, radii) for export, for example to the 3MF Beam Lattice extension [3MF beam lattice repository; contents unverified].
-
-Failure behavior: `BelowResolution { size }` when a wall or strut is thinner than 2λ (manufacturability limits such as printer resolution are checks in the Manufacturing tab, not kernel errors); `FieldOutOfRange` when a driving Field leaves its declared range; `TooManyCells { estimated, limit }` before evaluation when the estimated cell count exceeds the fuel. Oracle: volume fractions of uniform TPMS and strut lattices against closed-form or high-resolution reference values, minimum-thickness checks by certified interval evaluation, and determinism across platform classes. Phase 1, for golden product 2.
-
-### Implicit meshing
-
-`anvil::convert(implicit, into: Mesh)` uses adaptive dual contouring on an octree with certified cell classification:
-
-1. **Classify.** Interval evaluation marks octree cells as inside, outside or ambiguous; ambiguous cells refine.
-2. **Certify cells.** Refinement continues until each surface cell is monotone: the interval enclosure of one partial derivative excludes zero, so within the cell the surface is a graph over the other two axes, with no folds or small closed pieces. Cells that reach λ without this property are flagged `Uncertified` in the result.
-3. **Place vertices.** Each surface cell gets one vertex per connected surface piece in the cell, placed by minimizing a quadric error function built from exact gradients, which keeps sharp edges and corners.
-4. **Connect.** Manifold dual contouring connectivity guarantees a manifold output, as in Fidget's implementation [Fidget]; occupancy-based dual contouring shows the same structure parallelizes well on GPUs [Hwang and Sung 2024].
-5. **Check.** An exact self-intersection test runs on the output; intersecting pairs are repaired locally by vertex relocation inside their cells.
-
-The result's `ErrorBound` is a two-sided Hausdorff bound. Vertices are clamped to their cells, so every surface point is within one cell diagonal of the mesh, and every triangle, which spans adjacent surface cells, is within two cell diagonals of the surface. Where the ratio of max \|f\| over a triangle to a certified lower bound of \|∇f\| in its cells is smaller, that ratio is the bound.
-
-The bound is `Guaranteed` in certified cells and `Estimated` in flagged ones, which are listed. Manifoldness is guaranteed; topological equivalence to the true surface is not claimed. Keeter notes that "good meshing of arbitrary implicit surfaces remains an unsolved problem" [Fidget], and Anvil claims no more than its certified cells allow.
-
-## Mesh representation
-
-### Surface meshes
-
-A `Mesh` Body stores triangles with Manifold-style exact topology: an oriented, combinatorially 2-manifold half-edge structure, closed or with boundary. Manifold makes the same split, with exact topology, inexact geometry and a tracked precision ε that bounds accumulated rounding [Manifold wiki].
-
-| Part | Layout |
-| --- | --- |
-| Positions | `f64` columns relative to the Body frame |
-| Topology | Three half-edges per triangle (start vertex, paired half-edge); the pairing is a bijection |
-| Face groups | A run of triangles that forms one selectable face, with its `EntityId`; tessellations of B-rep faces keep the face's EntityId |
-| Crease edges | Half-edge flags marking sharp creases and face-group boundaries, each with an `EntityId` |
-| Property channels | Typed per-vertex or per-corner channels: normals, UVs, colors, `(EntityId, u, v)` back-references, Field values |
-| Regions | For closed meshes, which side is material and which material |
-| Precision ε | The accumulated geometric error bound, as in Manifold |
-
-Per-corner properties (a UV seam, a normal crease) use property indices separate from position indices, so seams never break topology. This mirrors Manifold's `MeshGL` merge vectors, which record vertex duplication for GPU buffers [Manifold wiki].
-
-Triangle data that is not an oriented manifold does not become a `Mesh`. It enters through `anvil::mesh_from_triangles`, which either builds a valid `Mesh`, builds a cellular B-rep with facet faces when the data is non-manifold by intent (for example a T-junction of three sheets), or fails with `NotManifold { edges, vertices }` that suggests `anvil::repair_mesh`.
-
-### Volume meshes
-
-A `Mesh` Body may also carry volume cells. Volume meshes share the vertex and boundary-face structure of surface meshes and add:
-
-| Part | Content |
-| --- | --- |
-| Cells | Tetrahedra, hexahedra, prisms, pyramids and general polyhedra (hex-dominant output), each with a region index |
-| Order | Geometry order p_g from 1 to 4, with Bézier control nodes per element; Lagrange nodes derived on request |
-| Boundary classification | Each boundary facet maps to the `EntityId` of the B-rep face or the internal interface it approximates; each crease edge maps to an edge `EntityId` |
-| Quality | Per-element minimum scaled Jacobian, certified from Bernstein coefficients |
-| Geometry error | Per-facet certified distance to the classified face, aggregated into the Body's `ErrorBound` |
-
-Boundary classification is how Flux resolves `ds(part.face(q))` on fitted meshes: the query resolves to an `EntityId` on the B-rep, and the mesh's boundary facets carry that `EntityId`. Operations that expect a solid, such as Booleans, use a volume mesh's boundary and drop its cells with `Note::CellsDropped`; mesh operations keep the cells.
-
-### Mesh repair
-
-`anvil::repair_mesh` turns imported or scanned triangle data into a valid `Mesh`. Each step is reported in the result.
-
-1. **Weld.** Merge vertices within the healing limit, using exact predicates on a fixed grid order so the result does not depend on input order.
-2. **Remove degeneracies.** Collapse zero-area and needle triangles below λ.
-3. **Resolve self-intersections.** Build the exact arrangement of all triangles with indirect predicates.
-4. **Classify cells.** Assign inside or outside to each arrangement cell by the generalized winding number, which remains meaningful for self-intersecting, open and non-manifold inputs [Jacobson et al. 2013]; threshold 0.5.
-5. **Extract.** Return the boundary of the inside cells as a manifold mesh, with holes smaller than a fill limit closed by minimal-area patches.
-
-The `ErrorBound` reports the maximum displacement of any input point and the total area added or removed, with guarantee `Guaranteed` for displacement and `Estimated` for the winding-number decision near its threshold. Oracle: Thingi10K, whose models carry self-intersections and non-manifold geometry [Thingi10K 2016]; every repaired output must pass `check_body`, and the inside volume must match the reference winding-number volume within the reported bound.
-
-### Where volume meshing lives
-
-**Decision D-ANV-12:** Volume meshing (tetrahedral, hex-dominant, boundary layers, curved high-order elements), mesh adaptation and node optimization are Anvil operations; Flux decides what to mesh and how finely by passing sizing and metric Fields. *Why:* meshing consumes exact geometry, needs the same exact predicates, tolerance model and EntityIds for boundary classification, and its outputs are Bodies that other operations (Booleans, slicing, display) also consume; Flux's tab already assumes this split, with Anvil owning "all mesh generation and mesh modification" and Flux owning error estimation and marking. *Rejected:* meshing in Flux (would duplicate predicates, evaluators and naming, and mix geometry robustness into the solver); meshing as a Wasm component (it is a general operation used by every fitted discretization, which the contract assigns to native operations, and it needs Anvil's internal evaluators in every inner loop).
-
-### Tetrahedral meshing
-
-`anvil::tetrahedralize` has two strategies, chosen by input quality or explicitly:
-
-| Strategy | When | Method | Boundary guarantee |
-| --- | --- | --- | --- |
-| `Conforming` (default for valid B-reps and valid meshes) | Input passes `check_body` | 1. Tessellate faces with the sizing Field, conforming at edges. 2. Constrained Delaunay tetrahedrization with Steiner points represented implicitly and indirect predicates [Diazzi et al. 2023]. 3. Quality improvement by local operations (split, collapse, swap, smoothing) that never move boundary vertices off their classified face. | Boundary facets subdivide the surface tessellation; Steiner points lie exactly on it until rounded to `f64`, then within one rounding of it; geometric error is the tessellation's certified error plus that rounding |
-| `Envelope` | Imperfect input: soups, scans, healed imports | Incremental insertion into a floating-point background mesh with mesh optimization interleaved, keeping the boundary inside an envelope of width ε_env [fTetWild 2020] | Boundary within ε_env of the input (default τ_heal); every input triangle inserted, or the omitted ones reported |
-
-Diazzi and colleagues report that the conforming CDT succeeds on all 4,408 valid Thingi10K models, averages 4.3 s per model with 76% under one second, and that TetGen fails on 378 of them. They also show that rounding Steiner points to floating point keeps the mesh valid in 93.22% of cases (99.77% after post-processing), and that some inputs admit no floating-point conforming mesh at all [Diazzi et al. 2023].
-
-Anvil therefore rounds, checks every element with exact orientation predicates, and repairs inverted elements by local re-insertion. If any remain, it fails with `NotRepresentable { elements }` and suggests the `Envelope` strategy.
-
-fTetWild guarantees a valid floating-point tetrahedral mesh but no longer guarantees that every input triangle is inserted; on Thingi10K it always inserted all of them [fTetWild 2020]. Anvil reports any omitted input triangle explicitly.
-
-Multi-region bodies mesh conformally: every region of a cellular Body gets its own cells, and shared faces get shared facets. Contract: inputs `body: Body`, `sizing: &Field<Body, Length>`, `geometry_order: u8`, `strategy`, `quality: QualityTarget`; outputs a volume `Mesh` Body and an `ErrorBound` (Hausdorff distance between mesh boundary and Body boundary). Failure behavior: `InvalidInput` with `check_body` violations, `NotRepresentable`, `BudgetExceeded { elements }`, `QualityNotReached { worst, target }` (the mesh is still returned, marked).
-
-Oracle: Thingi10K valid subset and ABC samples [ABC 2019] at fixed sizing; zero inverted elements; boundary error within the reported bound; region volumes within the bound. Phase 2 (`Conforming`, linear and curved by projection), phase 3 (`Envelope`).
-
-### Curved high-order elements
-
-`geometry_order > 1` curves the boundary elements onto the exact geometry:
-
-1. Place Bézier control nodes of boundary facets by projecting onto the classified B-rep face in its parameter space, which keeps nodes on the face.
-2. Certify validity: an element is valid when all Bernstein coefficients of its Jacobian determinant are positive, which is sufficient; the minimum coefficient bounds the scaled Jacobian from below.
-3. Untangle invalid elements by optimizing interior nodes of a local patch, as `anvil::untangle`.
-4. Refine (h) locally where untangling fails, up to the fuel.
-
-Two published methods give stronger guarantees and set the state of the art. 3D Bézier Guarding covers polynomial boundary surfaces with a layer of curved elements that are "free of degeneracies and inversions" and conform exactly, at any polynomial order [Khanteimouri and Campen 2023]. Bijective coarse high-order meshing produces valid, non-flipped Bézier tetrahedra with a distance bound and a bijective map to the input surface; its code is MIT-licensed but depends on GPL CGAL [Jiang et al. 2021]. Anvil implements the guarding construction for faces whose geometry is polynomial or has an exact polynomial piece (planes, NURBS, cached approximations of procedural faces), and the project-certify-untangle pipeline for the rest.
-
-Failure behavior: `InvalidElement { cell, jacobian_min }` when certification fails after untangling and refinement, matching the error Flux expects. Oracle: zero elements with a nonpositive Bernstein coefficient; boundary distance within the reported bound measured by dense sampling against the exact surface. Phase 2 (project, certify, untangle, for Flux's fitted contact in golden product 3), phase 3 (guarding).
-
-### Hex-dominant meshing
-
-`anvil::hex_dominant` converts a tetrahedral mesh into mostly hexahedra plus some irregular polyhedra by field-guided polyhedral agglomeration: orientation and position fields guide a simplification that keeps topological validity at every step, so the output is manifold [Gao et al. 2017]. The hex-meshing survey states that no known method combines robustness, quality and full automation, and that conforming high-quality hex meshing "remains a challenge" [hex survey 2022]. Anvil therefore promises hex-dominant output, not all-hex output, for arbitrary bodies.
-
-All-hex meshes are offered only through `anvil::sweep_mesh` for bodies that are sweepable between a source and a target face, and through block-structured meshing of regions the user partitions. Failure behavior: `NotSweepable { reason, faces }`.
-
-Oracle: element validity, hex fraction reported (no target promised), conformity across regions. Phase 3 (sweep meshing), phase 4 (hex-dominant).
-
-### Boundary layers
-
-`anvil::boundary_layer` grows prismatic layers from selected faces (a `Query`) for wall-resolved flow and thin-layer physics:
-
-| Parameter | Type |
-| --- | --- |
-| First layer height | `Field<Faces, Length>` or a value |
-| Growth ratio, layer count or total thickness | Values |
-| Termination | Proximity, sharp-corner and collision rules |
-
-Layers advance along smoothed normals with multiple normals at concave and convex edges. Collisions between fronts are found with exact predicates on the advancing faces, and layers terminate or compress locally with pyramids as transitions to the tetrahedral core. For curved high-order meshes, Anvil generates one thick curved layer and splits it isoparametrically into thin layers, the approach used for stretched curvilinear elements around streamlined bodies [Marcon et al. 2019].
-
-Failure behavior: `LayerCollapsed { faces, achieved_layers }`, returning the partial mesh marked. Oracle: positive Jacobians, first-layer height within 5% of the request on 95% of faces (target), no layer intersections. Phase 4 (drone airflow).
-
-### Adaptation and optimization
-
-| Operation | Contract | Method | Phase |
-| --- | --- | --- | --- |
-| `anvil::refine_mesh` | `(mesh, marked: cells) -> (Body, HistoryRecords)` | Newest-vertex bisection of marked simplices with conforming closure, for the small adaptive steps Flux takes on fitted meshes; boundary midpoints projected onto classified faces | 2 |
-| `anvil::adapt_mesh` | `(mesh, metric: &Field<Body, Metric>) -> (Body, HistoryRecords, ErrorBound)` | Local operations (split, collapse, swap, smoothing) driven by edge lengths in the metric, with boundary nodes kept on classified faces | 3 |
-| `anvil::optimize_mesh` | `(mesh, target: &Field<Body, Metric>) -> Body` | Node relocation only, no topology change, for r-adaptivity | 3 |
-| `anvil::untangle` | `(mesh) -> Body` | Local optimization of a barrier-free untangling energy, then quality optimization | 2 |
-
-`anvil::polyhedral_mesh` builds the boundary-conforming polyhedral dual of a tetrahedral mesh for Flux's finite-volume method, with boundary-layer prisms kept as prisms. Each polyhedral cell records the tetrahedral cells it came from. Failure: `NonPlanarFace { cells, deviation }` when a dual face's planarity deviation exceeds the requested limit.
-
-Oracle: closed cells, positive volumes, and face-area vectors summing to zero per cell. Phase 3.
-
-Mesh adaptation history records map new cells to the cells they came from, so Flux can transfer solution Fields with its conservative or consistent rules. Volume cells are not named entities, so their parentage travels as a compact parent-index array in the output and expands to `Split` and `Merged` records only on request. Region and boundary face-group EntityIds follow the ordinary naming rules.
-
-The Flux tab names Mmg as the reference implementation for anisotropic remeshing, used only as a reference. All three operations parallelize by deterministic independent sets, described under parallelism.
-
-### Surface remeshing, decimation and smoothing
-
-| Operation | Method | Guarantee | Phase |
-| --- | --- | --- | --- |
-| `anvil::remesh` | Isotropic or metric-driven local operations with crease edges fixed; optional quad-dominant mode by feature-line driven quad remeshing, which fails on fewer than 0.5% of Thingi10K models by its authors' report [Pietroni et al. 2021] | Hausdorff deviation from the input bounded and reported | 2 (triangles), 3 (quads) |
-| `anvil::decimate` | Quadric error metric edge collapse [Garland and Heckbert], with feature and boundary preservation, a hard Hausdorff bound checked per collapse, and deterministic collapse order (cost, then EntityId-derived vertex order) | Reported Hausdorff bound is `Guaranteed`, because each collapse is verified, not estimated from the quadric | 1 |
-| `anvil::smooth` | Taubin λ/μ smoothing, bilaplacian fairing with boundary and feature constraints | Displacement bound reported | 2 |
-
-The quadric error metric is a heuristic that can overcount planes and grows unreliable away from the vertex [Garland and Heckbert], which is why Anvil verifies each collapse against the original surface instead of trusting the quadric.
-
-All three keep face-group EntityIds and record `Split` and `Merged` for groups whose boundaries change. Failure behavior: `BudgetExceeded`; `FeatureConflict { edges }` when the target edge length or triangle budget cannot be met without crossing a fixed feature, with the closest feasible target as a fix. Oracle: ANV-O-REM-1.
-
-## Subdivision surfaces
-
-A `SubD` Body is a Catmull-Clark control cage: a polygon mesh with per-edge crease sharpness (real-valued semi-sharp creases plus infinitely sharp ones), per-vertex corner sharpness, boundary interpolation rules, and an `EntityId` per cage face, edge and vertex. Crease and boundary rules follow the conventions of OpenSubdiv, whose limit surface "matches Pixar's Renderman to numerical precision" [OpenSubdiv repository].
-
-### Limit evaluation
-
-| Region | Method | Exactness |
-| --- | --- | --- |
-| Regular faces (valence 4, no creases nearby) | Uniform bicubic B-spline patch | Exact |
-| Faces near extraordinary vertices or semi-sharp creases | Feature-adaptive subdivision to a fixed depth, then patches; the exact limit at extraordinary vertices by eigen-analysis [Stam 1998] | The feature-adaptive method computes the "true limit surface up to machine precision" [Nießner et al. 2012] |
-
-Stam's evaluation costs about as much as a bicubic patch but needs each face to contain at most one extraordinary vertex and does not address creases [Stam 1998]; Anvil uses it inside the adaptive scheme only for crease-free neighborhoods. Curvature at extraordinary vertices is in general not well defined, and `anvil::curvature` reports such points as singular instead of returning a number.
-
-**Decision D-ANV-13:** Anvil implements Catmull-Clark subdivision with semi-sharp creases natively in Rust, following OpenSubdiv's rules and using OpenSubdiv as an oracle. *Why:* the limit surface must evaluate identically on CPU and in Wasm and feed exact B-rep faces; OpenSubdiv is C++ with GPU back ends in CUDA, Metal and OpenGL [OpenSubdiv repository], and its license is Apache 2.0 with a modified trademark section (the Tomorrow Open Source Technology License 1.0) [OpenSubdiv license], which permits use as a test oracle. *Rejected:* linking OpenSubdiv (C++ FFI, platform-specific GPU paths, no wgpu back end); Loop subdivision as the primary scheme (triangle cages suit meshes, not industrial design).
-
-### SubD operations and conversions
-
-| Operation | Contract | Failure behavior | Oracle | Phase |
-| --- | --- | --- | --- | --- |
-| `anvil::convert` (Mesh → SubD) | Cage from a polygon mesh, with creases from crease edges | `NotManifold` | Limit of a regular cage equals its bicubic B-spline | 3 |
-| `anvil::subd_edit` | Move, extrude, inset, bevel, crease, uncrease, insert edge loop, bridge; each keeps EntityIds of untouched cage elements | `NonManifoldResult`, `ZeroArea` | Euler characteristic and EntityId stability | 3 |
-| `anvil::subd_limit` | Evaluate limit points, derivatives and normals at (face, u, v) | `SingularPoint` at extraordinary vertices for curvature | Agreement with OpenSubdiv within 10⁻¹² relative (target) | 3 |
-| `anvil::convert` (SubD → BRep) | Exact mode: one subdivision-limit face per cage face (D-ANV-7); NURBS mode: exact bicubic patches on regular faces and certified approximations near extraordinary vertices | `ToleranceNotMet { achieved }` in NURBS mode | Deviation from the limit surface by dense certified sampling; G1 deviation across patch boundaries reported | 3 |
-| `anvil::fit` (target SubD) | Fit a cage to a B-rep or mesh through feature-aligned quad remeshing, then least squares on cage positions | `FitFailed { residual }` | Hausdorff distance to the target, reported as `Estimated` | 4 |
-
-## Naming: EntityId, HistoryRecord and Query resolution
-
-### EntityId
-
-The contract defines `EntityId` as a hash of (operation id, input entity ids, role). Anvil fixes each part:
-
-EntityId = SHA-256₁₂₈( "anvil.eid.v1" ‖ kind ‖ site ‖ role ‖ inputs ‖ discriminator )
-
-| Part | Definition |
-| --- | --- |
-| `kind` | Region, shell, face, loop, edge, vertex; for meshes, face group and crease edge; for SubD, cage face, edge and vertex; for implicits, DAG node |
-| `site` | The `OpSite` of the Op node that created the entity: the feature instance path plus a call-site key supplied by Ingot and Kiln, plus loop and pattern indices. It excludes argument values, so editing a dimension keeps every site. |
-| `role` | From the operation's role vocabulary, such as `start_cap`, `end_cap` and `side` for `extrude` (the Mechanical tab uses the same roles) |
-| `inputs` | The EntityIds of the generating entities: the profile edge for an extruded side face, the two faces for an intersection edge, the edge for a blend face. Sorted, unless the operation declares their order meaningful. |
-| `discriminator` | Present only when (kind, site, role, inputs) is not unique; see below |
-
-`SHA-256₁₂₈` is the first 128 bits of SHA-256 over the canonical encoding. Within one Body, a duplicate EntityId fails the operation with `Internal::EntityIdCollision`. By the birthday bound the chance of an accidental collision is about n²/2¹²⁹, or 2⁻⁶⁵ for a Body with n = 2³² entities, and the check makes it loud if it ever happens.
-
-Discriminators, in order of preference:
-
-1. **`Bound(set)`**: the EntityIds of the cause entities that bound the piece, such as the tool faces that cut it. Stable under parameter edits that keep topology.
-2. **`Side(cause, sense)`**: which side of a cutting entity the piece lies on.
-3. **`Ordinal(k)`**: the k-th piece in a canonical order along a declared direction, used only when the first two cannot distinguish pieces (identical strips cut by one periodic tool). The EntityId carries a fragility flag, and any query anchored on it gets `Note::FragileAnchor`.
-
-Entities that an operation leaves untouched keep their EntityId. Entities whose geometry, boundary, tolerance or attributes change also keep it and get a `Modified` record.
-
-Pattern copies differ by the copy index inside `site`. An operation called from inside a Wasm component gets the site of the component's Op plus a call key that the component passes through its WIT interface; components are deterministic, so the key is too.
-
-**Decision D-ANV-14:** `OpSite` excludes argument values and is keyed by the stable syntax-node identity that Ingot assigns to each call. *Why:* if the operation id included parameters, every dimension edit would rename every downstream face and break every query; call-site identity is the structural "operation id" the contract intends, and `repo`'s syntax-tree CRDT already gives syntax nodes stable identities. *Rejected:* the Op content hash (renames on every edit); sequence numbers of operations in evaluation order (shift when features are inserted); geometric signatures as primary names (geometry changes under exactly the edits that names must survive, and the 2018 review of persistent identification finds that topology-only and geometry-only schemes each have limits [persistent naming review 2018]; signatures are used only for imported geometry, below).
-
-Because EntityIds depend on the site, `OpSite` is an input of every operation (CCR-ANV-5). To keep the cache shared across sites, each operation runs as a site-independent geometric core, cached without the site and labeled with provisional ids, followed by a relabeling pass that applies the site; the pass is linear in the number of new entities. A call that the editor moves keeps its syntax-node identity and therefore its site. A call that is deleted and retyped gets a new site; queries anchored on the old one fail with `ResolveError::Deleted`, and the fix re-anchors them to the new call.
-
-### HistoryRecord
-
-Every operation returns a list of records over the entities of its input and output Bodies:
-
-| Record | Meaning | Lineage edge |
-| --- | --- | --- |
-| `Created { out, role, from }` | A new entity generated from `from` entities of other kinds, such as a blend face from an edge | Cross-kind ("generated by") |
-| `Modified { id, aspects }` | Same entity, changed geometry, boundary, tolerance or attributes | Identity |
-| `Split { from, into }` | One entity became several of the same kind | Parent to child |
-| `Merged { from, into }` | Several entities of the same kind became one | Parent to child |
-| `Deleted { id, by, reason }` | The entity no longer exists: consumed by `by` (a blend face consumes its edge), became internal, or was removed | None |
-
-Records satisfy four properties that the history oracle checks on every operation:
-
-1. **Coverage.** Every input entity is unchanged in the output, or is the subject of exactly one same-kind record (`Modified`, `Split`, `Merged` or `Deleted`); `Created` records may also name input entities as generators. Every output entity is an unchanged input, the `id` of a `Modified`, an `into` entry of a `Split` or `Merged`, or the `out` of exactly one `Created`.
-2. **Kind.** `Split`, `Merged` and `Modified` relate entities of the same kind.
-3. **Geometric soundness.** The pieces of a `Split` lie within the tolerance region of the parent, and the parents of a `Merged` lie within the merged entity's region, checked by certified sampling.
-4. **Canonical order.** Records are sorted by (record kind, first EntityId), so the list is identical across thread counts and platforms.
-
-### Lineage
-
-Each Body stores, for every entity, its ancestor set: the EntityIds reachable backward through identity, `Split` and `Merged` edges. Sets are persistent and share structure with the input Bodies' sets, so storage grows with the number of records, not with model size. Cross-kind `Created` edges are stored separately as generator links.
-
-The descendants of an anchor id a in Body B are D(a, B) = { e ∈ B : kind(e) = kind(a) and (e = a or a ∈ ancestors(e)) }. Generator queries such as `created_by` follow generator links instead.
-
-### Query resolution
-
-Ingot lowers every `Query` to a plan with three stages, and Anvil evaluates it against a Body:
-
-1. **Anchor.** One or more EntityIds captured from feature results, such as `base.face(top)`, or a structural set, such as `created_by(feature)`.
-2. **Lineage.** Map each anchor to D(a, B). An empty set yields `Deleted` information from the record that removed it.
-3. **Filter and select.** Apply geometric predicates (normal direction, surface type, area or length range, convexity, adjacency, `bounded_by`, distance to a point) with certified evaluation, then the cardinality rule: `one`, `all`, `at_least(n)`, or a selector such as `largest` with a declared tie rule.
-
-A geometric predicate near its threshold is decided by the certified rule of D-ANV-4. If the enclosure straddles the threshold, resolution fails with `ResolveError::Ambiguous { entity, predicate, margin }`; it never flips an entity in or out on rounding noise.
-
-| Outcome | Result |
-| --- | --- |
-| The plan selects what the cardinality requires | `Resolved { entities, notes }` |
-| Anchor was split and the query needs one entity | `ResolveError::Split { anchor, pieces, fixes }` |
-| Anchor was merged | Resolves to the merged entity with `Note::Merged { with }`, unless the query sets `on_merge: fail` |
-| Some descendants of the anchor were deleted later | Resolves to the surviving descendants with `Note::Partial { deleted }` |
-| Anchor was deleted | `ResolveError::Deleted { anchor, by, site, fixes }` |
-| Filters leave fewer entities than the cardinality requires (none, for `one`) | `ResolveError::NoMatch { stage, found, closest, fixes }` |
-| Filters leave more than allowed | `ResolveError::TooMany { candidates, fixes }` |
-
-Each fix is a typed source edit. Fixes are ranked by the stability test the agents tab specifies: resolve the fixed query under 16 seeded parameter perturbations and prefer the fix that resolves identically in all of them (D-AGT-8).
-
-Ranking rebuilds the design 16 times, so it runs on demand, when the UI or an agent asks for fixes, and its rebuilds share the Kiln cache. Notes are visible in the UI and the CI report, and a check may forbid them, for example `require no_notes(part)` before release.
-
-**Decision D-ANV-15:** Query resolution walks recorded lineage, then applies certified geometric filters, and treats splits, ambiguity and deletion as typed errors while accepting merges with a visible note. *Why:* the contract forbids silent re-selection; a merged entity still contains the referenced geometry, so resolving it changes extent but not meaning, whereas choosing one split piece would change meaning. *Rejected:* geometric matching as the primary mechanism (it re-identifies entities by geometry after the very edits that change geometry); failing on merges by default (common Boolean unions would break many queries for no gain).
-
-[[DIAGRAM: Lineage of the worked examples. Left column "Example 1": box T (top face, site S₁ extrude, role end_cap) with an arrow labelled "Split at S₂ (union with rib)" to two boxes T₁ (Bound F_front) and T₂ (Bound F_back); a dashed arrow from a query box "part.face(base.face(top))" to both pieces, labelled "ResolveError::Split with 3 ranked fixes". Middle column "Example 2": boxes A_top and B_top with arrows labelled "Merged at S_union" into one box M; a query box "part.face(a.face(top))" with a solid arrow to M labelled "Resolved + Note::Merged". Right column "Example 3": T → T₁, T₂ (Split at S₂, slot) → M₃ (Merged at S₃, delete_faces); a query box on T with a solid arrow to M₃ labelled "Resolved, single descendant".]]
-
-### Worked example 1: a face split by a rib
-
-```
-let base = sketch(plane.xy) { rect(60mm, 40mm) } |> extrude(4mm)        // top face at z = 4 mm
-let rib  = sketch(plane.xz) { rect(60mm, 10mm, at: (0mm, 9mm)) }        // wall from z = 4 mm to 14 mm
-           |> extrude(3mm, symmetric: true)                               // 3 mm thick, centered on y = 0
-let part = base + rib
-let top  = part.face(base.face(top))
-```
-
-1. `extrude` at site S₁ creates the top face T = EID(face, S₁, `end_cap`, [profile region]).
-2. The rib spans the full 60 mm length, so the union at site S₂ cuts T along the rib's side faces F_front (y = −1.5 mm) and F_back (y = +1.5 mm). It returns `Split { from: T, into: [T₁, T₂] }` with T₁ = EID(face, S₂, `split`, [T], Bound{F_front}) and T₂ = EID(face, S₂, `split`, [T], Bound{F_back}). The strip under the rib becomes internal and is removed, so the split lists only the two surviving pieces. The rib's bottom face is entirely internal and gets `Deleted { reason: Internal }`. The rib's end faces are coplanar with the base's end faces at x = ±30 mm, so each pair also merges, as in example 2.
-3. `part.face(base.face(top))` asks for one entity and finds two descendants, so it fails:
-
-```
-ResolveError::Split {                                              // stability counts illustrative
-  anchor: base.top, pieces: [T₁, T₂],
-  fixes: ["part.faces(base.face(top))",                                   // both pieces; stable 16/16
-    "part.face(base.face(top), bounded_by: rib.face(side_front))",  // T₁; stable 16/16
-    "part.face(base.face(top), nearest: point(0mm, -15mm, 4mm))",   // T₁; stable 13/16]
-}
-```
-
-4. If the user shortens the rib to 40 mm, it no longer reaches the edges of T, so T is not split. T keeps its EntityId, gains an inner loop, and gets `Modified { aspects: Boundary }`; the original cardinality-one query now resolves to T without error. If the user instead lifts the rib 1 mm off the face, the `bounded_by` query fails with `NoMatch { stage: bounded_by }`, which explains that the rib no longer bounds the top face, instead of silently returning the whole face.
-
-### Worked example 2: coplanar faces merge, then separate
-
-```
-let a = box(10mm, 10mm, 10mm)
-let b = box(10mm, 10mm, h).translate(x: 10mm)
-let part = a + b
-let f = part.face(a.face(top))
-```
-
-1. With h = 10 mm the top faces A_top and B_top are coplanar and share an edge. The union returns `Merged { from: [A_top, B_top], into: M }` with M = EID(face, S_union, `merged`, sorted [A_top, B_top]). The front, back and bottom pairs merge the same way. The touching side faces become internal and are `Deleted { reason: Internal }`.
-2. `f` resolves to M with `Note::Merged { with: [B_top] }`. A fillet on `f.edges()` now runs around the combined face, and the note shows why.
-3. With h = 12 mm the faces are no longer coplanar. No merge happens, A_top keeps its EntityId with a `Modified { aspects: Boundary }` record, and `f` resolves to A_top alone.
-
-### Worked example 3: split, then re-merged
-
-A slot cuts face T into T₁ and T₂ at site S₂; a later `delete_faces` of the slot faces at site S₃ heals the gap and returns `Merged { from: [T₁, T₂], into: M₃ }`. For anchor T, D(T, B) = {M₃}, because both pieces descend into one entity, so a cardinality-one query on T resolves to M₃ without error. The same rule makes "cut, then fill" sequences behave as designers expect.
-
-### Worked example 4: the contract's `joined` edges
-
-The contract's bracket fillets `web.edges(joined)` after `base + web`. Ingot lowers `joined` to a generator query: the edges with `Created { role: intersection_edge }` at the union's site whose generating faces include a descendant of a `web` face. When an edit to `thickness` moves the web, the union re-runs at the same site, the intersection edges get the same EntityIds (same site, role and generating faces), and the fillet keeps its edges.
-
-If an edit makes the web's end face flush with the base's end face, the intersection edge along that end is never created. The query then returns the remaining edges, unless it declared a count such as `at_least(3)`, in which case it fails with `NoMatch { found: 2 }`.
-
-### Names for other representations
-
-| Representation | Named entities | Rule |
-| --- | --- | --- |
-| Mesh | Face groups and crease edges | Tessellation keeps each B-rep face's EntityId on its face group; remeshing and decimation keep group ids and record splits and merges of groups |
-| SubD | Cage faces, edges, vertices | `subd_edit` records `Created`, `Split` and `Merged` for cage elements; exact B-rep conversion gives each limit face its cage face's EntityId |
-| Implicit | DAG nodes with roles | Converting an implicit to a Mesh or B-rep labels each output face group with the EntityId of the DAG leaf whose value is active at the surface, found from interval choices; `lattice.faces(role: skin)` works on the converted Body |
-| Imported B-rep | Faces, edges, vertices | Site is the import Op; the discriminator is a geometric signature (surface type, quantized defining parameters and box at the face tolerance) |
-
-Imported geometry has no history, so a revised STEP file is matched to the previous import with `anvil::match_bodies`. It pairs faces by certified Hausdorff distance and overlap in the shared coordinate frame and returns `HistoryRecord`s between the two imports. Queries on the old import then resolve on the new one through ordinary lineage, and unmatched faces fail with typed errors.
-
-Oracle: edited copies of ABC models with known edits; matched pairs must equal the edit's ground truth. Phase 2.
-
-### Feature-level roles
-
-Features often name entities by intent, such as `counterbore_wall`, which operations do not know; the Mechanical tab raises this as an open question. Anvil answers it with an attribute: a feature attaches a `FeatureRole` attribute to EntityIds it returns, with the `Copy` split policy and `Union` merge policy. Queries match roles like any other attribute, and EntityIds stay purely structural.
-
-## Intersections
-
-Intersections are the core of Booleans, blends, trims, sections and classification. Anvil computes them with one certified framework: enclosures prune, interval Newton certifies, and the tolerance rule decides what remains.
-
-### Building blocks
-
-| Tool | Role |
-| --- | --- |
-| Bernstein enclosures | The convex hull of a Bézier piece's control points bounds the piece; subdivision tightens it. Procedural geometry uses its cached Bézier approximation plus the certified approximation error. |
-| Normal and tangent cones | Interval enclosures of unit normals or tangents over a parameter box |
-| Krawczyk operator (interval Newton) | Proves that a box contains exactly one regular root, or none, and contracts it |
-| Distance enclosure | Interval bound on the distance between two pieces, used by the tolerance rule |
-| Projected Polyhedron | Subdivision solver for polynomial systems in Bernstein form, with an interval variant, described in chapter 4 of Patrikalakis, Maekawa and Cho [Patrikalakis, Maekawa and Cho] |
-
-### Curve-curve intersection
-
-Inputs are two curves in 3D, or two parameter curves on one surface in 2D. Output is a sorted list of isolated points (t₁, t₂) with multiplicity class (transversal or tangent) and overlap intervals where the curves coincide within tolerance.
-
-1. Exact special cases: line-line, line-circle and circle-circle with exact predicates and closed forms.
-2. General case: recursive subdivision with Bernstein hulls, pruning disjoint pairs, with Krawczyk contraction once a pair is small enough to contain at most one transversal root.
-3. In 2D, a pair is certified when the Krawczyk operator proves a unique transversal root inside it. Curves in 3D generically miss each other, so there Anvil certifies the pair's unique closest-approach point, a critical point of the distance, and decides intersection with the tolerance rule.
-4. Tangent and overlapping pairs fall to the tolerance rule: a pair whose distance enclosure stays below τ over a parameter interval becomes an overlap; a pair whose closest approach is an isolated minimum below τ becomes a tangent point at the certified minimizer.
-
-### Curve-surface intersection
-
-The same scheme runs in three unknowns (t, u, v). Line and conic against plane and quadric use closed forms. Results are points with multiplicity class and overlap intervals (a curve lying on the surface within tolerance), trimmed against the face's loops by certified point-in-face classification.
-
-### Surface-surface intersection
-
-Surface-surface intersection (SSI) returns a branch graph: intersection curves between characteristic points, isolated contact points, and coincidence regions where the surfaces overlap within tolerance. Two recent papers set the bar for topological correctness.
-
-Yang, Jia and Yan handle cross intersections, isolated contacts, boundary intersections, contacts across branches and high-order contacts along a curve, and report that OCCT and ACIS struggle with some of these cases [Yang et al. 2023]. Cheng and colleagues map SSI topology to the solutions of an algebraic system through 4D interval algebraic topology analysis [Cheng et al. 2023].
-
-Anvil's algorithm:
-
-1. **Analytic pairs.** Plane, quadric and torus pairs use closed forms where they exist, with exact detection of special positions (parallel, coaxial, tangent, coincident) on defining parameters within tolerance. Plane-cylinder gives lines or ellipses; coaxial surfaces of revolution give circles.
-2. **Broad phase.** Hierarchies of conservative patch boxes for both surfaces, overlap culling, and candidate leaf pairs in canonical order.
-3. **Loop exclusion.** For each candidate pair, Anvil looks for a vector v with v · (n₁ × n₂) bounded away from zero over the interval enclosures of both normal cones. A closed loop has a point where its tangent n₁ × n₂ is orthogonal to v (its extreme point in direction v), so such a v proves that the pair holds no closed loop. Because n₁ × n₂ is then nonzero throughout, the pair also holds no tangent or singular point, and every branch in it enters and leaves through the pair's boundary. Otherwise the pair subdivides.
-4. **Characteristic points.** Pairs that still fail the tests at the subdivision floor are searched for tangent and singular points with the Krawczyk operator. The system describes critical points of the signed distance h from S₁ to S₂: S₁(u, v) − S₂(s, t) − h·n₂(s, t) = 0, n₂ · ∂S₁/∂u = 0 and n₂ · ∂S₁/∂v = 0, five equations in (u, v, s, t, h). A non-degenerate tangency or branch crossing is a regular root with h = 0, so it is certified even though the plain SSI system is singular there. Roots with 0 < |h| ≤ τ are near-misses for the tolerance rule; degenerate roots, such as contact along a curve, are handled under tangential cases below.
-5. **Boundary points.** Each piece's boundary curves are intersected with the other surface by curve-surface intersection.
-6. **Tracing.** Within each resolved pair, each branch piece is traced between its boundary or characteristic points by certified marching. A step is accepted only when an interval implicit-function test proves the step's box contains exactly one branch segment, so a tracer cannot jump between nearby branches. Each piece is traced from its smaller end point in canonical order, with a deterministic step rule, and pieces join at shared boundary points into branches. A closed loop inside one pair surrounds a certified critical point and is traced from its crossing with the parameter line through that point. Traced points therefore never depend on processing order.
-7. **Coincidence.** Pairs whose distance enclosure stays below τ over a region become coincidence regions, bounded by their own curves.
-8. **Output.** Each branch becomes an intersection curve: the two surfaces, a fitted B-spline within τ of the true curve, and two parameter curves, with the certified deviation stored.
-
-A run is complete when every leaf pair is disjoint, passes the loop-exclusion test, or holds certified characteristic points. Fuel is local: a subdivision depth per pair and a step limit per branch piece, never a global count, so success and output do not depend on the order in which pairs are processed.
-
-Pairs that reach the depth limit unresolved are decided by the tolerance rule, or the operation fails with `Ambiguous { faces, region }`. The result never contains a branch that was not certified or decided by the rule.
-
-**Decision D-ANV-16:** SSI uses subdivision with Bernstein and interval enclosures, normal-cone loop exclusion, Krawczyk certification of characteristic points as critical points of signed distance, and certified marching, and it reports a topology certificate per pair. *Why:* this combination gives the branch-graph guarantees of the topology-guaranteed methods while staying in `f64` with interval rules, and every step parallelizes over pairs. *Rejected:* plain marching from sampled seeds (misses small loops and jumps branches near tangencies); purely algebraic methods (degrees explode for rational, offset and blend surfaces); lattice sampling as the decision method (no guarantee between samples).
-
-### Tangential and degenerate cases
-
-| Case | Detection | Result |
-| --- | --- | --- |
-| Transversal crossing | Disjoint normal cones along the branch | Curve, certified |
-| Tangent contact point | Regular root of the critical-point system with h = 0 | Isolated point with contact order |
-| Tangent contact along a curve (two fillets touching, a cylinder resting on a plane) | Distance and normal-difference enclosures both near zero along a branch | Curve classified `Tangential`; Booleans treat both sides with the tolerance rule |
-| Overlap (coincident patches) | Distance enclosure below τ over a region | Coincidence region; Booleans merge the faces |
-| Near-miss closer than τ | Distance enclosure below τ, normal cones separated | Treated as a touch; tolerance grows within the cap, recorded |
-| Singular crossing (two branches cross) | Saddle-type regular root of the critical-point system with h = 0 | Branch graph vertex of degree 4 |
-| Surface singularities (cone apex, sphere pole, lemon torus) | Declared singular points of the surface | Handled as characteristic points |
-
-Tangential intersections are ill conditioned. For two curves that touch with normal curvatures differing by Δκ, a normal shift ε creates crossings at distance √(2ε/Δκ) from the contact, so a rounding-level change of 10⁻¹⁶ m with Δκ = 1 m⁻¹ moves them by about 10⁻⁸ m. The tolerance rule turns this into an explicit decision with a recorded tolerance instead of a random outcome.
-
-### GPU strategy and freedom to operate
-
-US patent 12,229,885 B1, "Surface-to-surface intersections in computer-aided graphics and modeling", was filed on 13 May 2024 as application 18/662,056 and granted on 18 February 2025. Google Patents lists the inventor as Alyn Rockwood and the assignee as an individual, and estimates expiration in 2044 [US12229885B1].
-
-Zoo's engine overview cites the same application number as "recently allowed" [Zoo engine overview]. Claim 1 covers computing distances between points of a set representing the first surface and points of a set representing the second, forming intersection points from first-surface points within a threshold distance of a second-surface point, and outputting intersection curves; the system claim recites a "parallel computing processor" [US12229885B1 full text].
-
-The contract decides "GPU sampling plus certified CPU refinement" for SSI. Anvil implements it in three parts, each with a fixed role:
-
-1. **GPU sampling orders the work.** The GPU evaluates both surfaces on grids in `f32` and builds per-cell boxes and box hierarchies, the method Krishnamurthy and colleagues published in 2008 [Krishnamurthy et al. 2008]. Overlapping cells give the CPU a priority order: pairs likely to hold a branch are processed first, so exact branches stream to Kiln early, which serves the contract's coarse-results-first rule. Every candidate pair is still processed, with local fuel, so the order changes latency, never output.
-2. **An exact integer broad phase prunes.** The CPU computes conservative `f64` boxes for patch pieces, faces and triangles, rounds them outward to integer coordinates on a grid of cell size 2⁸ρ in the Body frame, and uploads them. The GPU tests box overlaps and traverses hierarchies with integer comparisons only. Integer comparisons are exact on every GPU, so the candidate set equals the CPU fallback's.
-3. **The CPU decides.** Every intersection point and curve comes from the certified subdivision of the previous section, which is complete on its own; the GPU order changes how fast it finishes, never what it returns. Anvil never forms intersection points from pairs of surface samples whose distance falls below a threshold.
-
-`f32` GPU evaluation also feeds display tessellation and previews. Preview intersection curves come from triangle-triangle intersection of preview tessellations.
-
-GPU acceleration of NURBS operations has a long published record. Krishnamurthy and colleagues evaluated NURBS surfaces into GPU textures, built curvature-inflated box hierarchies, tested box pairs on the GPU and intersected triangle pairs, reporting about 40× the speed of ACIS at its standard tolerance of 10⁻³, excluding curve fitting, in 2008 [Krishnamurthy et al. 2008]. ETER evaluates NURBS on uniform sampling grids with tensor-core acceleration, 2.9 to 16.2 times faster than evaluation based on hardware tessellation, and renders up to 3.7 million patches at 30 frames per second [ETER].
-
-**Decision D-ANV-17:** In intersections the GPU samples surfaces to order CPU work and runs an exact integer broad phase to prune it; every intersection point comes from a CPU certified solve, and Anvil never thresholds distances between point samples of two surfaces. *Why:* this realizes the contract's "GPU sampling plus certified CPU refinement" with outputs that are bit-identical with and without a GPU; certified solves give guarantees that sampled thresholds cannot; the sampling step follows 2008 prior art, and no step performs the thresholding that claim 1 of US 12,229,885 B1 describes. *Rejected:* dense point-sample SSI on the GPU (uncertified, which Zoo's own overview concedes in calling SSI inherently approximate [Zoo engine overview], and within the patent's claims); no GPU use at all (gives up speed on large models and assemblies).
-
-This is a technical design-around, not a legal opinion. Counsel must review it before any GPU intersection path ships in phase 1, as the contract requires. The CPU path is complete on its own, so an adverse opinion removes acceleration, never function.
-
-### Intersections in other representations
-
-| Pair | Method |
-| --- | --- |
-| Triangle-triangle (meshes, facet faces) | Exact arrangement with indirect predicates; intersection points stay implicit until output [Attene 2020; Cherchi et al. 2022] |
-| Facet face with exact surface | Per-triangle plane against the surface (curve-surface on the triangle's edges, plane-surface SSI inside), certified |
-| Subdivision-limit faces | Regular faces are exact bicubic patches and use SSI directly; faces near extraordinary vertices use adaptive patches with certified bounds |
-| Implicit with anything | Zero-set classification by interval evaluation; intersection curves only on conversion |
-
-## Operation contract and behavior versions
-
-### What every operation guarantees
-
-Every Anvil operation is a value of the same shape: a name, a behavior version, typed arguments, and a run function from a context and arguments to an output or a typed error.
+1. **Bodies are immutable values**; unchanged storage is shared.
+2. **Operations are pure and label-invariant**: results depend on arguments, input geometry and the version, never on clocks, randomness, thread order or names.
+3. **Work limits are arguments** with per-version defaults; reaching one is the deterministic `Failure` `WorkLimit`, while cancellation, memory exhaustion and Evaluation fuel are Aborts.
+4. **Decisions are certified**, by exact predicates or certified enclosures, never a floating-point guess.
+5. **Approximations state their error** as per-face `{ position, normal }` bounds.
+6. **The GPU orders, prunes and previews**; canonical results are identical without it.
+7. **No silent fallbacks**: a fallback runs only on request and says so.
+8. **Each question is asked once per tolerance epoch**: predicates are memoized by (pair, epoch).
+
+### The operation contract
+
+Every operation implements Kiln's `OpImpl` from `base` with grade `Portable`, except `thickness` and `correlate_grids` (`Certified`); GPU preview paths never produce canonical results.
 
 | Element | Contract |
 | --- | --- |
-| Inputs | Bodies, plain values with units already converted, `Query` results as EntityId sets, Fields with a required accuracy |
-| Output | Bodies or plain values (measurements are values, distributions are Fields), `HistoryRecord`s, one `ErrorBound` per output, notes |
-| Errors | `OpError { kind, why, fixes, at: [EntityId], partial }`; `partial` is a marked diagnostic Body that Kiln never caches as a success |
-| Fuel | Deterministic work limits (subdivision depth, iterations, element count), applied per unit of work (per pair, per element, per branch) so that success never depends on processing order; exhaustion gives `BudgetExceeded { resource, used, fix }` |
-| Fidelity | `Exact` (canonical, cached, checkable) or `Preview` (marked, never cached in the shared store, never used by checks) |
-| Determinism | Output bits depend only on the cache key of the contract's `Op`; thread count, GPU presence and memory addresses never matter |
-| Validity | Every output Body is valid. Operations run `check_body` on the entities they created or modified and on their neighbors, which suffices because untouched entities were valid and did not change; oracle runs check whole Bodies. A violation is an internal error, never a returned Body |
-
-`OpError` maps one-to-one onto the Mechanical tab's `FeatureError { kind, why, fix, at }`, so Ingot features pass Anvil errors through with their fixes.
+| Inputs | Bodies, plain values with units converted by Ingot, `Query` resolutions as `EntityId` sets with a declared use (`Surface` or `Extent`), Fields with a requested accuracy |
+| Outputs | Bodies or values, `HistoryRecord`s, per-face bounds and `Note`s, canonical at the boundary (−0.0 becomes +0.0; no non-finite values), so decode(encode(v)) = v bit for bit |
+| Stages | Entity-naming operations run a geometric stage and a relabeling stage (see Bodies, identities and encoding) |
+| Failures | `OpError { kind, why, fixes, at, partial }` is a deterministic `Failure`, cached and catchable; `partial` is a diagnostic Body, never cached as a success; `OpError` maps one-to-one onto MEC's `FeatureError` |
+| Fidelity | Each version maps `Preview`, `Interactive` and `SignOff` to its effective fidelity (see Fidelity, performance and determinism) |
+| Validity | Incidence, combinatorics and regularity are checked on created and modified entities and their neighbours; their separation is checked against the whole Body through the broad phase, in O(m log n) for m such entities, and a clash fails with `SelfIntersecting { faces, at }` |
 
 ### Behavior versions
 
-A behavior version identifies the exact input-to-output function of an operation, written `anvil::blend@2`. Anything that can change the output bits of an `Exact` run, the history records, the EntityIds or the error kinds is a behavior change and needs a new version. A change that keeps every bit, such as a faster data structure with the same arithmetic, does not.
+A behavior version (`anvil::blend@2`) fixes an operation's output for every input; any change to output bits, history, `EntityId`s or error kinds needs a new version.
 
-**Decision D-ANV-18:** Each operation version is an immutable source module; the code of `anvil::blend@2` and of every internal algorithm module it uses (for example `ssi@4`, `predicates@1`) is frozen by content hash once released, and changes go into new module versions. *Why:* old designs must rebuild identically, and a regression corpus cannot cover every input, whereas frozen source plus PLT's bit-reproducible toolchain makes old versions reproducible by construction. *Rejected:* versioning only the public operation while sharing mutable internals (a fix inside a shared intersection routine would silently change every old version); keeping old Crucible binaries around to rebuild old designs (no cross-platform guarantee, no shared cache, security fixes impossible).
+**Decision D-ANV-18:** Each operation version, and every internal module it uses (for example `ssi@4`), is frozen by source hash once released; changes go into new module versions. *Why:* frozen source plus PLT's reproducible toolchain rebuilds old designs by construction, which no regression corpus can promise. *Rejected:* versioning only the public operation (a fix in shared intersection code would silently change every old version); keeping old binaries (no cross-platform guarantee, no shared cache).
 
-Four mechanisms implement the policy:
+CI blocks merges that change frozen modules (security exceptions need a human and identical corpus outputs), attaches each new version's behavior diff to its Proposal, and requires toolchain and `detmath` upgrades to reproduce every version's golden hashes.
 
-1. **Freeze check.** CI hashes the source of every released module version. A change to a frozen module fails the merge queue unless a human approves a security exception, which must also show identical outputs on the full regression corpus.
-2. **Behavior diff.** A new version runs beside its predecessor on the operation's corpus. The report lists output hash changes, history differences and new or removed error kinds, and it is attached to the change's Proposal.
-3. **Toolchain guard.** A Rust toolchain or `detmath` upgrade must reproduce the golden output hashes of every active and deprecated version. A difference blocks the upgrade, because a toolchain must never change old behavior.
-4. **Retired versions to Wasm.** A version leaving the native tree is compiled, together with the frozen sources of every module it depends on, into a Wasm component published in the package registry. The `cpu-f64` class spans native and Wasm targets (D-FLX-19), so the component reproduces the native bits, and it runs on every platform including the browser. The host passes Bodies to the component in the encoding major version it was built with; a Body that version cannot represent fails with `EncodingError::NotRepresentable`, which suggests upgrading the operation.
+A design pins versions in `ingot.lock` (`anvil.blend = 2`), a call may override with `op: anvil::blend@1`, and `crucible upgrade anvil::blend` produces a Proposal with geometry overlay, metric deltas, changed checks and every `ResolveError`. Versions go from `Current` to `Deprecated` (native for at least five years, noted on every build) to `Retired` (archived Wasm build, identical bits, contract 4); a `Yanked` version stays executable for audit, and release checks fail until the design upgrades or a human waives.
 
-### How a design pins versions
-
-| Mechanism | Where | Effect |
-| --- | --- | --- |
-| Lockfile pins | The design repository's lockfile, one line per operation: `anvil.blend = 2` | Every call of `blend` in the design uses version 2 |
-| Call-site override | Ingot: `fillet(edges, 2mm, op: anvil::blend@1)` | One call uses an older version, for a feature that must not move while the rest upgrades |
-| New designs | Lockfile created with the current version of each operation | Latest behavior by default |
-| Upgrade | `crucible upgrade anvil::blend` | Creates a Proposal: rebuilds with the new version, attaches geometry overlay, metric deltas, changed checks and every `ResolveError` |
-
-The Ingot tab owns lockfile syntax; Anvil supplies the registry of versions, their status and their migration notes.
-
-### Version lifecycle
-
-| Status | Meaning | Execution | Duration |
-| --- | --- | --- | --- |
-| `Current` | Default for new designs | Native | Until superseded |
-| `Deprecated` | Superseded; pinned designs still use it | Native; every build emits `Note::DeprecatedBehavior { op, current, migration }` | At least 5 years after supersession [proposal] |
-| `Retired` | Removed from the native tree | Wasm component from frozen source, same bits | Indefinitely; never deleted |
-| `Yanked` | Known to produce wrong results | Runs for pinned designs with `Warning::YankedBehavior`; release checks fail until the design upgrades or a human waives | Never removed |
-
-A yanked version stays executable because releases signed with it must rebuild bit-identically for audit. Only new pinning is blocked.
-
-The Flux tab raises a 10-year retention window as an open question; Anvil's answer is that versions stay executable indefinitely, natively for at least 5 years and as Wasm components afterwards. The 5-year native window is a proposal for PLT and Kiln to confirm against CI cost.
-
-### Versions and the cache
-
-Kiln's cache key includes the operation name and behavior version, as the contract defines for `Op`. A Body decoded from an older encoding is re-encoded in the current version, so its content hash is an ordinary hash and needs no extra key. Deprecated and retired versions share the CAS with current ones, so a team that pins old versions still gets cache hits.
-
-## Operations catalog
-
-The catalog lists the operations std features call. Every row obeys the operation contract above: outputs pass `check_body`, carry an `ErrorBound`, return `HistoryRecord`s, and fail with a typed `OpError`. Read-only queries and analyses return values or Fields and emit no `HistoryRecord`s, so their tables omit the History column.
-
-Columns give the specific inputs and outputs, the history the operation emits, its failure kinds, its oracle (listed under Oracles) and its phase. "Created(role)" means `Created` records with that role vocabulary.
-
-### Canonical names
-
-Other drafts in this round call some operations by different names. Anvil proposes one name per concept:
-
-| Name used elsewhere | Canonical Anvil operation | Reason |
-| --- | --- | --- |
-| `section_body` (MEC), `slice` (MFG) | `anvil::section` | One plane, a stack of parallel planes or a surface; the stack form is the slicing case |
-| `offset_curves_2d` (MFG) | `anvil::offset_curve` | Planar input keeps arcs exact; one operation for 2D and curves on surfaces |
-| `medial_axis_2d` (MFG) | `anvil::medial_axis` | Planar regions get the exact segment-and-arc Voronoi skeleton; solids get the certified 3D approximation |
-| `extend_face` (MEC), `extend_surface` (MFG) | `anvil::extend` | One concept |
-| `implicit_from_brep`, `brep_from_implicit`, `subd_to_brep` (MEC) | `anvil::convert` | One conversion operation with a target representation and a required accuracy |
-| `fit_nurbs`, `fit_primitive` (MEC), `fit` (MFG) | `anvil::fit` | The model kind is an argument |
-| `icp` (MEC) | `anvil::align` | A plain name; iterative closest point is its method |
-| `tool_drop`, `tool_push` (MFG) | `anvil::tool_contact` | Both find the first contact of a revolved tool moving along a direction |
-| `collide` (MFG) | `anvil::interference` | Overlap, touch and clearance in one query |
-| `thickness_ray` (MEC) | `anvil::thickness` with `method: Ray` | Ray and inscribed-sphere thickness are one analysis |
-| `sample_surface`, `evaluate_curve` (MEC) | `anvil::sample`, `anvil::evaluate` | One evaluation operation for curves and surfaces, one sampling operation |
-| `approximate_curve`, `approximate_surface` (MEC) | `anvil::approximate` | Exact geometry to NURBS within a tolerance, for curves and faces alike |
-| `offset_body`, `draft_faces` (MEC) | `anvil::offset`, `anvil::draft` | Shorter names; `offset_faces` stays separate because it moves selected faces only |
-| `delete_face`, `replace_face` (MEC) | `anvil::delete_faces`, `anvil::replace_faces` | Both take entity sets |
-| `helix` (MEC) | `anvil::curve` with `Helix` | Curve constructors share one operation |
-
-### Construction
-
-| Operation | Contract | History | Failure behavior | Oracle | Phase |
-| --- | --- | --- | --- | --- | --- |
-| `anvil::primitive` | Box, wedge, cylinder, cone, sphere, torus, prism from a frame and dimensions → solid Body | Created(`top`, `bottom`, `side(i)`, `cap`) | `Degenerate { parameter }` for zero or negative sizes | ANV-O-OP-1 (exact volume, area, Euler characteristic) | 0 |
-| `anvil::curve` | Line, arc, circle, ellipse, conic, helix, spiral, interpolating or approximating spline, curve on surface → wire Body | Created(constructor roles) | `Degenerate`, `ToleranceNotMet { achieved }` | ANV-O-GEOM-1 (closed-form evaluation) | 0; exact helix 2 |
-| `anvil::make_regions` | Planar wire Bodies → sheet Body of faces from the planar arrangement, with nested loops; exact predicates for lines and arcs | Created faces, `Bound` discriminators by bounding curves | `OpenProfile { gaps }` with a close-gap fix; `SelfOverlap { curves }` | ANV-O-OP-2 (areas against exact polygon and sector formulas) | 1 |
-| `anvil::extrude` | Faces or region sheet; direction; extent as a distance, a `Field`, or up to a face or Body; draft angle; symmetric flag → solid or sheet | Created(`start_cap`, `end_cap`, `side(e)` per profile edge, `lateral(v)` per profile vertex) | `SelfIntersecting` with the largest feasible draft as a fix; `UpToNotReached { target }` | ANV-O-OP-3 (prism and frustum volumes) | 0 |
-| `anvil::revolve` | Faces or curves, axis, angle ≤ 2π → solid or sheet; a full revolution creates no seam | Created(`start_cap`, `end_cap`, `side(e)`) | `AxisCrossesProfile { points }`; `Degenerate` | ANV-O-OP-4 (Pappus volumes and areas) | 0 |
-| `anvil::sweep` | Profiles, path, frame rule, scale and twist Fields, guide curves → solid or sheet with procedural swept faces | Created(`side(e)`, `start_cap`, `end_cap`, `between(k)`) | `SelfIntersecting { region }` when path curvature times profile extent reaches 1; `FrameUndefined` at Frenet inflections, with a rotation-minimizing-frame fix | ANV-O-OP-5 (torus and helical spring volumes) | 1 |
-| `anvil::loft` | Ordered sections, guide curves, end tangency or curvature conditions, vertex correspondence (automatic minimal twist or explicit) → solid or sheet | Created(`side(e, k)` per span, caps) | `IncompatibleSections { loops }`; `Twisted` with a correspondence fix; `ContinuityNotMet` | ANV-O-OP-6 (sections interpolated within τ; ruled lofts equal ruled surfaces) | 1 |
-| `anvil::boundary_surface` | Curve network in two directions with G0 to G2 conditions per boundary → face; Gordon surfaces for networks (OCCT 8.0 adds Gordon construction [OCCT 8.0]) | Created(`patch`) | `NetworkNotCompatible { curves }`; `ContinuityNotMet { edge, achieved }` | ANV-O-OP-7 (a network of isoparameter curves reproduces its surface) | 2 |
-| `anvil::fill_surface` | Closed n-sided boundary with G0 to G2 per edge, optional interior points and curves → faces | Created(`fill`) | `BoundaryNotClosed { gap }`; `ContinuityNotMet` | ANV-O-OP-8 (continuity measured by `analyze_continuity`) | 2 |
-| `anvil::blend_surface` | Two edges or curves on faces, G1 to G3 at each side, shape parameters → bridging face | Created(`bridge`) | `ContinuityNotMet` | ANV-O-OP-8 | 2 |
-| `anvil::match_surface` | Face edge to a target edge, G0 to G3, region of influence → modified face | Modified | `CannotMatch { achieved }` | ANV-O-OP-8 | 2 |
-
-### Booleans
-
-All Booleans run on one engine, the cellular arrangement:
-
-1. **Intersect.** Compute every intersection between faces of the operands that overlap in the broad phase: SSI for exact faces, exact arrangements for facets, mixed methods for mixed pairs.
-2. **Imprint.** Split faces and edges of every operand along the intersection curves and points.
-3. **Merge.** Identify coincident vertices, edges and faces across operands with the tolerance rule (D-ANV-4), growing tolerances within the cap where needed.
-4. **Classify.** Assign each 3-cell of the arrangement its membership vector: inside or outside each operand. Membership comes from radial order around edges and one point classification per connected group of cells, as in Lévy's Weiler-model method [Lévy 2024]. Imperfect operands classify by the generalized winding number with threshold 0.5 [Spainhour and Weiss 2025].
-5. **Select.** Evaluate the Boolean expression on each cell's membership vector. The expression may be any n-ary formula, not just binary union, subtraction or intersection.
-6. **Regularize and simplify.** Remove faces with the same selected cell on both sides, unless the caller keeps internal faces. Merge adjacent faces that share the same surface within tolerance, and merge edges likewise.
-7. **Name.** Emit `Split`, `Merged`, `Deleted` and `Created` records for the arrangement's pieces (D-ANV-14).
-
-| Operation | Contract | History | Failure behavior | Oracle | Phase |
-| --- | --- | --- | --- | --- | --- |
-| `anvil::boolean` | Bodies and an expression (`union`, `subtract`, `intersect`, or an n-ary formula); `keep: Regularized` (default) or `keep: Cells` → one Body; `Cells` returns a cellular Body with every non-empty cell as a region labeled by its membership vector | Split, Merged, Deleted(`Internal`), Created(`intersection_edge`) | `Ambiguous { faces, region }`; `ToleranceGrowth`; `BelowResolution { size }` for slivers smaller than λ; `EmptyResult` only when the caller requires non-empty | ANV-O-BOOL-1 to 6 | 1 (all representations; B-rep on analytic, NURBS and blend surfaces), 2 (hardened on imports) |
-
-`keep: Cells` serves multi-material parts and simulation. Overmolding an insert is `boolean([insert, shot], keep: Cells)` with materials assigned per region, and the result is the conformal multi-region Body that `tetrahedralize` meshes with shared interfaces.
-
-**Decision D-ANV-19:** One cellular arrangement engine implements Booleans for every representation pair without an implicit operand, and the same engine serves n-ary expressions, cell-keeping results, `split`, `imprint` and `interference`. *Why:* these operations differ only in which cells they keep and report, so one tested engine replaces six special cases; cellular output is exactly what multi-material parts and conformal meshing need; Parasolid's Booleans already use imprint, join and select phases [Jackson 1995], and Lévy shows the same structure with an exact Weiler model and arbitrary expressions [Lévy 2024]. *Rejected:* separate union, subtract and intersect code paths (three times the special cases); binary-only Booleans (n-ary unions of many tools would take n − 1 full passes).
-
-### Booleans for every representation pair
-
-| Pair | Result | Method | Guarantee |
-| --- | --- | --- | --- |
-| B-rep × B-rep | B-rep | Cellular arrangement with certified SSI | Exact topology; geometry within the reported tolerances |
-| Mesh × Mesh | Mesh | Exact triangle arrangement with indirect predicates, so constructed points are never rounded during the arrangement [Attene 2020; Cherchi et al. 2022]; exact cell classification; output rounding to `f64` with an exact re-check (below) | Manifold, intersection-free output from manifold input; ε grows by the rounding and repair displacements, which are reported |
-| B-rep × Mesh | B-rep with facet faces | Mesh enters as a facet B-rep (D-ANV-2); facet-to-exact intersections certified | Exact faces stay exact |
-| SubD × anything explicit | B-rep | SubD enters as subdivision-limit faces | Limit surface preserved where untouched |
-| Implicit × anything | Implicit | min, max and negation over the DAG; explicit operands become exact-distance leaves | Exact zero set; distance kind follows D-ANV-10 |
-
-Output rounding is where exact mesh Booleans usually lose their guarantees: Cherchi and colleagues note that converting exact results to floating point is an open problem and use snap-rounding heuristics [Cherchi et al. 2022], and EMBER's export can reintroduce small self-intersections [EMBER 2022]. Anvil rounds each implicit point to the nearest `f64`, then re-checks every triangle pair touched by a moved point with exact predicates. Each conflict (an intersecting or inverted pair) is repaired by collapsing the shortest edge involved, when the link condition allows, and the neighborhood is re-checked.
-
-The loop stops when the exact check passes, so a returned mesh is valid by construction of the stopping rule. If the accumulated displacement would exceed τ_cap, the operation fails with `PrecisionExhausted` and suggests a coarser resolution or a remesh.
-
-**Decision D-ANV-20:** Mesh Booleans use exact arrangements on unquantized `f64` inputs with indirect predicates, exact classification, and checked output rounding with an explicit precision ε. *Why:* inputs keep their full precision (EMBER's 26-bit integer inputs give about 15 nm in a 1 m³ scene [EMBER 2022], coarser than Anvil's 1.9 nm resolution for a Body of that size, whose diagonal is 1.73 m); topology decisions are exact; the output is valid and its rounding error is stated. *Rejected:* Manifold's floating-point method with symbolic perturbation (guaranteed manifold output, but ε-validity is only a goal, by its author's statement [Manifold wiki]); EMBER's integer plane-based representation (quantized input, T-junction polygon soup output that needs topology recovery [EMBER 2022]); linking Manifold or Geogram (C++ FFI; both remain oracles and benchmarks).
-
-Performance targets for Booleans are in the State of the art section. The newest published claim, trueform (July 2026), reports up to two orders of magnitude speedups over prior art with exact predicates and no exact constructions [trueform 2026]; Anvil tracks it as a benchmark to measure, not yet as a method to adopt, because its license and full results were not available.
-
-### Blends
-
-Blending is a research program, as the contract states, and the stages below are its milestones. `anvil::blend` creates fillets on edge chains. `anvil::chamfer` uses the same engine with a ruled cross-section, sized by two distances or by a distance and an angle, and shares the blend's history roles and errors.
-
-| Parameter | Type | Default |
-| --- | --- | --- |
-| `edges` | EntityId set from a `Query`; tangent-continuous chains are propagated automatically unless `propagate: false` | — |
-| `radius` | Length, or `Field<Edges, Length>` for variable radius, or two lengths for asymmetric blends | — |
-| `section` | `Circular`, `Conic { rho }`, `CurvatureContinuous { depth }` (G2 to both supports) | `Circular` |
-| `corners` | Per vertex: `Auto`, `Setback { distances }`, `Sharp` | `Auto` |
-| `overflow` | `RollOver` (ball rolls onto the next face), `KeepEdge` (blend trimmed by the neighboring face), `Fail` | `RollOver` |
-| `fallback` | `None` or `Implicit { max_deviation }` | `None` |
-
-The algorithm for each chain:
-
-1. **Spine.** Offset both support surfaces by r toward the side where the ball rolls (into the material for convex edges, out of it for concave edges) and intersect the offsets with certified SSI. The intersection is the spine, the path of the ball's center.
-2. **Contact curves.** Project the spine onto both supports to get the two contact curves.
-3. **Surface.** Build a procedural rolling-ball blend surface (D-ANV-7), with a certified NURBS approximation within τ.
-4. **Overflow.** Intersect the blend with neighboring faces; apply the overflow rule where the ball meets a third face.
-5. **Corners.** Blend each vertex where three or more blends meet (below).
-6. **Rebuild topology.** Trim supports at the contact curves, insert blend faces, and remove the blended edges.
-
-Vertex blends use the setback split that Várady and Rockwood introduced ("Vertex blending based on the setback split", 1995; see also Várady and Hoffmann, "Vertex blending: problems and solutions", 1998) [Várady publication list]. Each incident blend stops a setback distance before the vertex, and Anvil fills the resulting polygon with an n-sided patch that is G1 to the blends and supports. `Auto` setbacks are the smallest that keep the patch's boundary curves free of self-intersection, found by certified checks on a fixed sequence of candidate values.
-
-| Stage | Capability | Phase |
-| --- | --- | --- |
-| 1 | Constant-radius circular blends and chamfers on analytic and NURBS supports; edge-chain propagation; `KeepEdge` overflow; three-edge vertex blends with equal radii, because the fillets of golden product 1 meet at corners (general setback blends follow in stage 3, as the contract orders) | 1 |
-| 2 | Variable radius from Fields; conic and G2 sections; `RollOver` overflow; asymmetric distances | 2 |
-| 3 | Setback vertex blends for any valence and mixed convexity; blends across facet faces | 3 |
-| 4 | Blends on blends (rolling over earlier blends), G3 sections for class-A surfacing | 4 |
-
-Failure behavior:
-
-| Error | Meaning | Fixes offered |
-| --- | --- | --- |
-| `RadiusTooLarge { edge, max_feasible }` | The ball cannot touch both supports | Use `max_feasible`; split the chain |
-| `BlendOverflow { faces }` | Overflow rule cannot resolve the third-face contact | Switch overflow rule; reduce radius |
-| `VertexBlendFailed { vertex, reason }` | No valid setback patch | Larger setbacks; `Sharp` corner; implicit fallback |
-| `SelfIntersecting { region }` | The blend surface folds where the radius exceeds the supports' curvature radius | Reduce radius locally with a Field |
-
-With `fallback: Implicit { max_deviation }`, a failed region is rebuilt as follows. The region is replaced by the zero set of a smooth implicit union of the support faces' exact distances, with blend radius matched to r. That zero set is converted to a B-rep patch, either facet faces or a fitted NURBS face, within `max_deviation` of the zero set.
-
-The patch joins the exact blends with a G0 seam whose gap is measured. The result carries `Note::BlendFallback { region, deviation_from_rolling_ball, seam_gap }`, so the deviation is stated and never silent.
-
-History: `Created { role: blend, from: [edge] }` for each blend face, `Created { role: vertex_blend, from: [vertex] }` for each corner patch, `Deleted { by: blend face }` for each blended edge, and `Modified { aspects: Boundary }` for the trimmed supports. Oracle: ANV-O-BLEND-1 to 4 (fillets on planes, cylinders and cones against closed-form toroidal and cylindrical blends; the spine at distance r from both supports within τ; G1, and G2 for `CurvatureContinuous`, measured by `analyze_continuity`; volume change against closed forms for straight edges).
-
-### Offsets, shells and thickening
-
-| Operation | Contract | History | Failure behavior | Oracle | Phase |
-| --- | --- | --- | --- | --- | --- |
-| `anvil::offset` | Body and signed distance (value or `Field<Faces, Length>`); corners `Round` (exact Minkowski sum with a ball) or `Natural` (offset surfaces extended and intersected) → Body. Implicit inputs: exact by D-ANV-10. Meshes: feature-preserving mitered offsets [Cao et al. 2024] or rounded offsets from exact distance meshing | Modified faces, Created(`edge_pipe(e)`, `vertex_ball(v)`), Deleted for faces that vanish | `OffsetCollapse { faces }` when a face vanishes and the caller forbade it; `FieldOutOfRange` | ANV-O-OFF-1 (offset sphere, cylinder, torus and box exact; Hausdorff distance from input equals \|d\| within τ) | 1 (B-rep and implicit), 2 (mesh) |
-| `anvil::offset_faces` | Selected faces moved along their normals by a distance; neighbors extended or trimmed to keep a closed solid | Modified; Created where neighbors grow | `NeighborCannotExtend { face }` | ANV-O-OFF-2 | 1 |
-| `anvil::shell` | Solid, faces to open, thickness (value or Field), inward or outward → hollow solid | Created(`inner(f)` for each offset face), Deleted for opened faces | `WallCollapse { region }` where the thickness exceeds the local inscribed radius | ANV-O-OFF-3 (shelled box and cylinder volumes exact) | 1 |
-| `anvil::thicken` | Sheet, thickness (value or Field), side → solid | Created(`front`, `back`, `rim(e)`) | `SelfIntersecting` | ANV-O-OFF-3 | 1 |
-
-`Round` offsets of a B-rep use the exact Minkowski construction. For d > 0, the candidate surfaces are the offset faces, pipe surfaces around convex edges and spheres around convex vertices.
-
-One pass of the cellular engine builds their arrangement, and Anvil keeps the cells whose certified distance to the input is at most d; negative offsets apply the same rule to the complement. Regions where an offset surface folds fall outside the kept cells instead of producing invalid faces.
-
-### Draft
-
-`anvil::draft` tilts faces relative to a pull direction about a neutral element (plane, edges or a parting line), with angle as a value or `Field<Faces, Angle>`. Planes stay planes, cylinders become cones, and other faces become procedural drafted surfaces with certified approximations. Neighbors are extended and re-intersected.
-
-History: `Modified` for drafted faces, `Created` for step faces at a parting line. Failure: `DraftNotPossible { face, reason }` (the face is parallel to the pull direction at the neutral element), `SelfIntersecting`.
-
-Oracle: ANV-O-DRAFT-1 (drafted planar faces measured at the requested angle; analysis agrees with the input angle within 10⁻⁹ rad). Phase 2.
-
-### Split, trim, extend, imprint
-
-| Operation | Contract | History | Failure behavior | Oracle | Phase |
-| --- | --- | --- | --- | --- | --- |
-| `anvil::split` | Body and tool (plane, sheet, Body); `output: Bodies` (one Body per piece) or `Regions` (one cellular Body) | Split, Created(`cut_face`) | `ToolDoesNotCut`; `OpenTool { gaps }` | ANV-O-BOOL-5 (piece volumes sum to the input) | 1 |
-| `anvil::trim` | Sheet and boundary curves or tool; keep side by a point or a `Query` | Split, Deleted | `KeepSideAmbiguous` | ANV-O-TRIM-1 | 1 |
-| `anvil::extend` | Face edge, distance or target, mode `Natural` (surface extended analytically), `Linear` or `CurvatureContinuous` | Modified | `CannotExtend { reason }` (surface ends at a singularity) | ANV-O-TRIM-2 (continuity at the old edge) | 1 |
-| `anvil::imprint` | Body and curves or another Body → same Body with split faces and edges; volume unchanged | Split, Created(`imprint_edge`) | `CurveNotOnFace { gap }` | ANV-O-BOOL-6 (volume and surface area unchanged) | 1 |
-
-### Transform, pattern, mirror
-
-| Operation | Contract | History | Failure behavior | Oracle | Phase |
-| --- | --- | --- | --- | --- | --- |
-| `anvil::transform` | Moves a Body: rigid motion, uniform or non-uniform scale, or reflection → the same Body, transformed | EntityIds kept: identity for rigid motions, `Modified { aspects: Geometry }` for scaling and reflection (orientation is restored by flipping senses) | `Degenerate` for zero scale | ANV-O-XF-1 (round trip within one ulp per coordinate) | 0 |
-| `anvil::pattern` | Copies a Body or tool: placements (linear, circular, along a curve, mirror, table, or points sampled from a Field) and `combine: Separate`, `Union`, or `Subtract` from a target → Bodies or Body | Each copy's entities get the copy index in their site, so an original and its mirror copy never share EntityIds; Boolean records for combinations | `CopyFailed { index, error }` unless `skip_failed`; `Overlapping { pairs }` when `Separate` requires disjoint copies | ANV-O-PAT-1 (copy counts, transforms, volumes) | 1 |
-
-Patterns combine in one n-ary Boolean, not a chain of binary ones. When copies overlap only the target, not each other, and each copy meets congruent target faces (checked exactly on the defining parameters), the first copy's intersection results are transformed and reused for the others. Reuse is part of the operation's defined behavior, so results stay deterministic.
-
-Five thousand cooling holes in a plate then cost one hole's intersection work plus bookkeeping linear in the count. Implicit patterns use domain repetition and cost nothing per copy.
-
-### Sew, heal and imported geometry
-
-| Operation | Contract | History | Failure behavior | Oracle | Phase |
-| --- | --- | --- | --- | --- | --- |
-| `anvil::sew` | Sheets and faces, tolerance up to τ_heal → shells or solids; edge pairs matched by certified Hausdorff distance and merged into tolerant edges | Merged (edges, vertices), Modified (faces) | Returns the sewn Body plus `Note::FreeEdges { edges, gaps }`; fails only on `ToleranceGrowth` above the given limit | ANV-O-HEAL-1 (exploded solids re-sew exactly; ABC's STEP files close [STEP distribution unverified]) | 1 |
-| `anvil::heal` | Imported Body → valid Body: rebuild parameter curves, close gaps, remove edges and faces below λ, fix orientation and loop nesting, replace degenerate geometry, split self-intersecting loops, recognize analytic surfaces stored as NURBS | Modified, Merged, Deleted with reason per fix; each fix listed with its tolerance change | `Unhealable { entities, reason }` listing what remains invalid; never returns an invalid Body | ANV-O-HEAL-2 (every healed body passes `check_body`; deviation from input within the reported bound) | 1 |
-| `anvil::check_body` | Body → list of violations of the four validity conditions | None | — | Oracle of every operation | 0 |
-| `anvil::match_bodies` | Old and new import → `HistoryRecord`s between them | As described under naming | `NoCorrespondence` | ANV-O-NAME-4 | 2 |
-
-`anvil::sew` replaces the separate "knit" concept: one operation joins sheets along edges within tolerance. OCCT's 8.0 release notes list Shape Healing fixes for stack overflows and edge multiplication [OCCT 8.0], which shows where healing breaks in practice; Anvil's healing oracle includes those failure classes.
-
-### Direct edits and defeaturing
-
-| Operation | Contract | History | Failure behavior | Oracle | Phase |
-| --- | --- | --- | --- | --- | --- |
-| `anvil::move_faces` | Faces and a motion (offset, translate, rotate); neighbors re-intersected; used by the Mechanical tab's direct editing and live rules | Modified; Created and Deleted where topology changes | `TopologyChangeRejected` when the caller forbids it | ANV-O-DE-1 | 2 |
-| `anvil::replace_faces` | Faces and replacement surfaces → Body with neighbors re-intersected | Modified (EntityIds kept) | `ReplacementDoesNotClose { gaps }` | ANV-O-DE-1 | 2 |
-| `anvil::delete_faces` | Faces → Body healed by extending neighbors to close the gap, or a sheet when `heal: false` | Deleted; Merged where neighbors join | `CannotHeal { loop }` with a fill-surface fix | ANV-O-DE-2 (deleting a boss restores the base volume) | 2 |
-| `anvil::recognize_aspects` | Body → holes, fillets, chamfers, bosses, pockets, ribs, patterns, each with faces, parameters and confidence | None (read-only) | Unrecognized faces listed | ANV-O-REC-1 (labeled ABC subset; target precision ≥ 0.98 on holes and fillets) | 2 |
-| `anvil::recognize_relations` | Faces → coplanar, coaxial, concentric, tangent, perpendicular, symmetric and equal-radius relations decided by the tolerance rule | None | — | ANV-O-REC-2 | 2 |
-| `anvil::defeature` | Body and rules (aspect kinds below sizes, or explicit faces) → simplified Body; recognize, then delete faces | Deleted with the aspect as reason | `CannotHeal` per aspect, other aspects still removed when `partial: true` | ANV-O-DE-3 (volume change equals removed aspect volumes) | 2 |
-
-### Mid-surface extraction
-
-`anvil::mid_surface` turns a thin-walled solid into a sheet Body plus a thickness `Field<Faces, Length>` for Flux shells:
-
-1. Pair faces that are offsets of each other within a thickness range, using certified distance and normal tests.
-2. Build each pair's mid-surface: exact for plane, cylinder and cone pairs; a procedural mid-surface with a certified approximation otherwise.
-3. Extend mid-surfaces and intersect them at junctions (T-joints and corners); trim to the solid.
-4. Treat unpaired regions, such as rib ends and bosses, by the 3D medial axis where it is thin, or report them.
-
-History: `Created { role: mid(face_a, face_b) }`, so a shell boundary condition can still reference the solid's face. Failure: `UnpairedFaces { faces, reason }` with the partial sheet.
-
-Oracle: ANV-O-MID-1 (sheet-metal and plate test bodies with known mid-surfaces; the thickness Field matches the paired distance within τ). Phase 2, for golden product 4.
-
-### Section, project and wrap
-
-| Operation | Contract | History | Failure behavior | Oracle | Phase |
-| --- | --- | --- | --- | --- | --- |
-| `anvil::section` | Body and a plane, a stack of parallel planes, or a surface → planar region Bodies per plane (sheets with loops) or curves; any representation | Created(`section_edge`) from faces | `NotClosed { gaps }` names the defective faces | ANV-O-SEC-1 (areas per plane equal the integrated cross-section within the bound; closed forms for quadrics) | 1 |
-| `anvil::project_curve` | Curves onto faces along a direction or the surface normal → curves on surface | Created(`projection`) | `Misses { segments }` | ANV-O-PROJ-1 | 1 |
-| `anvil::parameterize` | Faces or a mesh region → a (u, v) map: Boundary First Flattening with boundary length or angle control and cone singularities, as the Mechanical tab decided; or least-squares conformal; or isometric for developable faces | None | `NotDisk { genus }` with cut suggestions | ANV-O-PAR-1 (angle distortion within the method's reference value) | 2 |
-| `anvil::wrap` | Planar curves or a planar sheet onto a target face through a map from `parameterize` → curves or faces on the target; emboss and deboss through `offset_faces` | Created(`wrapped`) | `OutOfDomain { curves }` | ANV-O-PROJ-2 (lengths on developable targets preserved within τ) | 2 |
-| `anvil::unfold`, `anvil::fold` | Sheet-metal bodies with developable faces and a neutral-layer offset per bend (from the K-factor the feature supplies) → flat pattern, and back | Identity between folded and flat faces; Created(`bend_line`) | `NotDevelopable { faces, deviation }` | ANV-O-SM-1 (fold of unfold returns the input within τ) | 2 |
-
-### Deform and morph
-
-| Operation | Contract | History | Failure behavior | Oracle | Phase |
-| --- | --- | --- | --- | --- | --- |
-| `anvil::deform` | Body and a displacement `Field<Body, Displacement>` or a lattice (cage, radial basis, free-form deformation) → deformed Body in the same representation. B-rep: control points of NURBS faces move, and analytic faces are converted to NURBS only where the Field is non-rigid on them; meshes and SubD cages move vertices; implicits compose with the inverse map | Modified (EntityIds kept) | `FoldOver { region }` when the map's Jacobian determinant reaches zero; `ToleranceNotMet { achieved }` | ANV-O-DEF-1 (rigid Fields reproduce `transform` exactly; deviation from the exact deformed surface within the bound) | 2 |
-| `anvil::morph` | Source Body, target Body or point correspondences → deformation Field that maps one onto the other, then `deform` | Modified | `NoCorrespondence` | ANV-O-DEF-2 | 3 |
-| `anvil::shrinkwrap` | Bodies and a gap size → one closed outer skin: implicit union, closing by offset +g then −g on exact distances, mesh or B-rep output | Created(`skin`) | `BudgetExceeded` | ANV-O-OFF-4 (skin within g of the input everywhere outside; watertight) | 2 |
-
-`deform` is how distortion compensation works in the Manufacturing tab (D-MFG-13): MFG inverts a predicted displacement Field and Anvil applies it. The deformed B-rep's error is the difference between the exact composed surface S(u, v) + d(S(u, v)) and the fitted NURBS, bounded by certified sampling plus the Field's reported sampling error.
-
-### Mesh processing operations
-
-Mesh operations not already described under the mesh representation:
-
-| Operation | Contract | History | Failure behavior | Oracle | Phase |
-| --- | --- | --- | --- | --- | --- |
-| `anvil::mesh_from_triangles` | Triangle and index buffers → Mesh, or facet B-rep for intended non-manifold data | Created face groups | `NotManifold { edges, vertices }` | ANV-O-MESH-1 | 0 |
-| `anvil::repair_mesh` | As described above | Modified, Deleted, Created(`fill`) | `Unrepairable { reason }` | ANV-O-MESH-2 (Thingi10K) | 1 |
-| `anvil::segment_mesh` | Mesh → face groups by curvature and normal clustering, with crease edges | Split of face groups | — | ANV-O-MESH-3 (labeled segmentations) | 3 |
-| `anvil::align` | Source and target Bodies, optional initial transform → rigid transform by point-to-plane iterative closest point with trimmed outliers; deterministic sample selection from a fixed sequence | None | `NotConverged { rms }` | ANV-O-FIT-1 (known transforms recovered within 10⁻⁶ of the Body diagonal) | 4 |
-| `anvil::fit` | Points or a mesh region and a model kind (plane, sphere, cylinder, cone, torus, NURBS of given degree and knots, SubD cage) → geometry plus residual statistics | Created(`fitted`) | `FitFailed { residual }` | ANV-O-FIT-2 (exact recovery from exact samples; noise-level residuals) | 1 (primitives), 4 (freeform) |
-| `anvil::voxelize` | Body and voxel size → occupancy grid or narrow-band distance grid; inside test by winding number | None | `BudgetExceeded { voxels }` | ANV-O-VOX-1 (voxel volume converges to the exact volume at first order in h) | 1 |
-| `anvil::correlate_grids` | Two occupancy grids → exact integer correlation counts (FFT with a proven rounding bound below 0.5, otherwise direct integer correlation), as decided by MFG (D-MFG-12) | None | `BudgetExceeded` | ANV-O-VOX-2 (equality with direct integer correlation) | 2 |
-| `anvil::common_refinement` | Two discretizations of one interface (meshes or faces) → their overlay, each piece mapped to its parent cell on both sides, built by exact arrangement in a shared parameterization; Flux uses it for conservative interface transfer | Created(`piece`) with both parents | `NotSameInterface { gap }` when the two sides deviate by more than their tolerances | ANV-O-MESH-4 (piece areas sum to each side's area within the bound) | 4 |
-
-### Geometry access
-
-| Operation | Contract | Failure behavior | Oracle | Phase |
-| --- | --- | --- | --- | --- |
-| `anvil::evaluate` | Curve or face EntityIds and parameters → positions and derivatives to third order, exact | `OutOfDomain { parameters }` | ANV-O-GEOM-1 | 0 |
-| `anvil::sample` | Faces or curves and a density or count → points with EntityId and (u, v), in a deterministic low-discrepancy pattern | — | ANV-O-GEOM-2 (coverage and determinism) | 1 |
-| `anvil::intersect` | Two entity sets (curves, faces, Bodies) → points and curves as a new wire Body with `Created(intersection)` records, classified transversal, tangent or overlap | `Ambiguous { entities, region }` | ANV-O-SSI-1 to 3 | 1 |
-| `anvil::approximate` | Curves or faces → NURBS within a tolerance, for export and downstream fitting | `ToleranceNotMet { achieved }` | ANV-O-GEOM-3 (certified deviation within the request) | 1 |
-
-### Mass properties
-
-`anvil::mass_properties` returns volume, area, mass, center of mass and the inertia tensor about the center and principal axes, with an `ErrorBound` per quantity.
-
-| Representation | Method | Error |
-| --- | --- | --- |
-| B-rep | Divergence theorem: volume integrals become surface integrals of polynomial fields, and on each trimmed face the surface integral becomes a line integral over its loops in parameter space (Green's theorem), evaluated with adaptive Gauss-Legendre quadrature on exact geometry; each panel's remainder is bounded by interval enclosures of the integrand's derivatives | `Guaranteed` from the certified remainders plus the certified approximation of procedural faces |
-| Mesh | Exact closed-form sums over signed tetrahedra from a frame-local origin, summed with a fixed-order compensated reduction | `Guaranteed` at the rounding level, plus the mesh's ε times surface area |
-| SubD | Converted to exact B-rep faces internally | As B-rep |
-| Implicit | Adaptive octree with interval classification: inside cells exactly, ambiguous cells by subdivision to λ, then the residual cells bounded by their volume | `Guaranteed` two-sided bounds |
-| Multi-region | Per region with its material density; densities may be `Field`s, integrated with the region | Sum of parts |
-
-Each quantity is computed in the Body frame, which keeps cancellation small for parts far from the world origin. Oracle: ANV-O-MP-1 (closed-form volumes, centroids and inertia of primitives, shelled primitives, tori, and Pappus solids; agreement between B-rep, mesh and implicit forms of the same body within their bounds). Phase 0 (meshes), 1 (all).
-
-### Distance, clearance and interference
-
-| Operation | Contract | Failure behavior | Oracle | Phase |
-| --- | --- | --- | --- | --- |
-| `anvil::distance` | Two Bodies or entity sets, optional upper bound → minimum distance, witness points with EntityIds and (u, v), certified enclosure; `signed` for penetration depth | `NotSeparated` only when the caller requires positive distance | ANV-O-DIST-1 (closed forms for analytic pairs; agreement across representations) | 1 |
-| `anvil::closest_point` | Points and a Body → closest point, EntityId, (u, v), signed distance with winding-number sign | — | ANV-O-DIST-2 | 0 |
-| `anvil::interference` | Bodies (Instances with placements), clearance threshold → pairs classified as `Separated { distance }`, `Touching { region }`, `Clearance { min }` below threshold, or `Overlapping { volume, region }` | `BudgetExceeded` | ANV-O-DIST-3 (known assemblies; overlap volumes against Boolean intersection volume) | 1 |
-| `anvil::ray_cast` | Rays and a Body → first hits with EntityId, (u, v), normal; certified for exact faces | — | ANV-O-DIST-4 | 1 |
-| `anvil::deviation` | Two Bodies → signed deviation `Field<Faces, Length>` on each, with certified one-sided and two-sided Hausdorff bounds; serves proposal geometry overlays, scan-to-CAD inspection and conversion checks | `BudgetExceeded` | ANV-O-DIST-5 (offset copies deviate by exactly the offset) | 1 |
-
-Distance uses branch-and-bound over both Bodies' hierarchies with conservative distance bounds, then a certified local solve for the closest pair (Krawczyk on the first-order optimality conditions). Signed distance to imperfect geometry takes its sign from the generalized winding number on trimmed surfaces [Spainhour and Weiss 2025], accelerated with the hierarchical far-field expansion that Spainhour, Whitlock and Weiss describe, which turns some 10³-second direct evaluations into sub-second ones [Spainhour, Whitlock and Weiss 2026].
-
-Assembly interference runs in three steps: GPU integer box culling over all Instance pairs (D-ANV-17), CPU certified distance on surviving pairs, and Boolean intersection volume only for overlapping pairs. Pairs are processed in canonical Instance order, so results are deterministic.
-
-### Analysis: curvature, continuity, draft and thickness
-
-| Operation | Contract | Oracle | Phase |
-| --- | --- | --- | --- |
-| `anvil::curvature` | Faces or curves → Fields of principal, Gaussian and mean curvature (surfaces), curvature and torsion (curves), with certified extremes; singular points reported, not numbers | ANV-O-AN-1 (closed forms on quadrics and tori) | 1 |
-| `anvil::analyze_continuity` | Edges between faces, or curve joins → G0 gap, G1 angle, G2 curvature mismatch, G3 rate-of-curvature mismatch, each as a certified maximum along the edge and as a Field for display | ANV-O-AN-2 (constructed G1, G2, G3 joins measured correctly; known discontinuities detected) | 1 (G0 to G2), 2 (G3) |
-| `anvil::isophotes` | Faces, light direction, angles → curves on surface (isophote lines and reflection lines) | ANV-O-AN-2 | 2 |
-| `anvil::draft_analysis` | Faces, pull direction, minimum angle → per-face `Field<Faces, Angle>` and regions classified as positive draft, negative draft, below minimum, or vertical; split curves certified | ANV-O-AN-3 (cones and drafted planes at known angles) | 2 |
-| `anvil::thickness` | Body → local thickness `Field<Body, Length>` by `method: Sphere` (largest inscribed sphere touching the point, via the medial axis) or `Ray` (opposite-normal ray), with certified minimum location | ANV-O-AN-4 (plates, tubes and wedges with closed-form thickness) | 1 |
-| `anvil::medial_axis` | Planar regions → segment Voronoi skeleton with exact predicates, arcs decided by certified interval predicates under the tolerance rule; solids → certified medial approximation from narrow-band distance with a stated Hausdorff bound | ANV-O-AN-5 (rectangles, discs, L-shapes against closed forms in 2D) | 1 (2D), 2 (3D) |
-| `anvil::silhouette` | Body and view direction or eye point → silhouette curves on faces (where n · v = 0), certified | ANV-O-AN-6 | 1 |
-| `anvil::project_hlr` | Body and a view → visible and hidden edges and silhouettes, projected; lines and circles exact, freeform edges approximated with bounds (drawings for golden product 1) | ANV-O-AN-6 (hidden-line results of reference views) | 1 |
-| `anvil::visibility` | Body and directions → per-face visibility Fields for tool access or line of sight | ANV-O-AN-7 | 2 |
-| `anvil::draft_map` | Body and direction set → per-face feasible draw directions, for mold parting search | ANV-O-AN-3 | 3 |
-
-The UI tab owns how analyses look. Anvil returns them as Fields, which the UI paints on the exact geometry through the display tessellation's `(EntityId, u, v)` back-references.
-
-### Manufacturing geometry
-
-| Operation | Contract | Failure behavior | Oracle | Phase |
-| --- | --- | --- | --- | --- |
-| `anvil::tool_contact` | Revolved tool profile (flat, ball, bull, taper, generic), positions and a motion direction, target Body → first-contact heights or distances with contact EntityId; exact contact classification against analytic and facet faces | `BudgetExceeded` | ANV-O-MFG-1 (drop and push cutter against analytic surfaces) | 1 |
-| `anvil::swept_volume` | Body or tool profile and a motion (3-axis or 5-axis path with orientations) → narrow-band implicit envelope with an `ErrorBound` | `BudgetExceeded` | ANV-O-MFG-2 (swept spheres and cylinders along straight and circular paths exact) | 1 (3-axis), 2 (5-axis) |
-| `anvil::offset_curve` | Planar curves, distance, corner rule; lines and arcs stay lines and arcs, as the Manufacturing tab requires; curves on surfaces offset geodesically | `Degenerate` | ANV-O-MFG-3 | 1 |
-
-### Constraint solving and shape velocity
-
-The Mechanical tab owns the semantics of `anvil::solve_constraints` and `anvil::analyze_constraints` (D-MEC-3, D-MEC-11, D-MEC-21). Anvil provides them as ordinary versioned operations with Anvil's evaluators, exact rational rank computations and canonical ordering. Their oracles and phases are those of the Mechanical tab.
-
-`anvil::shape_velocity` gives Flux the derivative of geometry with respect to an Ingot parameter, as a `Field<Faces, Displacement>` per unit change. Anvil differentiates each operation's construction in forward mode: every geometry constructor has a tangent rule, so a parameter's tangent propagates through the operation sequence of the build. A tangent is defined only where topology is locally constant; at a topology change (a face appearing or vanishing) the velocity Field is marked `Singular` there, as Flux's `SampleFlags` allow.
-
-Oracle: ANV-O-SV-1 (finite differences of rebuilt geometry agree with the velocity Field within the step-size error, on parameterized primitives, extrudes and fillets). Phase 2.
-
-### Tessellation and level of detail
-
-`anvil::tessellate` produces display and export meshes from any representation.
-
-| Parameter | Meaning |
-| --- | --- |
-| `chord` | Maximum distance between mesh and surface |
-| `angle` | Maximum normal deviation between mesh and surface |
-| `edge_length` | Optional maximum edge length |
-| `view` | Optional camera, for screen-space error |
-
-Output: a Mesh Body whose face groups carry the source faces' EntityIds, with per-vertex `(EntityId, u, v)` back-references for painting Fields, and a `Guaranteed` chord bound per face from certified sampling. Shared edges are discretized once by edge parameter, so the mesh is watertight by construction (the same-parameter rule above).
-
-Level of detail uses a per-face hierarchy: each face is tessellated at a geometric series of chord tolerances, and levels share boundary vertices on every edge, so neighboring faces at different levels never crack. The UI selects levels by screen-space error and streams changed triangles, as the contract requires. ETER shows that pixel-accurate tessellation of NURBS on the GPU can replace pre-tessellation [ETER]; Anvil adopts GPU tessellation for previews and interactive views only (phase 3), because the canonical exported mesh must be bit-identical.
-
-Failure behavior: none for valid Bodies; `BudgetExceeded { triangles }` when a tolerance demands too many triangles. Oracle: ANV-O-TESS-1 (certified chord bound; watertightness; face-group EntityIds equal source faces). Phase 0.
-
-### Point and solid classification
-
-| Operation | Contract | Method | Oracle | Phase |
-| --- | --- | --- | --- | --- |
-| `anvil::classify_points` | Points → `Inside`, `Outside` or `On { entity }` per point, with the tolerance applied | Exact predicates for meshes; generalized winding number with certified near-surface correction for B-reps [Spainhour and Weiss 2025]; interval evaluation for implicits | ANV-O-CLS-1 (agreement across representations; points near faces at distances ±τ/2 and ±2τ) | 0 |
-| `anvil::classify_box` | Box → `Inside`, `Outside` or `Cut`, certified, for Flux's immersed methods | Interval evaluation of the winding number or implicit; hierarchy culling | ANV-O-CLS-2 | 1 |
-| `anvil::classify_body` | Body against Body → each face of A classified as inside, outside or on B | Arrangement-free: point classification of face samples plus SSI only where faces approach | ANV-O-CLS-3 | 1 |
-
-### Geometry queries for simulation
-
-Anvil implements the `GeometryQuery` trait that the Flux tab requires for every representation: `classify_box`, `closest_point`, certified `moments` over a box (by the divergence theorem on the trimmed surface, as for mass properties), `surface_quadrature` over a box, and `local_thickness`. Moments return a guaranteed error, which Flux uses to bound cut-cell quadrature error.
-
-A cut that Anvil cannot certify within fuel returns `Uncertified { achieved }`, and Flux then subdivides or fails with `UncertifiedCut`, as its tab specifies. Phase 1.
-
-### Draping
-
-`anvil::drape_kinematic` maps a woven fabric onto a tool surface by the kinematic (pin-jointed net) method that the Mechanical tab specifies: inextensible fibers, constant step length, seed point and two fixed fibers, quadrants draped independently in a fixed order. Output: fiber curves on the surface and a shear-angle `Field<Faces, Angle>`. Failure: `ExcessiveShear { region, angle }` beyond the fabric's locking angle.
-
-Oracle: ANV-O-DRAPE-1 (drape on a hemisphere against published shear patterns). Phase 4.
-
-## Conversions
-
-`anvil::convert(body, into: Repr, accuracy: Length, options) -> (Body, ErrorBound)` is the only conversion operation. The `ErrorBound` uses the shared type `{ value, norm, kind }` (CCR-ANV-1); for geometry the norm is the two-sided Hausdorff distance unless stated.
-
-| From → To | Method | Error bound | Topology and names | Phase |
-| --- | --- | --- | --- | --- |
-| BRep → Mesh | Tessellation with certified chord control | `Guaranteed`, value ≤ requested chord | Watertight; face groups keep face EntityIds | 0 |
-| BRep → Implicit | Exact signed distance leaf with winding-number sign | Zero: exact | Leaf references the B-rep's content hash | 1 |
-| BRep → SubD | Feature-aligned quad remesh, then cage fit | `Estimated` (fit residual) | Cage faces get `Created { from: face }` | 4 |
-| Mesh → BRep (facet) | Facet faces per face group | Zero: exact | Face groups become faces with the same EntityIds | 1 |
-| Mesh → BRep (fitted) | Segment, fit primitives and NURBS per segment, intersect neighbors, sew | `Estimated` from residuals, `Guaranteed` after a certified Hausdorff check if requested | New faces `Created { from: face_group }` | 4 |
-| Mesh → Implicit | Exact signed distance to triangles, winding-number sign | Zero: exact | Leaf references the mesh | 1 |
-| Mesh → SubD | Mesh as cage | Not an approximation of the mesh: the limit surface differs, and the deviation is reported as `Estimated` | Cage elements keep group ids | 3 |
-| Implicit → Mesh | Certified adaptive dual contouring | Two-sided, `Guaranteed` in certified cells and `Estimated` in flagged cells | Face groups labeled by active DAG leaves | 1 |
-| Implicit → BRep | Mesh as above, then facet faces; or fitted NURBS per leaf region with exact analytic faces recovered where the active leaf is an analytic primitive | Facet path as Implicit → Mesh; fitted faces `Estimated` until a certified deviation check | Faces labeled by active leaves | 1 (facet), 3 (fitted) |
-| SubD → BRep | Exact limit faces, or NURBS with bicubic patches and certified approximation near extraordinary vertices | Zero (exact mode); `Guaranteed` (NURBS mode) | Faces keep cage-face EntityIds | 3 |
-| SubD → Mesh | Limit tessellation | `Guaranteed` chord bound | As B-rep tessellation | 3 |
-| SubD → Implicit | Through exact B-rep faces | Zero | — | 3 |
-| Implicit → SubD | Implicit → Mesh, then a cage fit as for BRep → SubD | `Estimated` (meshing bound plus fit residual) | Cage faces labeled by active DAG leaves | 4 |
-
-Every conversion records its bound on each face it produces, and bounds compose by addition along a chain of conversions, since Hausdorff distance obeys the triangle inequality. Later operations keep each face's bound, because a trimmed face still deviates from its source surface by at most that amount, and faces derived from bounded faces (offsets, blends) inherit the largest bound of their sources.
-
-A Body's bound is the maximum over its faces. A Check can therefore require `body.error() < 10µm` and fail with the contributing faces and conversions listed.
-
-The bound describes geometry, not topology. A near-tangent configuration can resolve differently on converted inputs than on the originals, and the tolerance rule reports such cases as tolerance growth, not as part of the bound.
-
-**Decision D-ANV-21:** Inclusions in the representation lattice are exact (zero error), and approximating conversions record Hausdorff bounds per face that compose along conversion chains and survive later operations. *Why:* mixed operations then never approximate, and a check can bound the geometric error of any Body regardless of how many conversions produced it. *Rejected:* per-call error reports only (lost after the next operation); one bound per Body (a local conversion would taint every face); RMS error metrics (hide the worst deviation, which is what tolerances and fits care about).
-
-## Performance, parallelism and determinism
-
-### Determinism rules
-
-Anvil inherits the contract's determinism principle and the PLT and Flux mechanisms: the `cpu-f64` platform class spans every Tier 1 CPU target, native and Wasm (D-FLX-19), with correctly rounded math from `detmath` and no implicit FMA (Rust's strict IEEE semantics rule out implicit contraction [RFC 3514]). Anvil adds rules for its own code:
-
-1. **Canonical order everywhere.** Every set that an algorithm iterates is sorted by a content-derived key (EntityId, Morton code, canonical vertex order). No `HashMap` iteration order, no pointer order and no thread arrival order reaches output.
-2. **Fixed reduction trees.** Sums (volumes, moments, energies) use compensated summation over a fixed binary tree defined by the data's canonical order, not by the thread schedule.
-3. **Explicit FMA only.** Anvil calls `mul_add` only where an algorithm states it, such as TwoProduct. Rust guarantees that `mul_add` returns the correctly rounded fused result, "guaranteed not to change", while its speed depends on hardware FMA [Rust f64 docs]. All targets therefore produce the same bits. This does not conflict with D-FLX-8, which forbids implicit fusion in generated kernels; on x86-64-v2 hardware without FMA, TwoProduct uses Dekker splitting, which yields the same exact error term.
-4. **Deterministic parallel decomposition.** Parallel work splits by data (patch pairs, octree cells, independent sets), never by worker count. Each task's output has a canonical position, and results merge in canonical order.
-5. **No GPU-defined answers.** GPU results are exact integer culls, work orderings or previews (D-ANV-17). Algorithms whose output could depend on work order, such as SSI tracing, start from canonical points. The one GPU computation with a canonical output, grid correlation, rounds to integers under a proven error bound.
-6. **Counted fuel.** Budgets count work units, never time.
-7. **NaN never leaks.** NaN bit patterns are non-deterministic in Rust and Wasm [RFC 3514; Wasm nondeterminism]. Anvil checks every construction result for finiteness and turns NaN or infinity into a typed error at the source, and the encoding rejects them.
-
-Canonical Anvil results exist only in the `cpu-f64` platform class, which spans every Tier 1 CPU target. GPU platform classes never produce canonical Anvil outputs, so Anvil results agree exactly across platform classes, and the contract's "within declared tolerance" clause is needed only for Flux's GPU solves.
-
-Parallel mesh algorithms (remeshing, adaptation, untangling, Delaunay refinement) use independent-set scheduling. Each round computes a maximal independent set of non-conflicting local operations by priority, where the priority is a hash of the element's deterministic id (derived from its parents' ids when it was created) and the round number.
-
-The operations of a round apply in parallel; rounds repeat until no operation remains. The result is identical for any number of threads, because the set chosen in each round depends only on the mesh.
-
-**Decision D-ANV-22:** Anvil achieves determinism under parallelism by data-defined decomposition, canonical merge order, fixed reduction trees and independent-set scheduling for mesh modification. *Why:* these give identical bits for any thread count without locks around floating-point state, and they parallelize well; graph-coloring or randomized schedules would tie output to thread count or random seeds. *Rejected:* single-threaded exact mode (wastes cores on the 2-second rebuild target); deterministic replay logs (heavy and fragile).
-
-### Parallelism
-
-| Level | Mechanism | Examples |
-| --- | --- | --- |
-| Across operations | Kiln schedules independent Ops in parallel | Features on separate Bodies, independent pattern copies, Instances in an assembly |
-| Within an operation | Data-parallel tasks on the PLT `runtime` pool | SSI over candidate patch pairs, face-pair intersections in Booleans, tessellation per face, distance over hierarchy subtrees, octree cells in implicit meshing |
-| SIMD | 8-lane `f64` and 16-lane `f32` batches through the PLT `simd` crate's canonical lanes | NURBS evaluation (de Boor in batches of parameters), interval arithmetic, implicit tapes, predicate filters, box tests |
-| GPU | wgpu compute through the PLT `gpu` crate, with a CPU path for each kernel | Integer broad phase for intersections and interference; preview tessellation and NURBS evaluation; implicit preview rendering and culling; `correlate_grids` |
-
-Predicate filters vectorize well because the static filter is a fixed sequence of multiplications and additions; only lanes that fail the filter fall to the scalar exact path.
-
-### Performance targets
-
-Targets are on the reference laptop that phase 0 fixes. All are targets, not measurements.
-
-| Workload | Target |
-| --- | --- |
-| Rebuild of a 200-feature part after an early edit (contract) | Anvil share ≤ 1.2 s of the 2 s budget, with Kiln backdating unchanged features |
-| B-rep Boolean, two bodies of 500 faces each, analytic and NURBS mix | ≤ 50 ms exact |
-| Constant-radius fillet chain of 50 edges | ≤ 100 ms exact |
-| Mesh Boolean, 1 million triangles total | ≤ 70 ms on 8 cores, 2× EMBER's reported 34 ms for 1.2 million triangles [EMBER 2022]. Deviation: unquantized `f64` input and a valid triangulated output cost more than EMBER's integer polygon soup |
-| Implicit lattice bracket (golden product 2), 10⁵ cells, preview render | 60 fps at 1080p on the reference GPU; exact mesh at 50 µm chord in ≤ 10 s |
-| Tessellation of a 10,000-face part at 0.01 mm chord | ≤ 200 ms |
-| Interference of a 1,000-part assembly | ≤ 1 s from warm cache |
-| Conforming tetrahedralization, 10⁶ elements | ≤ 10 s on 8 cores |
-| Coarse drag preview (contract) | ≤ 100 ms including preview Booleans and tessellation |
-
-### GPU use
-
-The `gpu` crate gives Anvil one compute abstraction over wgpu and a CPU fallback for every kernel, per the contract. Anvil's GPU kernels:
-
-| Kernel | Precision | Role | Canonical? |
-| --- | --- | --- | --- |
-| Integer box overlap and hierarchy traversal | Integer | Broad phase for intersection, interference, classification | Yes, bit-identical with CPU |
-| NURBS and subdivision evaluation on grids, with per-cell boxes | `f32` | Preview tessellation, display level of detail, SSI work ordering (D-ANV-17) | No; affects speed only |
-| Implicit tape interpreter with interval pruning | `f32` intervals with outward rounding by one ulp per operation | Preview rendering, culling in previews | No |
-| Grid correlation | `f32` FFT with proven rounding bound, integer output | `correlate_grids` (D-MFG-12) | Yes, once WGSL accuracy is verified (open question 6); until then the CPU path (`f64` FFT with a proven bound, or direct integer correlation) is canonical and the GPU result only orders work |
-
-GPU interval arithmetic cannot rely on rounding modes, so the interpreter widens every operation's result by one ulp on each side. That keeps enclosures conservative for basic operations under WGSL's accuracy rules, but those rules could not be verified for this draft [unverified: WGSL ulp bounds for `+`, `×`, `/`, `sqrt`]; until verified, GPU interval results only order and prune preview work.
-
-## Rust API
-
-The signatures below are illustrative but plausible; they fix names, ownership and error shapes. Units are SI `f64` inside Anvil; Ingot's `Quantity` checks happen before the call.
-
-### Core values (`anvil-geom`, `anvil-topo`, `anvil-ops`)
+### Rust surface
 
 ```rust
-/// 128-bit provenance id: SHA-256 prefix of (kind, site, role, inputs, discriminator).
+/// SHA-256 prefix of (kind, OpSite, role, generating ids, discriminator).
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub struct EntityId(pub [u8; 16]);
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub enum EntityKind { Region, Shell, Face, Loop, Edge, Vertex, FaceGroup, CreaseEdge, CageFace, CageEdge, CageVertex, ExprNode }
-
-/// Structural identity of an Op call: feature instance path, call-site key, loop and pattern indices.
-/// Never contains argument values (D-ANV-14).
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub struct OpSite { pub path: Box<[SiteSegment]>, pub indices: Box<[u32]> }
-
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub enum Discriminator { Bound(Box<[EntityId]>), Side { cause: EntityId, sense: Sense }, Ordinal(u32) }
-
-/// Shared with Flux (CCR-ANV-1, CCR-FLX-1); defined here, in the lowest crate that needs it.
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct ErrorBound { pub value: f64, pub norm: Norm, pub kind: Guarantee }
-
-#[derive(Clone, Debug)]
-pub enum HistoryRecord {
-    Created  { out: EntityId, role: Role, from: Box<[EntityId]> },
-    Modified { id: EntityId, aspects: Aspects },               // Geometry | Boundary | Tolerance | Attributes
-    Split    { from: EntityId, into: Box<[EntityId]> },
-    Merged   { from: Box<[EntityId]>, into: EntityId },
-    Deleted  { id: EntityId, by: Option<EntityId>, reason: DeleteReason },
-}
-
-/// Immutable, cheaply clonable; storage shared between versions.
-#[derive(Clone)]
-pub struct Body { repr: Repr, frame: Frame, resolution: Resolution, regions: Regions, meta: Arc<BodyMeta> }
+/// Per-face representation error (contract 5).
+pub struct FaceBound { pub position: Component<Length>, pub normal: Component<Angle> }
 
 #[derive(Clone)]
+pub struct Body { repr: Repr, frame: Frame, resolution: Length, regions: Regions, meta: Arc<BodyMeta> }
 pub enum Repr { BRep(Arc<BRep>), Implicit(Arc<Implicit>), Mesh(Arc<Mesh>), SubD(Arc<SubD>) }
 
 impl Body {
-    pub fn content_hash(&self) -> Sha256;                    // over the canonical encoding
-    pub fn error(&self) -> ErrorBound;                      // maximum of per-face conversion bounds (D-ANV-21)
-    pub fn resolution(&self) -> Resolution;
+    pub fn geometry_id(&self) -> GeometryId;   // names, lineage and name-keyed attributes removed
+    pub fn object_id(&self) -> ObjectId;       // full canonical encoding
+    pub fn error(&self) -> Component<Length>;  // largest face position bound
     pub fn entity(&self, id: EntityId) -> Option<EntityRef<'_>>;
-    pub fn lineage(&self) -> &Lineage;
-    pub fn encode(&self, w: &mut impl io::Write) -> Result<(), EncodingError>;
-    pub fn decode(r: &mut impl io::Read) -> Result<Body, EncodingError>;
+}
+
+pub struct Blend;
+impl OpImpl for Blend {
+    const ID: OpId = OpId::new("anvil", "blend");
+    const VERSION: u32 = 2;
+    const GRADE: DeterminismGrade = DeterminismGrade::Portable;
+    type Inputs = BlendArgs;      // body, edges (Query use: Extent), radius law, section, corners, overflow, variant
+    type Outputs = BodyOutput;    // Body, HistoryRecords, Notes; FaceBounds live in the Body
+    fn eval(&self, cx: &mut OpCx<'_>, args: BlendArgs) -> Result<BodyOutput, OpError> { /* … */ }
+    fn cost(&self, sizes: &InputSizes) -> CostEstimate { /* … */ }
 }
 ```
 
-### Geometry traits (`anvil-geom`)
+| Capability | Contract | Failure | Oracle id | Phase |
+| --- | --- | --- | --- | --- |
+| Operation registry | Name and `ingot.lock` pin → `OpImpl`; status `Current`, `Deprecated`, `Retired`, `Yanked` | `UnknownOperation`; `Note::DeprecatedBehavior` | ANV-O-VER-1 | 0 |
+| Frozen versions and toolchain guard | Source hashes and golden output hashes per version | Merge or upgrade blocked | ANV-O-VER-1 | 0 |
+| Retired versions | Archived Wasm build of frozen source, identical bits | Never `OpVersionRetired`: Anvil has no `ClassExact` operation | ANV-O-VER-1 | 1 |
+| `anvil::check_body` | Body → every violation of the four validity conditions | — | ANV-O-VALID-1 | 0 |
+| Global separation check in every operation | Changed entities against the whole Body through the broad phase | `SelfIntersecting { faces, at }` | ANV-O-VALID-2 | 0 |
+| Canonical outputs | decode(encode(v)) = v for every output | Internal error | ANV-O-ENC-1 | 0 |
+| Robustness under random use | Property-based operation sequences with near-degenerate placements | Failures minimized into the corpus | ANV-O-FUZZ-1 | 0 |
 
-```rust
-pub trait Curve: Send + Sync {
-    fn domain(&self) -> Interval;
-    fn periodic(&self) -> Option<f64>;
-    /// Position and derivatives up to `order` (≤ 3) at each parameter; fixed operation order.
-    fn eval(&self, t: &[f64], order: u8, out: &mut CurveSamples);
-    /// Certified enclosure of the curve and its tangent cone over a parameter interval.
-    fn bound(&self, t: Interval) -> CurveBound;
-    fn to_nurbs(&self, tol: f64) -> (NurbsCurve, ErrorBound);
-}
+## Bodies, identities and encoding
 
-pub trait Surface: Send + Sync {
-    fn domain(&self) -> Box2;
-    fn periodic(&self) -> [Option<f64>; 2];
-    fn singular_points(&self) -> &[Point2];
-    fn eval(&self, uv: &[Point2], order: u8, out: &mut SurfaceSamples);
-    fn bound(&self, uv: Box2) -> SurfaceBound;               // box, normal cone, curvature bound
-    fn closest(&self, p: Point3, seed: Option<Point2>) -> Result<SurfacePoint, GeomError>;
-    fn to_nurbs(&self, tol: f64) -> (NurbsSurface, ErrorBound);
-}
+### The Body value
 
-/// Exact and filtered predicates generated at build time (D-ANV-5).
-pub mod predicates {
-    pub fn orient3d(a: Point3, b: Point3, c: Point3, d: Point3) -> Sign;
-    pub fn insphere(a: Point3, b: Point3, c: Point3, d: Point3, e: Point3) -> Sign;
-    pub fn orient3d_implicit(a: ImplicitPoint, b: Point3, c: Point3, d: Point3) -> Sign;
-}
+A `Body` holds its representation; a frame (a translation on a fixed 2⁻²⁰ m grid; rotations belong to Instance placements); its resolution ρ; regions, each `Material`, `Void` or `Exterior` (a fluid is a material region); and metadata with per-face bounds. Anvil stores no item numbers or names; Parts add identity.
 
-/// The tolerance rule of D-ANV-4.
-pub enum Decision { Coincident, Separated(Sign), Grown { new_tolerance: f64 } }
-pub fn decide(enclosure: Interval, tol: f64, cap: f64, fuel: &mut Fuel,
-              refine: impl FnMut(&mut Fuel) -> Option<Interval>) -> Result<Decision, Ambiguous>;
+| Representation | Exact content | Typical sources | Limits |
+| --- | --- | --- | --- |
+| `BRep` | Analytic, NURBS and procedural faces, facet faces, cellular topology with regions | Features, STEP, conversions | Blends and imports are the hard cases |
+| `Implicit` | Expression DAG; exact faces of B-rep leaves that remain on the boundary | Lattices, topology optimization, field-driven design, shrinkwraps | Distance may be only a bound; cost grows with expression size |
+| `Mesh` | Manifold triangle topology with precision ε; vertex-only point sets | Scans, printing, tessellation, simulation | Piecewise linear |
+| `SubD` | Catmull-Clark cage with semi-sharp creases | Industrial design | G1 at extraordinary vertices |
+
+### Representation lattice
+
+Three inclusions lose no geometry: a Mesh is a B-rep with facet faces, as Parasolid's Convergent Modeling mixes facet and classic surfaces in one model [Parasolid convergent modeling]. A SubD is a B-rep with subdivision-limit faces, exact except near extraordinary vertices with semi-sharp creases, where a certified bound is recorded. A B-rep or Mesh is an implicit leaf, its exact signed distance with the sign from generalized winding numbers [Jacobson et al. 2013; Spainhour and Weiss 2025].
+
+A mixed operation returns the join of its operands: Mesh with Mesh gives a Mesh, B-rep combinations a B-rep whose faces keep their native geometry, and anything with an implicit an implicit. The join is leaf-preserving: an `Implicit` Body keeps each B-rep leaf's exact faces that remain on its boundary, with their `EntityId`s and attributes, found by certified classification.
+
+Queries, PMI and drawings use those faces directly, and `convert(into: BRep)` keeps them exact, trimmed by certified intersection, with facet faces only where other leaves are active. Golden product 2's mounting holes thus keep their `HoleSpec` and semantic PMI, which CAx-IF practice allows only on exact geometry [CAx-IF PMI 4.1].
+
+**Decision D-ANV-2:** Mixed operations return the least representation in the lattice Mesh ⊂ BRep, SubD ⊂ BRep, BRep ⊂ Implicit that holds both operands without approximating geometry or dropping B-rep faces that remain on the boundary. *Why:* exact faces keep their names and attributes, and any later conversion is explicit and bounded. *Rejected:* converting to meshes first (destroys exact faces); a plain implicit result (loses faces, names and PMI, which golden product 2 needs); refusing mixed operations (contract 7.1). (revised in round 2)
+
+[[DIAGRAM diagrams/02-anvil-representation-lattice.jsx: representation lattice · 4 representations, 3 inclusions]]
+
+Mesh and SubD sit inside BRep and BRep inside Implicit, so a mixed operation takes the join; going back down is an explicit conversion that records per-face bounds.
+
+### Two identities and two stages
+
+`GeometryId` hashes the geometry part of a Body's encoding and `ObjectId` the whole encoding (contract 7.2), so only `ObjectId` sees names, lineage and name-keyed attributes.
+
+An entity-naming operation runs in two stages. The geometric stage, keyed by input `GeometryId`s, arguments, version, class and effective fidelity, computes geometry and history over canonical entity numbers. The relabeling stage, keyed by the geometric output's id, the `OpSite` and the inputs' name maps, assigns `EntityId`s, lineage and name-keyed attributes in linear time.
+
+`std` features called from different designs thus share every geometric result, a refactor that changes no geometry changes no `GeometryId`, and Flux keys solves on `GeometryId`s plus the canonical numbers of referenced entities.
+
+**Decision D-ANV-24:** Every Body has a `GeometryId` beside its `ObjectId`, and entity-naming operations split into a geometric stage keyed by `GeometryId`s and a relabeling stage keyed by the `OpSite`. *Why:* names hash upstream sites transitively, so one named identity defeats cross-design caching, early cutoff after refactors and approvals over geometry. *Rejected:* removing sites from keys while the encoding holds names; caching only label-free operations (almost no sharing).
+
+[[DIAGRAM diagrams/02-anvil-two-stage-operation.jsx: two-stage operation · one geometric result shared by two designs]]
+
+Only the relabeling stage sees names, so a second design that builds the same geometry at another site reuses the geometric-stage result.
+
+### Canonical geometric order
+
+Every order Anvil computes with comes from geometry: kind, box minimum, box maximum, type and defining parameters, then a hash of the entity's full geometric content. Distinct entities of a valid Body never tie, since equal content would violate separation; during construction, coincident vertices break ties by their neighbours' sorted coordinates. The order sets storage rows, perturbation indices, pair order, hierarchy tie-breaks and independent-set priorities, and seeds hash argument values and input `GeometryId`s.
+
+**Decision D-ANV-25:** Anvil is label-invariant: orders, perturbation indices, priorities and seeds come from geometry, topology and argument values, so renaming input `EntityId`s and `OpSite`s changes only name sections. *Why:* geometry must follow from source text alone, so Git round trips and published packages rebuild bit-identically (contract 7.1). *Rejected:* `EntityId` tie-breaks and seeds (names would steer geometry); memory or insertion order.
+
+### Encoding and versioning
+
+The geometry part holds topology tables, geometry pools, tolerances, per-face bounds and geometric attributes in canonical geometric order; the name part maps canonical numbers to `EntityId`s, lineage and name-keyed attributes. Each section is a persistent tree of structure-of-arrays leaves of at most 1,024 rows, and a row ends a leaf when a hash of its canonical key has its low 8 bits zero, so equal content gives equal leaves whatever the edit history. Identities are SHA-256 Merkle hashes over leaves; floats are binary64 with −0.0 normalized and no NaN or infinity; a text form with hexadecimal floats serves goldens and diffs.
+
+A minor version adds optional sections or columns, and the hashed form omits optional values equal to their defaults, so a minor release never changes an identity; an unknown required section fails with `EncodingError::Unsupported { needed }`. A major version is a behavior change: it enters item 1 of the `OpKey` and is pinned in `ingot.lock`, with a reader kept for every major and a writer for every pinned one.
+
+**Decision D-ANV-9:** The encoding is canonical, split into geometry and name parts with content-defined leaves and Merkle hashes, invariant across minor versions and readable for every major version forever. *Why:* the two identities need a separable name part, builders on different releases must agree on one `OpKey`, and hashing stays proportional to edits. *Rejected:* re-encoding in the current minor version (changes identities of identical geometry); serializing in-memory structs; STEP as native storage (loses procedural geometry, tolerances and lineage). (revised in round 2)
+
+Operations build Bodies in arenas with generational keys [slotmap docs]; finished Bodies share untouched leaves between versions.
+
+| Capability | Contract | Failure | Oracle id | Phase |
+| --- | --- | --- | --- | --- |
+| `GeometryId` and `ObjectId` | Body → two SHA-256 Merkle identities | — | ANV-O-CACHE-1, ANV-O-LABEL-1 | 0 |
+| Two-stage operations | Geometric stage keyed by input `GeometryId`s; relabeling keyed by `OpSite` | `Internal::EntityIdCollision` | ANV-O-CACHE-1 | 0 |
+| Canonical geometric order and seeds | Orders, perturbation indices, priorities and seeds from geometry and arguments | — | ANV-O-LABEL-1 | 0 |
+| Encoding and text form | Body ↔ canonical bytes; hashes invariant across minor versions | `EncodingError::{Unsupported, NotRepresentable}` | ANV-O-ENC-1, ANV-O-ENC-2 | 0 |
+| Leaf-preserving implicit faces | Exact faces of B-rep leaves kept with ids and attributes | `Ambiguous { faces }` near tangency | ANV-O-LEAF-1 | 1 |
+| `anvil::build` | B-rep from topology and geometry records; point sets from buffers | `Invalid { violations }` with a heal fix | ANV-O-VALID-1 | 0 (B-rep), 1 (point sets) |
+
+## Numbers, tolerances and decisions
+
+Anvil computes with `f64`, Shewchuk expansions, intervals, reduced affine forms, integers and modular or rational arithmetic for ranks, in metres and radians; Ingot converts quantities at the boundary.
+
+### Resolution, frames and scale
+
+Every Body has a resolution ρ, the smallest length it distinguishes, where D is its box diagonal in metres:
+
+```latex
+\rho(D) = 2^{\lceil \log_2 D \rceil - 30}
 ```
 
-### Operations (`anvil-ops`)
+Coordinates are frame-relative, so for any Body above 2 µm ρ is at least 2²³ times the local `f64` spacing (2¹³ for a 1 nm Body), headroom that constructions may consume before a decision changes. With no absolute length constant besides the frame grid, a Body framed at the origin behaves identically under power-of-two scaling. A result takes ρ_out = max(input ρ, ρ(D_out)), and `resolution:` may lower ρ to 2^(⌈log₂ D⌉ − 40).
 
-```rust
-pub trait Operation: Send + Sync + 'static {
-    const NAME: &'static str;            // "blend"
-    const VERSION: u32;                  // 2  => anvil::blend@2
-    type Args: Canonical;                // hashed into the Op cache key
-    type Output: Canonical;
+| Body | D | Default ρ | Growth cap τ_cap = 2¹⁰ρ |
+| --- | --- | --- | --- |
+| MEMS accelerometer die | 0.5 mm | 2⁻⁴⁰ m ≈ 0.91 pm | ≈ 0.93 nm |
+| Machined bracket (GP1) | 0.1 m | 2⁻³³ m ≈ 0.12 nm | ≈ 0.12 µm |
+| Drone (GP6) | 1 m | 2⁻³⁰ m ≈ 0.93 nm | ≈ 0.95 µm |
+| Ship hull | 300 m | 2⁻²¹ m ≈ 0.48 µm | ≈ 0.49 mm |
 
-    fn run(&self, cx: &mut OpContext<'_>, args: &Self::Args) -> Result<OpOutput<Self::Output>, OpError>;
-}
+Frame offsets are multiples of 2⁻²⁰ m, so frame differences are exact below 2³² m and rebasing costs one rounding. Between Instances, decisions use the finer frame and max(ρ_a, ρ_b), and a coarsened result reports `Note::ResolutionCoarsened`.
 
-pub struct OpContext<'a> {
-    pub site: &'a OpSite,
-    pub fidelity: Fidelity,              // Exact | Preview: geometry side of interactive and sign-off modes
-    pub fuel: Fuel,                      // counted work units, never time
-    pub fields: &'a FieldInputs,         // Kiln-supplied Flux `Sampler`s for the FieldRef arguments (D-FLX-1)
-    pub gpu: Option<&'a gpu::Device>,    // proposals only; None gives identical Exact results
-    pub cancel: &'a CancelToken,         // cancellation returns no result, never a different one
-}
+**Decision D-ANV-3:** Resolution is per Body, scale-relative (2⁻³⁰ of the box diagonal, rounded to a power of two), with frames on a fixed 2⁻²⁰ m grid. *Why:* nanometres to hundreds of metres need scale-relative tolerances; a fixed value such as 1995 Parasolid's default of about 5·10⁻⁹ m [Jackson 1995] is coarse for MEMS and wasteful for ships; powers of two keep scaling exact. *Rejected:* a global tolerance (contract 7.1); ρ from the exact diagonal (changes with every edit); per-assembly resolution.
 
-pub struct OpOutput<T> { pub value: T, pub history: Vec<HistoryRecord>, pub error: ErrorBound, pub notes: Vec<Note> }
+### Per-entity tolerances
 
-/// Visible, non-fatal facts about a result; checks may forbid any of them.
-#[non_exhaustive]
-pub enum Note {
-    Merged { with: Vec<EntityId> },              // query anchor merged (CCR-ANV-4)
-    Partial { deleted: Vec<EntityId> },           // some descendants of an anchor were deleted
-    FragileAnchor { id: EntityId },               // anchor uses an Ordinal discriminator
-    ResolutionCoarsened { from: f64, to: f64 },
-    ToleranceGrown { entity: EntityId, from: f64, to: f64 },
-    BlendFallback { region: Vec<EntityId>, deviation_from_rolling_ball: f64, seam_gap: f64 },
-    FreeEdges { edges: Vec<EntityId>, gaps: Vec<f64> },
-    CellsDropped,                                 // a volume mesh entered a solid operation
-    DeprecatedBehavior { op: OpName, current: u32, migration: String },
-}
+Each vertex, edge and face carries a tolerance τ ≥ ρ, stored when it differs from ρ. As in Parasolid [Jackson 1995], τ(vertex) ≥ τ(edge) ≥ τ(face), and a tolerant edge keeps its faces' parameter curves within τ of one master curve.
 
-#[derive(Debug)]
-pub struct OpError {
-    pub kind: OpErrorKind,               // RadiusTooLarge { edge, max_feasible }, Ambiguous { .. }, ...
-    pub why: String,                     // one calm sentence
-    pub fixes: Vec<Fix>,                 // typed source edits, ranked
-    pub at: Vec<EntityId>,
-    pub partial: Option<Body>,           // diagnostic only; never cached as success
-}
+| Quantity | Default | Rule |
+| --- | --- | --- |
+| Growth cap τ_cap | 2¹⁰ρ | An operation raises a tolerance to at most max(the involved inputs' tolerances, τ_cap), else `ToleranceGrowth { entity, needed, cap }` |
+| Healing limit τ_heal | max(10 × the file's declared uncertainty, 2¹⁰ρ) | Up to 2²⁰ρ with an explicit argument |
+| Minimum size λ | 2⁴ρ | Smaller slivers merge within tolerance or fail with `BelowResolution` |
+| Mesh precision ε | Accumulated rounding bound per Mesh, as in Manifold [Manifold wiki] | Above τ_cap: `PrecisionExhausted` with a remesh fix |
 
-/// Registry consulted by Kiln when lowering Ingot calls with the lockfile's pins.
-pub struct OperationRegistry { /* name -> versions */ }
-pub enum VersionStatus { Current, Deprecated { since: ReleaseId }, Retired { wasm_component: PackageRef }, Yanked { reason: String } }
+### Validity
 
-impl OperationRegistry {
-    pub fn resolve(&self, name: &str, pinned: Option<u32>) -> Result<OpHandle, RegistryError>;
-    pub fn status(&self, name: &str, version: u32) -> Option<VersionStatus>;
+With tolerance regions N(x) = { p : dist(p, G_x) ≤ τ_x }, a Body is valid when four conditions hold; `anvil::check_body` reports every violation:
+
+1. **Incidence.** Curve endpoints lie in their vertices' regions; parameter-curve images and edge curves lie in their edges' regions.
+2. **Separation.** Every point of G_x within τ_x + τ_y of G_y lies in the region of an entity in the shared closure of x and y, so entities with disjoint closures are farther apart than τ_x + τ_y.
+3. **Combinatorics.** Loops close and are oriented; bounded regions are enclosed by closed shells; radial order around each edge agrees with the certified angular order; Euler–Poincaré holds per shell.
+4. **Regularity.** Curves and surfaces are regular where used, except at declared singular points; parameter curves stay in their domain or its periodic cover.
+
+### Certified decisions in rounds
+
+A topological question about curved geometry reduces to a quantity q (a distance, an oriented angle) whose certified enclosure [lo, hi] meets the applicable tolerance τ:
+
+1. hi ≤ τ: **coincident**, or the point is **on**.
+2. lo > τ: **separated**, with a certified sign.
+3. Otherwise the enclosure is refined by subdivision or interval Newton steps, within the work limit.
+4. If it narrows below ρ/2⁸ and still straddles τ, the decision is coincidence, with a request to grow the entities' tolerances to hi within the cap; if the cap or the limit is reached first, the operation fails with `Ambiguous { entities, enclosure }`.
+
+Decisions run in rounds by dimension: vertex–vertex, vertex–edge, edge–edge, vertex–face, edge–face, face–face. Within a round every pair is decided in parallel against tolerances frozen at the round's start; growth requests are reduced per entity by maximum, which is order-free, and applied at the round's end as a new epoch. Pairs touching a grown entity are decided again until nothing grows; growth is monotone and capped, so this terminates, and too many repeats fail with `ToleranceCascade { entities, rounds }`.
+
+Merged entities take max(τ_x, τ_y, certified Hausdorff distance), and each growth is reported as `Note::ToleranceGrown`; Parasolid likewise raises local tolerances where entities would otherwise collide [Jackson 1995].
+
+**Decision D-ANV-4:** Linear decisions use exact predicates; decisions on curved geometry use certified enclosures under the three-way rule, made in rounds by dimension against tolerances frozen at each round's start, with growth reduced by maximum and capped. *Why:* exact algebraic predicates on NURBS, offset and blend geometry are impractical, and frozen tolerances make outcomes independent of pair order and thread count (contract 7.1). *Rejected:* epsilon comparisons (contradictory decisions); growth applied as pairs are decided (order-dependent results); uncapped growth (tolerances creep until models break). (revised in round 2)
+
+### Predicates and intervals
+
+| Family | Inputs | Method | Used by |
+| --- | --- | --- | --- |
+| Linear | `f64` points: orient2d, orient3d, incircle, insphere, distance comparisons | Static filter, interval filter, exact expansions [Shewchuk 1997] | Meshes, planar arrangements, hulls |
+| Indirect | Implicit points from line–plane, three-plane and two-point combinations | Filters on the generating primitives, so points are never rounded [Attene 2020; Diazzi et al. 2023] | Mesh arrangements, Booleans, CDT |
+| Certified curved | Curves, surfaces, implicits | Interval and affine enclosures, Bernstein bounds, Krawczyk, with the round rule | B-rep Booleans, blends, classification, intersections |
+
+A build-time generator emits both families as safe Rust.
+
+**Decision D-ANV-5:** Anvil generates its own linear and indirect predicates, porting Shewchuk's method and Attene's scheme. *Why:* safe Rust with canonical order runs identically in native and Wasm builds, and indirect predicates make mesh arrangements exact without rational coordinates. *Rejected:* binding C++ libraries (FFI and licences: Attene's CDT code is GPL or LGPL by build option [MarcoAttene/CDT]); rational arithmetic throughout (arbitrary-precision mesh arrangements took 141 s where EMBER took 34 ms on 1.2 million triangles [EMBER 2022]).
+
+Intervals use error-free transformations, since Rust exposes no rounding modes: TwoSum, TwoProduct and the exact remainders a − q·b and a − s² give each rounding error exactly, and a nonzero error moves the bound outward with `next_up` or `next_down`, stable since Rust 1.86.0 [Rust 1.86.0 release]. TwoProduct uses Dekker splitting on wasm32 and `mul_add` by ISA level on native targets, with identical error terms (see Platform notes). Elementary functions come only from `detmath`, widened by one ulp.
+
+Exact ties in mesh algorithms break by Simulation of Simplicity [Edelsbrunner and Mücke] in canonical geometric order, as Lévy does for unique triangulations [Lévy 2024]. Booleans classify touching and coplanar faces explicitly, and Manifold's documented cases are oracles: touching cubes merge, an equal-height difference cuts through, and A − A is empty [Manifold wiki].
+
+| Capability | Contract | Failure | Oracle id | Phase |
+| --- | --- | --- | --- | --- |
+| Linear and indirect predicates | Points or implicit points → exact sign | — | ANV-O-PRED-1 | 0 |
+| Certified decision rule in rounds | Enclosures and frozen tolerances → coincident, separated or grown | `Ambiguous`, `ToleranceGrowth`, `ToleranceCascade` | ANV-O-TOL-1, ANV-O-DET-2 | 0 |
+| Interval and reduced affine arithmetic | Enclosures with identical bits on every target | — | ANV-O-IMP-1 | 0 |
+| Scale-relative resolution and frames | ρ per Body, frames on the 2⁻²⁰ m grid | `BelowResolution { size, resolution, floor }` | ANV-O-SCALE-1 | 0 |
+| Symbolic perturbation | Ties broken in canonical geometric order | — | ANV-O-LABEL-1 | 1 |
+
+## B-rep topology, geometry and attributes
+
+### Cellular topology
+
+One cellular boundary representation serves solids, sheets, wires, non-manifold and multi-region Bodies; manifold solids get fast paths but no separate type.
+
+| Entity | Holds | Invariant |
+| --- | --- | --- |
+| Region | Role `Exterior`, `Material(MaterialRef)` or `Void`; shells | One `Exterior` per Body; bounded regions are enclosed by closed shells |
+| Shell | Connected face sides bounding one region | Open shells are sheets, free in `Exterior` or embedded in a region |
+| Face | Surface, sense, loops, two sides each bounding a region | Both sides bound the same region only for sheets |
+| Loop, coedge | Coedge cycle; next, previous, radial next, sense, parameter curve | Radial cycles ordered by certified dihedral angle |
+| Edge, vertex | Curve or point, parameter interval, tolerance | τ(vertex) ≥ τ(edge) ≥ τ(face) |
+
+Radial cycles carry non-manifold cases: four coedges join two solids along an edge, a wire edge has none, an acorn vertex has no edges. A multi-material part is one Body whose regions share internal faces, such as an overmolded insert's steel–polymer interface.
+
+**Decision D-ANV-6:** One cellular B-rep (regions, shells, two-sided faces, loops, coedges with radial cycles, edges, vertices) serves every B-rep Body, with material per region. *Why:* multi-material parts, conformal meshing and Booleans that keep interfaces all need faces shared by regions. *Rejected:* a manifold half-edge B-rep with non-manifold side structures (two code paths); combinatorial 3-maps for every Body (heavier for the common case).
+
+Loops on periodic surfaces live in the universal cover, so a full cylindrical face has no seam edge, and sphere poles and cone apexes are singular points of faces, not edges. For comparisons with other kernels, Anvil defines a topology normal form (seams and poles removed, periodic faces unsplit, their counts reported separately). `anvil::exchange_form` writes seam edges and pole vertices for a receiver profile, approximates procedural geometry by B-splines within a stored bound, and maps every new entity back to its `EntityId` for the translation report.
+
+### Geometry types
+
+Every type evaluates exactly with derivatives to third order, gives a certified bound over any parameter box and converts to NURBS with a stated error. Procedural types also cache a certified NURBS approximation for enclosures and seeding (D-ANV-7).
+
+| Curves | Surfaces |
+| --- | --- |
+| Line; circle and ellipse; parabola and hyperbola | Plane; cylinder, cone, sphere, torus (self-intersecting tori allowed, singular points marked) |
+| Helix (axis, radius, pitch, handedness, taper), exact and procedural | General quadrics (phase 2) |
+| NURBS, degree ≤ 25 (higher-degree imports are approximated with a bound) | NURBS, degree ≤ 25 per direction |
+| Law curve from an Ingot `Expr` evaluated through the kernel IR with interval bounds (phase 2) | Law surface (phase 2) |
+| Planar offset; intersection curve; blend spine and contact curves | Offset; extrusion and revolution; general sweep with frame rules and scale and twist Fields |
+| Curve on surface; polyline and arc-spline with per-vertex samples | Rolling-ball blend; setback vertex blend; subdivision limit (phase 2); facet |
+
+Polyline and arc-spline edges carry toolpaths: one edge per run of one motion kind, with per-vertex Field samples, and single moves are addressed by (edge `EntityId`, vertex index), which is not a persistent name. A wire Body holds 10⁷ moves in under 400 MB (target).
+
+**Decision D-ANV-7:** Offset, intersection, sweep, blend, helix and subdivision-limit geometry stays procedural, with exact evaluation and a cached NURBS approximation certified by Taylor models or interval Newton on its defining system; nesting stops at depth three per face, beyond which a construction uses its inputs' certified caches as exact, records their bounds by the propagation rules and reports `Note::ProceduralFlattened`. *Why:* procedural geometry does not accumulate approximation error across features, and the depth limit bounds evaluation cost and enclosure width on blend-heavy parts. *Rejected:* converting every construction to NURBS at once (error compounds); unlimited nesting (cost and enclosure width grow with depth). (revised in round 2)
+
+**Decision D-ANV-8:** B-rep face geometry is always parametric; implicit surfaces never appear as B-rep faces. *Why:* trimming, tessellation, blending and export rely on (u, v) domains, and implicit operands already yield implicit Bodies. *Rejected:* implicit faces (every intersection pair would need an implicit–parametric variant, and STEP cannot carry them).
+
+Parameter curves share their edge curve's parameter within τ_edge, so tessellation places shared edge vertices at the same parameter from both sides and display meshes are watertight by construction. Trimming loops must close within vertex tolerances, avoid self-intersection beyond edge tolerances and nest consistently.
+
+### Attributes and certificates
+
+Design attributes (`HoleSpec`, `ThreadSpec`, `Weld`, finish, the `FeatureRole` role aliases of contract 5) live in a side table keyed by `EntityId`. Each attribute class declares its split policy (`Copy`, `Drop`, `Divide`), merge policy (`KeepIfEqual`, `Union`, `Drop`, `Fail`) and transform policy; Anvil applies them in every operation, and a `Fail` merge returns `AttributeConflict { entities, class }`.
+
+Edges carry construction certificates, `Continuity { order: G1 | G2, certified_by: (operation, OpSite) }`, on blend contact edges, offsets of smooth edges and sweep seams. Intersection and imprint read them (see Intersections).
+
+| Capability | Contract | Failure | Oracle id | Phase |
+| --- | --- | --- | --- | --- |
+| `anvil::curve` | Line, arc, conic, helix, spline, curve on surface, Law curve → wire Body | `Degenerate { parameter }`, `ToleranceNotMet { achieved }` | ANV-O-GEOM-1, ANV-O-LAW-1 | 0 (analytic, NURBS), 1 (helix), 2 (Law) |
+| `anvil::surface` | Law surface from an `Expr` → sheet Body | `Degenerate`, `NotRegular { region }` | ANV-O-LAW-1 | 2 |
+| `anvil::evaluate` | Curve or face and parameters → points and derivatives to third order | `OutOfDomain { parameters }` | ANV-O-GEOM-1 | 0 |
+| `anvil::sample` | Faces or curves, density → points with `EntityId` and (u, v), deterministic low-discrepancy | — | ANV-O-GEOM-2 | 1 |
+| `anvil::approximate` | Curves or faces → NURBS within a tolerance | `ToleranceNotMet { achieved }` | ANV-O-GEOM-3 | 1 |
+| Procedural nesting budget | Depth three per face; deeper inputs use certified caches | `Note::ProceduralFlattened` | ANV-O-PROC-1 | 1 |
+| `anvil::exchange_form` | Body, receiver profile → seams, poles, B-spline approximations, id map | `NotRepresentable { faces }` | ANV-O-NF-1 | 1 |
+| Attributes and certificates | Policies applied in every operation; `Continuity` certificates on constructed edges | `AttributeConflict { entities, class }` | ANV-O-NAME-1, ANV-O-CONTACT-1 | 0 (attributes), 1 (certificates) |
+| `anvil::sew` | Sheets and faces, tolerance up to τ_heal → shells or solids with tolerant edges | `Note::FreeEdges { edges, gaps }`; `ToleranceGrowth` above the limit | ANV-O-HEAL-1 | 1 |
+| `anvil::heal` | Imported Body → valid Body: parameter curves rebuilt, gaps closed, slivers removed, orientation fixed, analytic surfaces recognized; every fix listed with its tolerance change | `Unhealable { entities, reason }`, never an invalid Body | ANV-O-HEAL-2 | 1 (CAx-IF corpus), 2 (beyond) |
+
+## Naming and queries
+
+### EntityId
+
+```
+EntityId = SHA-256₁₂₈("anvil.eid.v1" ‖ kind ‖ OpSite ‖ role ‖ inputs ‖ discriminator)
+```
+
+The `OpSite` is contract 5's text-derived call identity, computed by Ingot; the role comes from the operation's vocabulary (`start_cap`, `end_cap`, `side(e)` for `extrude`); `inputs` are the generating entities' ids. A discriminator appears only when needed: `Bound(set)`, then `Side(cause, sense)`, then `Ordinal(k)`, which marks the id fragile (`Note::FragileAnchor`).
+
+Untouched and modified entities keep their ids, the latter with a `Modified` record. Wasm components calling through `crucible:ops` pass a call key appended to their site. A duplicate id fails with `Internal::EntityIdCollision`, with accidental odds of about n²/2¹²⁹.
+
+**Decision D-ANV-14:** `EntityId`s hash the text-derived `OpSite`, role, generating ids and discriminator, excluding argument values; names never feed geometric computation. *Why:* dimension edits must not rename entities, and text-derived identities survive Git round trips and publication. *Rejected:* the Op content hash (renames on every edit); evaluation sequence numbers; live-document block ids (not derivable from text); geometric signatures as primary names (geometry changes under the edits names must survive; topology-only and geometry-only schemes are each limited [persistent naming review 2018]). (revised in round 2)
+
+### Copies and placements
+
+A transform that replaces its source in the data flow keeps `EntityId`s. One whose source is used again, or written as `copy`, creates `EID(kind, site, copy, [source])` with `Created { role: copy, from: [source] }`, followed by lineage only on request (`.copies()`). Reflections add the aspect `Mirrored` in place or the role `mirror` on copies, and role queries accept `mirrored: true`; assembly-level features prefix ids with the Instance path.
+
+**Decision D-ANV-30:** Placement keeps names; copying derives names from the source with role `copy` or `mirror`. *Why:* `half + mirror(half, plane.yz)` and features over two Instances of one Part would otherwise put identical ids into one Boolean. *Rejected:* keeping ids on every transform (collisions); renaming on every transform (breaks queries).
+
+### HistoryRecord and lineage
+
+| Record | Meaning |
+| --- | --- |
+| `Created { out, role, from }` | New entity generated from other entities, such as a blend face from an edge or a copy from its source |
+| `Modified { id, aspects }` | Same entity with changed geometry, boundary, tolerance, attributes or `Mirrored` |
+| `Split { from, into }` | One entity became several of its kind |
+| `Merged { from, into }` | Several entities of one kind became one |
+| `Deleted { id, by, reason }` | Consumed (a blend face consumes its edge), internal, or removed |
+
+Records may name transient pieces that exist only inside one n-ary operation, such as two coplanar faces cut by one slot tool: `Split` into transient pieces, then `Merged` out of them. The history oracle checks coverage (each input entity unchanged or the subject of one same-kind record; each transient in one `into` and one `from`), kind, certified geometric soundness and canonical order.
+
+Ancestor sets (through identity, `Split` and `Merged`) are persistent and shared with inputs; `Created` edges are generator links. The descendants of anchor a in Body B are D(a, B) = { e ∈ B : kind(e) = kind(a), and e = a or a is an ancestor of e }.
+
+### Query resolution
+
+`anvil::resolve` is its own Op (contract 5), evaluating Ingot's query plan in three stages:
+
+1. **Anchor.** `EntityId`s captured from feature results (`base.face(role: end_cap)`) or a structural set (`created_by(feature)`).
+2. **Lineage.** Each anchor maps to D(a, B), or to the `Deleted` record that removed it.
+3. **Filter and select.** Certified geometric filters (normal, type, area, adjacency, `bounded_by`), then cardinality (`one`, `all`, `at_least(n)`). Rank selectors (`longest`, `largest`, `first(along:)`) are allowed only after an anchor or role filter; a winner whose lineage changes inside the declared parameter ranges is reported as `Note::RankSwap { at }`.
+
+Filters near a threshold use Ingot's `Truth` rule on a certified enclosure, and `Undecided` fails with `ResolveError::Ambiguous`. Every operation declares per `Query` parameter whether it uses a surface (sketch planes, up-to faces, mate axes) or an extent (edges of a face, areas, GD&T and PMI targets, drawing items).
+
+| Outcome | Result |
+| --- | --- |
+| Cardinality met | `Resolved { entities, notes }` |
+| Anchor split, query needs one entity | `ResolveError::Split { anchor, pieces, fixes }` |
+| Anchor merged, surface use | Resolves with `Note::Merged { with }` |
+| Anchor merged, extent use | `ResolveError::Merged { anchor, with, fixes }`, unless `on_merge: Accept` is written |
+| Some descendants deleted later | Resolves to the survivors with `Note::Partial { deleted }` |
+| Anchor deleted | `ResolveError::Deleted { anchor, by, site, fixes }` |
+| Too few or too many | `ResolveError::NoMatch { stage, found, closest, fixes }` or `TooMany { candidates, fixes }` |
+
+Each fix is a typed source edit that compiles, ranked by stability over the full declared range of every parameter, endpoints included, plus ±10% around current values (D-AGT-8); ranking runs on demand and shares the Kiln cache.
+
+**Decision D-ANV-15:** Resolution walks recorded lineage, then applies certified filters; splits, deletions and ambiguity are typed errors, and merges resolve with a note only for surface use. *Why:* contract 5 forbids silent re-selection; a merged face keeps the surface a sketch plane needs but changes the extent a fillet or GD&T target means. *Rejected:* geometric re-identification (fails after the edits that change geometry); accepting every merge (a fillet would silently run around both faces). (revised in round 2)
+
+### Worked example: a face split by a rib
+
+```
+let outline = rect(60mm, 40mm)
+let base = sketch(plane.xy) { outline } |> extrude(4mm)            // end_cap at z = 4 mm
+let r = rect(60mm, 10mm, at: (0mm, 9mm))                           // rib profile on plane.xz
+let rib = sketch(plane.xz) { r } |> extrude(3mm, symmetric: true)  // start_cap at y = −1.5 mm
+let part = base + rib
+let top = part.face(base.face(role: end_cap))
+```
+
+1. `extrude` at site `base` creates T = EID(face, base, `end_cap`, [profile region]).
+2. The rib's caps at y = ±1.5 mm cut T: `Split { from: T, into: [T₁, T₂] }` with discriminators `Bound{rib start_cap}` and `Bound{rib end_cap}`; the rib's `side(r.bottom)` becomes internal (`Deleted`), and `side(r.left)` and `side(r.right)` merge with the base's coplanar side faces.
+3. `top` needs one entity and finds two, so it fails:
+
+```
+ResolveError::Split {
+  anchor: base.end_cap, pieces: [T₁, T₂],
+  fixes: [
+    "part.faces(base.face(role: end_cap))",                                     // both pieces
+    "part.face(base.face(role: end_cap), bounded_by: rib.face(role: start_cap))", // T₁
+    "part.face(base.face(role: end_cap), first(along: +y))",                     // T₁, rank after an anchor
+  ]
 }
 ```
 
-### Selected operation arguments
+Shortened to 40 mm, the rib no longer reaches T's edges: T keeps its id with a new inner loop (`Modified`), and the query resolves. Lifted 1 mm off the face, the `bounded_by` fix fails with `NoMatch` instead of returning the whole face.
 
-```rust
-pub struct BooleanArgs { pub operands: Vec<Body>, pub expr: BoolExpr, pub keep: Keep }  // Keep::Regularized | Keep::Cells
-pub enum BoolExpr { Operand(u16), Union(Vec<BoolExpr>), Intersect(Vec<BoolExpr>), Subtract(Box<BoolExpr>, Box<BoolExpr>) }
+### Imported and non-B-rep entities
 
-pub struct BlendArgs {
-    pub body: Body,
-    pub edges: Vec<EntityId>,
-    pub radius: RadiusLaw,               // Constant(f64) | Field(FieldRef) | Asymmetric(f64, f64)
-    pub section: Section,                // Circular | Conic { rho } | CurvatureContinuous { depth }
-    pub corners: Vec<(EntityId, Corner)>,
-    pub overflow: Overflow,
-    pub fallback: BlendFallback,         // None | Implicit { max_deviation }
-}
+An imported entity's id is EID(kind, import site, `imported`, [], discriminator), where the discriminator is the source's persistent id (AP242 persistent ids, IFC GlobalId, a translator's native ids), else the surface type with a hash of the exact defining parameters as written and an adjacency signature, never an ordinal. `anvil::match_bodies` aligns two imports rigidly (`anvil::align`), matches attributed face-adjacency graphs, and writes the confirmed mapping as a reviewed source artifact, `import_map(old, new, pairs)`, which later rebuilds reuse.
 
-pub struct TetrahedralizeArgs {
-    pub body: Body,
-    pub sizing: FieldRef,                // Field<Body, Length>
-    pub geometry_order: u8,              // 1..=4
-    pub strategy: TetStrategy,           // Conforming | Envelope { epsilon }
-    pub quality: QualityTarget,
-}
+**Decision D-ANV-31:** Imported entities are named from source persistent ids, else from exact geometric and adjacency signatures, never ordinals, and revisions are matched into a reviewed `import_map`. *Why:* one rule for Anvil and ECO; ordinals change when a supplier re-exports, and quantized signatures flip at quantization boundaries. *Rejected:* ordinals; quantized signatures; unreviewed Hausdorff matching (fails exactly on the faces a supplier moved).
 
-pub struct ConvertArgs { pub body: Body, pub into: ReprKind, pub accuracy: f64, pub options: ConvertOptions }
-```
+Tessellations keep each face's id on its face group; `subd_edit` records cage history and limit faces take cage-face ids; converted implicits label faces by the leaf active at the surface, and kept B-rep faces keep their ids.
 
-### Query resolution (`anvil-topo`)
+| Capability | Contract | Failure | Oracle id | Phase |
+| --- | --- | --- | --- | --- |
+| `EntityId` and relabeling | Ids from `OpSite`, role, generating ids and discriminator | `Internal::EntityIdCollision` | ANV-O-SITE-1, ANV-O-LABEL-1 | 0 |
+| History records and lineage | Five records with transient pieces; persistent ancestor sets | Internal error on a property violation | ANV-O-NAME-1 | 0 |
+| Copies and reflections | Role `copy` or `mirror`; aspect `Mirrored`; Instance-path prefixes | — | ANV-O-COPY-1 | 1 |
+| `anvil::resolve` | `QueryPlan`, Body, per-parameter use → entities and Notes, or ranked compiling fixes | `ResolveError::{Split, Merged, Deleted, NoMatch, TooMany, Ambiguous}` | ANV-O-NAME-2, ANV-O-NAME-3, ANV-O-NAME-5 | 0 |
+| Imported entity ids | Persistent id, else exact signature | `Note::FragileAnchor` when only an adjacency signature distinguishes faces | ANV-O-NAME-4 | 1 |
+| `anvil::match_bodies` | Old and new import → `import_map` with `HistoryRecord`s | `NoCorrespondence { faces }` | ANV-O-NAME-4 | 2 |
 
-```rust
-/// Ingot lowers a Query to a plan; Anvil evaluates it (D-ANV-15).
-pub struct QueryPlan { pub anchors: Vec<Anchor>, pub filters: Vec<Filter>, pub cardinality: Cardinality, pub on_merge: OnMerge }
+## Intersections
 
-pub fn resolve(body: &Body, plan: &QueryPlan, fuel: &mut Fuel) -> Result<Resolved, ResolveError>;
+One certified framework serves every pair: Bernstein and interval enclosures prune, normal and tangent cones exclude loops, the Krawczyk operator (interval Newton) proves that a box holds exactly one regular root or none, and the round rule decides the rest; the Projected Polyhedron solver is the reference global method [Patrikalakis, Maekawa and Cho].
 
-pub struct Resolved { pub entities: Vec<EntityId>, pub notes: Vec<Note> }   // Note::Merged, Note::Partial, Note::FragileAnchor
+Curve–curve intersection uses closed forms for lines and circles and Bernstein subdivision otherwise; in 2D Krawczyk certifies unique transversal roots, and in 3D Anvil certifies the closest-approach point and decides contact by the round rule. Curve–surface intersection runs the same scheme in (t, u, v).
 
-#[derive(Debug)]
-pub enum ResolveError {
-    Split     { anchor: EntityId, pieces: Vec<EntityId>, fixes: Vec<Fix> },
-    Deleted   { anchor: EntityId, by: Option<EntityId>, site: OpSite, fixes: Vec<Fix> },
-    NoMatch   { stage: Stage, found: u32, closest: Vec<EntityId>, fixes: Vec<Fix> },
-    TooMany   { candidates: Vec<EntityId>, fixes: Vec<Fix> },
-    Ambiguous { entity: EntityId, predicate: Filter, margin: Interval },
-}
-```
+### Surface–surface intersection
+
+Surface–surface intersection (SSI) returns a branch graph of curves, isolated contacts and coincidence regions.
+
+1. **Analytic pairs** use closed forms, detecting special positions (parallel, coaxial, tangent, coincident) within tolerance.
+2. **Broad phase.** Patch-box hierarchies give candidate pairs in canonical order.
+3. **Loop exclusion.** A vector v with v · (n₁ × n₂) bounded away from zero over both normal cones proves the pair holds no closed loop, tangency or singular point, so every branch in it crosses its boundary; otherwise the pair subdivides.
+4. **Characteristic points.** At the subdivision floor, Krawczyk searches for critical points of the signed distance h between the surfaces: S₁(u, v) − S₂(s, t) − h·n₂(s, t) = 0 with n₂ orthogonal to ∂S₁/∂u and ∂S₁/∂v. Tangencies and branch crossings are regular roots with h = 0; roots with 0 < |h| ≤ τ are near-misses for the round rule.
+5. **Boundary points** come from curve–surface intersection of each piece's boundary.
+6. **Tracing** starts from each piece's smaller endpoint; a step is accepted only when an interval implicit-function test proves its box holds one branch segment, and traced points are Krawczyk-certified roots of the exact equations.
+7. **Coincidence.** Regions whose distance enclosure stays below τ become coincidence regions.
+8. **Output.** Each branch becomes a curve with a fitted B-spline, two parameter curves and its certified deviation.
+
+Work limits are local (a depth per pair, steps per piece), so output never depends on processing order; unresolved pairs go to the round rule or fail with `Ambiguous { faces, region }`.
+
+**Decision D-ANV-16:** SSI uses subdivision with Bernstein and interval enclosures, normal-cone loop exclusion, Krawczyk certification of characteristic points as critical points of signed distance, and certified tracing, with a topology certificate per pair. *Why:* branch-graph guarantees in `f64` with interval rules, parallel over pairs. *Rejected:* marching from sampled seeds (misses loops, jumps branches); purely algebraic methods (degrees explode for offsets and blends); lattice sampling as the decision method.
+
+Phase 1 certifies SSI among planes, quadrics, tori, extrusion and revolution surfaces, NURBS–analytic pairs and the NURBS pairs that GP1 and the prismatic ABC corpus need; general NURBS–NURBS pairs follow in phase 2 (contract 13.2).
+
+### Tangential contact
+
+Blends are tangent to their supports, so later operations near them meet tangential contact along curves on most real parts. Where curvatures differ by Δκ, a shift ε moves crossings by √(2ε/Δκ), about 10⁻⁸ m for ε = 10⁻¹⁶ m and Δκ = 1 m⁻¹, so naive tolerance decisions create spurious coincidence bands.
+
+Faces sharing an edge with a `Continuity` certificate are not re-intersected along it. A new surface tangent to an existing face goes to the contact-curve algorithm, which traces the reduced system (the critical-point system without its rank-deficient direction, with h = 0), certifies it by an interval test and imprints one tangential edge with τ = max(ρ, certified contact deviation).
+
+| Case | Detection | Result |
+| --- | --- | --- |
+| Transversal crossing | Disjoint normal cones along the branch | Certified curve |
+| Tangent point | Regular root of the critical-point system with h = 0 | Isolated point with contact order |
+| Tangent contact along a curve | Certificate, or rank-deficient critical-point system | One tangential edge from the contact-curve algorithm |
+| Overlap | Distance enclosure below τ over a region | Coincidence region; Booleans merge the faces |
+| Near-miss closer than τ | Enclosure below τ, normal cones separated | Touch, with growth recorded within the cap |
+| Branch crossing | Saddle-type root with h = 0 | Branch-graph vertex of degree 4 |
+| Surface singularity | Declared singular point | Characteristic point |
+
+**Decision D-ANV-26:** Constructions record `Continuity` certificates on edges they make tangent, and tangential contact along curves uses a certified contact-curve algorithm on the reduced critical-point system. *Why:* blend tangency is the common case, the full system is singular along contact curves, and certificates keep tangency the construction already knows. *Rejected:* the coincidence rule for tangency (spurious bands about 2√(2τ/Δκ) wide); re-intersecting certified edges (ill-conditioned, no new information).
+
+### GPU use and freedom to operate
+
+The GPU evaluates both surfaces on `f32` grids with per-cell boxes, as published in 2008 [Krishnamurthy et al. 2008], to order pairs likely to hold a branch, and tests integer box overlaps whose candidate sets equal the CPU's (contract 7.1). Tolerance decisions classify certified enclosures of exact distances, never sampled points.
+
+US 12,229,885 B1 (inventor Alyn Rockwood, assignee an individual; Zoo's engine overview describes a related method) claims intersection points formed from points of one surface within a threshold distance of the other; claims 1, 6 and 11 compare point sets, and claim 16 recites no GPU [US12229885B1; US12229885B1 full text; Zoo engine overview]. Counsel reviews claims 1, 6, 11 and 16 against the CPU and GPU paths and pending continuations, with an invalidity search from the 2008 work; until the opinion arrives, SSI itself is a phase 1 release risk.
+
+**Decision D-ANV-17:** In intersections the GPU only orders CPU work by sampling and prunes it by exact integer box tests; every intersection point is a certified root of the exact equations, never a point selected from a sample set by a distance threshold. *Why:* outputs are identical with and without a GPU, certified roots carry guarantees thresholded samples cannot, and this is the distinction counsel assesses. *Rejected:* dense sampled SSI on the GPU (uncertified; Zoo's overview calls SSI inherently approximate [Zoo engine overview]); no GPU use. (revised in round 2)
+
+Triangle pairs use exact arrangements with indirect predicates [Attene 2020; Cherchi et al. 2022]; facet faces meet exact surfaces through certified plane and edge intersections; regular subdivision-limit faces are bicubic patches; implicits produce curves only on conversion.
+
+| Capability | Contract | Failure | Oracle id | Phase |
+| --- | --- | --- | --- | --- |
+| Curve–curve and curve–surface intersection | Certified points and overlaps, classified transversal or tangent | `Ambiguous { entities, region }` | ANV-O-SSI-1 | 0 (analytic), 1 |
+| SSI, analytic and NURBS–analytic pairs | Certified branch graph with topology certificate | `Ambiguous`, `WorkLimit` | ANV-O-SSI-1, ANV-O-SSI-2 | 1 |
+| SSI, general NURBS–NURBS pairs | As above | As above | ANV-O-SSI-3 | 2 |
+| Contact curves and continuity certificates | Tangential edge with τ = max(ρ, certified deviation) | `ToleranceGrowth` | ANV-O-CONTACT-1 | 1 |
+| `anvil::intersect` | Two entity sets → new wire Body with `Created(intersection)` records | `Ambiguous` | ANV-O-SSI-1 | 1 |
+| GPU work ordering and integer broad phase | Same output with and without a GPU; CPU path registered for every GPU path | Device loss is an Abort; Kiln reruns on the CPU path | ANV-O-DET-1 | 1 |
+
+## Booleans, splits and patterns
+
+One cellular arrangement engine runs every Boolean:
+
+1. Intersect the faces that overlap in the broad phase (SSI for exact faces, exact arrangements for facets).
+2. Imprint the curves on every operand.
+3. Merge coincident entities by the round rule.
+4. Classify each 3-cell's membership vector by radial order and one point classification per connected group, as in Lévy's Weiler model [Lévy 2024], with generalized winding numbers for imperfect operands [Spainhour and Weiss 2025].
+5. Select cells by the expression.
+6. Regularize, merge same-surface faces and emit history.
+
+Expressions are n-ary, and Kiln lowers a whole CSG tree to one arrangement, so rounding happens once per tree.
+
+`keep: Cells` returns every non-empty cell as a region labelled by its membership vector. Overmolding an insert is `boolean([insert, shot], keep: Cells)` with materials per region, which is the conformal multi-region Body that `tetrahedralize` meshes with shared interfaces.
+
+**Decision D-ANV-19:** One cellular arrangement engine implements Booleans for every representation pair without an implicit operand, and the same engine serves n-ary expressions, cell-keeping results, `split`, `imprint` and `interference`. *Why:* these operations differ only in which cells they keep and report, and Parasolid's Booleans already imprint, join and select [Jackson 1995]. *Rejected:* separate union, subtract and intersect paths (three times the special cases); binary-only Booleans (n − 1 passes for n tools).
+
+| Pair | Result | Method |
+| --- | --- | --- |
+| B-rep × B-rep | B-rep | Arrangement with certified SSI |
+| Mesh × Mesh | Mesh | Exact arrangement chosen by the bake-off below, with checked output rounding |
+| B-rep × Mesh, SubD | B-rep with facet or limit faces | Operands enter through the lattice |
+| Implicit × anything | Implicit with kept exact faces | min, max and negation; explicit operands become exact-distance leaves |
+
+### Mesh Booleans
+
+EMBER's exact plane-based local arrangements take 34 ms for 1.2 million triangles on 8 cores, from 26-bit integer input, but output a polygon soup that needs topology recovery [EMBER 2022]. Cherchi and colleagues' indirect-predicate arrangements take 0.14 s per frame at 200,000 triangles and leave exact-to-float output open [Cherchi et al. 2022]; trueform claims up to 100× speedups with watertight output [trueform 2026]. Manifold guarantees manifold output, while ε-validity is a goal [Manifold wiki].
+
+A phase 0 bake-off on Thingi10K pairs and thingiCSG compares three candidates: (a) plane-based local arrangements on integer coordinates of the Body's ρ grid (2³⁰ to 2³¹ cells per diagonal, with wider fixed-width predicates) and topology recovery into the half-edge Mesh; (b) trueform's topological aggregation, once its licence is confirmed; (c) indirect predicates on `f64` input with checked rounding. The winner is chosen on validity first, then time, and sets the million-triangle target. Output rounding is checked exactly, repairs collapse only edges shorter than 2ε, at most three passes run, and a remaining conflict fails with `PrecisionExhausted`.
+
+**Decision D-ANV-20:** The mesh Boolean method is chosen by a phase 0 bake-off among ρ-grid integer local arrangements, topological aggregation and indirect predicates, with exact classification, bounded output repair and one rounding per CSG tree. *Why:* published speeds differ by one to three orders of magnitude, and ρ-grid quantization keeps Anvil's resolution, which removes the round 1 objection to integer input. *Rejected:* fixing the indirect-predicate design without measurement; Manifold's method (ε-validity not guaranteed); linking a C++ library (FFI; kept as oracles). (revised in round 2)
+
+### Patterns, hulls and Minkowski sums
+
+`anvil::pattern` makes keyed copies (contract 5: `linear` keys (i, j), `circular` the angular index, `at_points` the anchor's id, `fill` lattice coordinates, `by_density` initial keys), combined in one n-ary Boolean. When copies overlap only the target and meet congruent target faces, decided by the round rule on the certified distance between transformed and actual faces, the first copy's intersections are transformed and reused, with one rotation rounding added to their bounds. Translational patterns on planes reuse fully; circular patterns reuse on surfaces of revolution about the pattern axis; mirror patterns reuse where the target is symmetric within τ.
+
+`anvil::hull` computes convex hulls exactly with orientation predicates on meshes and facet faces; B-rep operands use support-function sampling with a stated bound. `anvil::minkowski` sums meshes and convex B-rep operands by convex decomposition and pairwise convex sums. OpenSCAD lists `hull()` and `minkowski()` among its core transformations [OpenSCAD cheat sheet].
+
+| Capability | Contract | Failure | Oracle id | Phase |
+| --- | --- | --- | --- | --- |
+| `anvil::boolean` | Bodies, n-ary expression, `keep: Regularized` or `Cells` → Body; `Split`, `Merged`, `Deleted(Internal)`, `Created(intersection_edge)` | `Ambiguous`, `ToleranceGrowth`, `BelowResolution { size }`, `PrecisionExhausted` | ANV-O-BOOL-1 to ANV-O-BOOL-4 | 1 |
+| `anvil::split` | Body, tool → pieces or one cellular Body | `ToolDoesNotCut`, `OpenTool { gaps }` | ANV-O-BOOL-5 | 1 |
+| `anvil::imprint` | Body, curves or Body → split faces and edges, volume unchanged | `CurveNotOnFace { gap }` | ANV-O-BOOL-6 | 1 |
+| `anvil::trim` | Sheet, boundary or tool, kept side | `KeepSideAmbiguous` | ANV-O-TRIM-1 | 1 |
+| `anvil::extend` | Face edge, distance or target, `Natural`, `Linear` or `CurvatureContinuous` | `CannotExtend { reason }` | ANV-O-TRIM-2 | 1 |
+| `anvil::transform` | Rigid motion, scale or reflection; keeps or derives ids per D-ANV-30 | `Degenerate` for zero scale | ANV-O-XF-1, ANV-O-COPY-1 | 0 |
+| `anvil::pattern` | Keyed copies, `Separate`, `Union` or `Subtract`, with congruent reuse | `CopyFailed { key, error }` unless `skip`; `Overlapping { pairs }` | ANV-O-PAT-1, ANV-O-PAT-2 | 1 |
+| `anvil::hull` | Meshes, facet faces → exact hull; B-rep operands with a stated bound | `Degenerate` (coplanar input) | ANV-O-HULL-1 | 1 (meshes, facets), 2 (B-rep) |
+| `anvil::minkowski` | Meshes and convex B-rep operands | `NotConvex { operand }` for B-rep operands | ANV-O-HULL-1 | 2 |
+| `anvil::convex_decompose` | Body → convex parts with a Hausdorff bound | `WorkLimit` | ANV-O-HULL-1 | 3 |
+
+## Blends, offsets, draft and direct edits
+
+### Blends
+
+Blending is a staged research program (contract 7.1). `anvil::blend` takes edges (a `Query` with extent use, tangent chains propagated unless `propagate: false`), a radius law (`Constant`, `Linear(r0, r1)`, later a Field), a section (`Circular`, later `Conic { rho }` and `CurvatureContinuous`), corners (`Auto`, `Setback { distances }`, `Sharp`), an overflow rule (`RollOver` by default, `KeepEdge`, `Fail`), a variant (`EdgeChain` by default, later `FaceFace { a, b, hold_lines }`, `ThreeFace { a, middle, b }` and `ChordWidth`) and a fallback. `anvil::chamfer` uses the same engine with a ruled section sized by two distances or a distance and an angle.
+
+For each chain, Anvil offsets both supports by r toward the side where the ball rolls, intersects the offsets with certified SSI to get the spine, projects it onto the supports for the contact curves, builds a procedural rolling-ball surface, resolves overflow against neighbouring faces, fills corners and rebuilds topology. Supports may be procedural blend, offset and swept faces, so sequential fillets work. Corners use the setback split of Várady and Rockwood (1995; with Hoffmann, 1998) [Várady publication list]: each blend stops a setback before the vertex, and an n-sided patch, G1 to its neighbours, fills the gap.
+
+| Stage | Capabilities | Phase |
+| --- | --- | --- |
+| 1 | Constant and linearly varying radius; circular sections; procedural blend, offset and swept supports; `RollOver` and `KeepEdge`; valence-3 corners with unequal radii and mixed convexity by setbacks; chamfer–fillet corners; termination at smooth edges; chamfers | 1 |
+| 2 | Conic and G2 sections; Field-driven radii; `FaceFace` with hold lines; `ThreeFace` (full round); `ChordWidth`; `edit_blend` | 2 |
+| 3 | Corners of valence four and above; blends across facet faces | 3 |
+| 4 | G3 sections | 4 |
+
+**Decision D-ANV-29:** Stage 1 blends cover the cases above, and one re-fillet benchmark measures every stage: a phase 0 corpus of ABC parts whose fillets are recognized, removed and re-applied with their recorded radii. Targets: 95% success on stage-1 configurations at the phase 1 gate and 97% on all configurations at the phase 2 gate, with OCCT 8.0 measured on the same corpus; MEC states the same targets. *Why:* golden product 1 and everyday parts need sequential fillets, rolling overflow and mixed corners from the start; one benchmark keeps both tabs' claims comparable. *Rejected:* stage 1 limited to equal-radius corners and `KeepEdge` (fails on common parts); targets only relative to OCCT (no absolute floor).
+
+Failures carry fixes: `RadiusTooLarge { edge, max_feasible }` (use the maximum, split the chain); `BlendOverflow { faces }` (other overflow rule, smaller radius); `VertexBlendFailed { vertex, reason }` (larger setbacks, a sharp corner, the fallback); `SelfIntersecting { region }` (a smaller local radius). With `fallback: Implicit { max_deviation }`, a failed region becomes the zero set of a smooth union of the supports' exact distances, fitted with G1 boundary constraints to the neighbouring exact faces by constrained least squares. Its seam is a tolerant edge with τ equal to the certified gap (`ToleranceGrowth` beyond τ_cap), and `Note::BlendFallback { region, deviation, seam_gap }` states its certified maximum deviation from the rolling-ball surface.
+
+History: `Created { role: blend, from: [edge] }`, `Created { role: vertex_blend, from: [vertex] }`, `Deleted { by: blend face }` for each blended edge and `Modified` for trimmed supports; contact edges get `Continuity` certificates.
+
+### Offsets, shells and draft
+
+`Round` offsets of a B-rep are exact Minkowski sums with a ball: offset faces, pipes around convex edges and spheres around convex vertices form one arrangement, and Anvil keeps the cells within certified distance d of the input; negative offsets do the same for the complement. `Natural` offsets extend and re-intersect offset faces. Phase 1 offsets analytic and procedural faces; free-form (NURBS) offsets follow in phase 2 (contract 13.2), and meshes use feature-preserving mitered offsets [Cao et al. 2024].
+
+`anvil::draft` tilts faces about a neutral element by an angle or a Field: planes stay planes, cylinders become cones, and free-form faces become procedural drafted surfaces.
+
+### Direct edits and blend regrowth
+
+`offset_faces`, `move_faces`, `replace_faces`, `delete_faces` and `draft` handle adjacent blends the same way. Blends next to the edited faces (Anvil-made blends carry supports, radius and section; imported ones come from `recognize_aspects`) are removed, the edit is applied, and the blends are rebuilt with the same parameters and ids (`Modified`), or the operation fails with `BlendRegrowFailed { blend, reason }` and the fixes "remove blend" and "reduce radius". UIX's phase 1 push-pull on non-cap faces uses `offset_faces`; `move_faces` arrives in phase 2.
+
+| Capability | Contract | Failure | Oracle id | Phase |
+| --- | --- | --- | --- | --- |
+| `anvil::blend` | Edges (extent use), radius law, section, corners, overflow, variant → Body; certificates on contact edges | As listed above | ANV-O-BLEND-1 to ANV-O-BLEND-5 | 1 (stage 1) to 4 |
+| `anvil::chamfer` | Edges, two distances or distance and angle | `RadiusTooLarge`, `VertexBlendFailed` | ANV-O-BLEND-1 | 1 |
+| `anvil::edit_blend` | Anvil-made or recognized blend, new radius or section | `BlendRegrowFailed` | ANV-O-BLEND-6 | 2 |
+| `anvil::offset` | Body, signed distance (value or `Field<Faces, Length>`), `Round` or `Natural` | `OffsetCollapse { faces }`, `FieldOutOfRange` | ANV-O-OFF-1 | 1 (analytic, procedural, implicit), 2 (NURBS, mesh) |
+| `anvil::offset_faces` | Faces moved along normals; neighbours extended; blends regrown | `NeighborCannotExtend { face }`, `BlendRegrowFailed` | ANV-O-OFF-2, ANV-O-BLEND-6 | 1 |
+| `anvil::shell` | Solid, faces to open, thickness (value or Field) | `WallCollapse { region }` | ANV-O-OFF-3 | 1 |
+| `anvil::thicken` | Sheet, thickness, side → solid | `SelfIntersecting` | ANV-O-OFF-3 | 1 |
+| `anvil::draft` | Faces, pull direction, neutral element, angle or Field; blends regrown | `DraftNotPossible { face, reason }`, `BlendRegrowFailed` | ANV-O-DRAFT-1 | 1 (analytic), 2 (free-form) |
+| `anvil::move_faces`, `replace_faces`, `delete_faces` | Faces and a motion, replacement or removal; neighbours re-intersected; blends regrown | `TopologyChangeRejected`, `ReplacementDoesNotClose { gaps }`, `CannotHeal { loop }` | ANV-O-DE-1, ANV-O-DE-2 | 2 |
+| `anvil::recognize_aspects`, `recognize_relations` | Holes, fillets, chamfers, bosses, pockets, ribs, patterns; coplanar, coaxial, tangent and other relations by the round rule | Unrecognized faces listed | ANV-O-REC-1, ANV-O-REC-2 | 2 |
+| `anvil::defeature` | Aspect kinds below sizes, or faces → recognize, then delete | `CannotHeal` per aspect | ANV-O-DE-3 | 2 |
+
+## Construction, surfacing and derived geometry
+
+MEC's sketch `text` emits glyph outlines as exact Bézier curves, which `make_regions` turns into faces, so text, emboss and engrave on planar and cylindrical faces work in phase 1, as code-CAD users expect [OpenSCAD cheat sheet].
+
+For Flux's shell and beam models (contract 7.1), `anvil::mid_surface` pairs offset faces, builds exact mid-surfaces for plane, cylinder and cone pairs and procedural ones otherwise, extends and intersects them at junctions, and returns a sheet with a thickness Field and junction curves. `anvil::member_axes` returns a wire Body of member axes and joints with each cross-section as a planar region and its area and second moments; Flux computes torsion and warping constants from the region.
+
+For control-vertex drags, Anvil re-evaluates the edited patch on the GPU at `Preview` fidelity, with zebra and curvature Fields from the same evaluation, within 16 ms (target), and releasing the drag writes one Ingot edit. G3 `match_surface` and `blend_surface` ship in the same phase as MEC's control-vertex editing. Continuity analyses default to thresholds relative to the Body's resolution and size; designs may set absolute overrides.
+
+| Capability | Contract | Failure | Oracle id | Phase |
+| --- | --- | --- | --- | --- |
+| `anvil::primitive` | Box, wedge, cylinder, cone, sphere, torus, prism → solid with roles | `Degenerate { parameter }` | ANV-O-OP-1 | 0 |
+| `anvil::make_regions` | Planar wires (lines, arcs, Bézier glyph outlines) → faces with nested loops | `OpenProfile { gaps }`, `SelfOverlap { curves }` | ANV-O-OP-2 | 1 |
+| `anvil::extrude` | Faces; direction; distance, Field or up-to target; draft; symmetric; twist and scale Fields → roles `start_cap`, `end_cap`, `side(e)` | `SelfIntersecting` with the largest feasible draft; `UpToNotReached { target }` | ANV-O-OP-3 | 0 (twist and scale 1) |
+| `anvil::revolve` | Faces or curves, axis, angle ≤ 2π; no seam on a full turn | `AxisCrossesProfile { points }` | ANV-O-OP-4 | 0 |
+| `anvil::sweep` | Profiles, path, frame rule, scale and twist Fields, guides; helical sweeps for threads | `SelfIntersecting { region }`, `FrameUndefined` with a rotation-minimizing fix | ANV-O-OP-5 | 1 |
+| `anvil::loft` | Ordered sections, guides, end conditions, vertex correspondence | `IncompatibleSections`, `Twisted`, `ContinuityNotMet` | ANV-O-OP-6 | 1 |
+| `anvil::boundary_surface`, `fill_surface`, `blend_surface`, `match_surface` | Curve networks, n-sided boundaries, bridges and matches with G0 to G3 conditions; Gordon surfaces for networks, which OCCT 8.0 also adds [OCCT 8.0] | `NetworkNotCompatible`, `BoundaryNotClosed { gap }`, `ContinuityNotMet { edge, achieved }` | ANV-O-OP-7, ANV-O-OP-8 | 2 (G0 to G2), 3 (G3) |
+| Control-vertex drag preview | Patch, control-point change → preview patch, zebra and curvature Fields | Falls back to the Kiln rebuild | ANV-O-FID-1 | 3 |
+| `anvil::project_curve` | Curves onto faces along a direction or normal | `Misses { segments }` | ANV-O-PROJ-1 | 1 |
+| `anvil::wrap` | Planar curves or sheets onto developable faces (plane, cylinder, cone); any face through `parameterize`; emboss and engrave through `offset_faces` | `OutOfDomain { curves }` | ANV-O-PROJ-2 | 1 (developable), 3 (general) |
+| `anvil::parameterize` | Faces or mesh region → (u, v) map by Boundary First Flattening (MEC's choice) or least-squares conformal | `NotDisk { genus }` with cut suggestions | ANV-O-PAR-1 | 3 |
+| `anvil::unfold`, `anvil::fold` | Sheet metal and flex circuits with developable faces and a neutral-layer offset per bend | `NotDevelopable { faces, deviation }` | ANV-O-SM-1 | 2 |
+| `anvil::drape_kinematic` | Woven fabric on a tool surface, pin-jointed net, quadrants in fixed order → fibre curves, shear Field | `ExcessiveShear { region, angle }` | ANV-O-DRAPE-1 | 4 |
+| `anvil::mid_surface` | Thin-walled solid → sheet, thickness Field, junction curves; `Created { role: mid(a, b) }` | `UnpairedFaces { faces, reason }` with the partial sheet | ANV-O-MID-1 | 2 |
+| `anvil::member_axes` | Lattice strut graph or swept members → axes, joints, cross-section regions, area and second moments | `NotPrismatic { region }` | ANV-O-AXIS-1 | 1 (lattices), 2 (swept members) |
+| `anvil::section` | Body and a plane, a stack of planes or a surface → regions or curves, any representation | `NotClosed { gaps }` naming defective faces | ANV-O-SEC-1 | 1 |
+| `anvil::deform` | Body, displacement Field or cage → same representation; ids kept | `FoldOver { region }`, `ToleranceNotMet { achieved }` | ANV-O-DEF-1 | 2 |
+| `anvil::morph` | Source, target or correspondences → deformation Field, then `deform` | `NoCorrespondence` | ANV-O-DEF-2 | 3 |
+| `anvil::shrinkwrap` | Bodies, gap g → one closed skin by closing on exact distances | `WorkLimit` | ANV-O-OFF-4 | 2 |
+
+## Implicit representation
+
+An `Implicit` Body is a hash-consed expression DAG f: ℝ³ → ℝ whose region f ≤ 0 is the solid, plus the exact faces its B-rep leaves keep. Nodes cover arithmetic, min, max, `detmath` functions, exact-distance primitives, hard and smooth CSG, warps (including Field-driven ones), offsets and shells, repetition, TPMS families and strut graphs, and leaves for B-rep or Mesh distances, Fields and cached bricks.
+
+### Distance kinds
+
+| Kind | Meaning | Allowed uses |
+| --- | --- | --- |
+| `Exact` | f is the signed distance | Everything, including offsets by any amount |
+| `Bound(L)` | Correct sign and \|f(p)\| ≤ L·dist(p, boundary) | Classification, Booleans, sphere tracing with step \|f\|/L, meshing; offsets after redistancing |
+| `Lipschitz(L)` | Correct sign and \|f(p) − f(q)\| ≤ L·\|p − q\| | As `Bound(L)` |
+| `SignOnly` | Correct sign only (C0 warps) | Interval classification only |
+
+Kinds propagate statically (min of exact distances is exact outside; a warp's constant is the enclosure of ‖J⁻¹‖), and offsetting a non-exact implicit first redistances a narrow band around the certified zero set, unless the caller accepts `approximate: true` with an `Estimated` bound.
+
+**Decision D-ANV-10:** Implicit nodes carry a statically propagated distance kind and Lipschitz constant, and operations that need exact distances redistance in a narrow band. *Why:* lattices, smooth blends and warps rarely give exact distances, and Lipschitz pruning relies on the same property [Barbier et al. 2025]. *Rejected:* assuming every implicit is a signed distance (offsets and clearances become silently wrong); allowing only exact-distance constructions (excludes TPMS, smooth blends and Field-driven geometry).
+
+### Evaluation
+
+Expressions lower to register-allocated tapes in the shared kernel IR (contract 7.5), as Fidget's 256-register bytecode does [Fidget], run by point, gradient, interval and reduced-affine evaluators. Interval evaluation prunes inactive min and max branches per box, shortening tapes about 17× per tile and 216× per subtile in Keeter's measurements, though smooth blends defeat it [Keeter 2020]. Anvil also prunes smooth-union branches whose Lipschitz bound lies a blend radius above the other branch [Barbier et al. 2025], and switches ambiguous wide boxes to reduced affine arithmetic [Sharp and Jacobson 2022].
+
+**Decision D-ANV-11:** Implicit tapes are kernel-IR programs, and the canonical CPU evaluator is a SIMD interpreter with interval, affine and Lipschitz pruning; compiled CPU paths (ahead-of-time and Wasm SIMD) keep the IR's operation order and give identical bits; a WGSL tape interpreter takes tapes as data for previews and for UIX's rendering during edits. *Why:* Fidget measures a 31× compiled advantage for brute force but about 25% once pruning runs, and the fastest Prospero entry is a NEON interpreter at 0.29 ms [Fidget; Prospero]; one IR keeps operation order fixed (contract 7.5); taking tapes as data avoids a shader compile per edit. *Rejected:* a native JIT per architecture (second code path, no gain once pruned); a WGSL shader compile per edit (lands inside the drag). (revised in round 2)
+
+WGSL offers `f32`, `f16` and AbstractFloat [WGSL], with accuracy not yet verified for intervals [unverified], so GPU results only order, cull and preview. A CAS cache of 8³ bricks of values and gradients covers the narrow band, and its trilinear reads report a bound from the Lipschitz constant and spacing.
+
+### Fields and lattices
+
+Field leaves sample Flux `Field`s at a requested accuracy, adding the sampled error to the Body's bounds. `anvil::implicit_from_field` needs a continuous Field with a finite gradient bound; degree-0 and quadrature-point Fields fail with `NotContinuous`, whose fix is the filtered, projected density from Flux's topology optimization.
+
+`anvil::lattice` fills a region from family, cell size, thickness, orientation and skin Fields; domain repetition keeps millions of cells to a few hundred nodes, and graphs above about 10⁴ struts use a spatial hash leaf. Strut lattices expose their graph for beam models and for the 3MF Beam Lattice extension 1.2.0, which stores beams by vertex indices with end radii, cap modes and balls [3MF beam lattice spec]. Cell-family generators such as MEC's are Wasm components that emit graphs or tapes.
+
+### Implicit meshing
+
+`convert(implicit, into: Mesh)` uses adaptive dual contouring on an octree:
+
+1. Interval evaluation marks cells inside, outside or ambiguous; ambiguous cells refine.
+2. A surface cell is certified when ∇f·d excludes zero for a direction d from the cell's gradient cone (the axes first, then the normalized sum of the active leaves' gradients), which certifies box corners and CSG edges; cells that reach λ uncertified are flagged.
+3. Each cell places one vertex per surface piece by minimizing a quadric error function from exact gradients, keeping sharp features.
+4. Manifold dual contouring connects the vertices [Fidget], a structure that parallelizes well on GPUs [Hwang and Sung 2024].
+5. An exact self-intersection check repairs crossings by moving vertices within their cells.
+
+Surface points lie within one cell diagonal of the mesh and triangles within two of the surface, or within max |f| over the triangle divided by a certified floor of |∇f| if smaller; the bound is `Guaranteed` in certified cells and `Estimated` in listed flagged ones. Keeter notes that good meshing of arbitrary implicit surfaces remains unsolved [Fidget].
+
+| Capability | Contract | Failure | Oracle id | Phase |
+| --- | --- | --- | --- | --- |
+| `anvil::implicit` | Ingot expression → DAG with distance kind and Lipschitz constant | `SignOnly` uses reported as slow | ANV-O-IMP-1, ANV-O-IMP-2 | 1 |
+| Tape evaluation and pruning | Point, gradient, interval, affine evaluators; pruned tapes equal full tapes per region | — | ANV-O-IMP-3 | 1 |
+| WGSL tape interpreter | Tapes as data for previews and UIX rendering | Device loss is an Abort; CPU path | ANV-O-FID-1 | 1 |
+| `anvil::implicit_from_field` | Continuous Field, iso-value → implicit, kind `Lipschitz(L)`, bound = sampling error / certified gradient floor | `NotContinuous`, `NoIsoSurface`, `FlatIsoSurface { region }` | ANV-O-IMP-4 | 1 |
+| `anvil::lattice` | Region, family, cell size, thickness, orientation, skin Fields → implicit with roles `wall`, `strut`, `node`, `skin`, and the strut graph | `BelowResolution`, `FieldOutOfRange`, `TooManyCells { estimated, limit }` | ANV-O-LAT-1 | 1 |
+| Implicit meshing | Implicit → manifold Mesh with two-sided bound | `Uncertified` cells listed | ANV-O-CONV-1 | 1 |
+
+## Meshes and volume meshing
+
+### Surface meshes and repair
+
+A `Mesh` stores `f64` positions in the Body frame, three half-edges per triangle with a paired-half-edge bijection, face groups with `EntityId`s, crease edges, typed per-vertex or per-corner property channels (normals, UVs, colours, `(EntityId, u, v)` back-references, Field values), regions for closed meshes, and the precision ε. Per-corner properties use their own indices, so seams never break topology, as Manifold's `MeshGL` merge vectors do [Manifold wiki]. A Mesh with vertices and no triangles is a point set, used for scans.
+
+`anvil::mesh_from_triangles` builds a valid Mesh, a facet B-rep when the data is non-manifold by intent, or fails with `NotManifold { edges, vertices }`. `anvil::repair_mesh` welds vertices within the healing limit in canonical order, collapses degenerate triangles, builds the exact arrangement of all triangles, keeps the cells whose generalized winding number exceeds 0.5, which stays meaningful for self-intersecting, open and non-manifold input [Jacobson et al. 2013], and closes holes below a fill limit. It reports the largest input displacement (`Guaranteed`) and the area changed.
+
+### Volume meshes
+
+A volume Mesh adds tetrahedra, hexahedra, prisms, pyramids and general polyhedra with region indices; geometry order up to 8 with Bézier control nodes, following Flux's solution degree; and boundary facets classified to the B-rep face or interface they approximate, so Flux resolves `ds(part.face(q))` through `EntityId`s. Element quality is the minimum scaled Jacobian, certified from Bernstein coefficients.
+
+**Decision D-ANV-12:** Volume meshing, adaptation and node optimization are Anvil operations; Flux chooses what to mesh and how finely through sizing and metric Fields. *Why:* meshing needs exact geometry, the same predicates and tolerance model, and `EntityId`s for boundary classification, and its outputs are Bodies other operations consume (contract 7.1). *Rejected:* meshing in Flux (duplicates predicates and naming); meshing as a Wasm component (a general operation that needs Anvil's evaluators in every inner loop).
+
+| Strategy | When | Method | Boundary |
+| --- | --- | --- | --- |
+| `Conforming` (default) | Valid input | Face tessellation by the sizing Field, constrained Delaunay tetrahedrization with implicit Steiner points and indirect predicates [Diazzi et al. 2023], local quality improvement | Facets subdivide the tessellation; Steiner points move by one rounding |
+| `Envelope` | Soups, scans, healed imports | Incremental insertion into a floating-point mesh with optimization inside an envelope [fTetWild 2020] | Within ε_env of the input; omitted triangles reported |
+
+Rounding the Steiner points of Diazzi and colleagues' conforming CDT keeps 93.22% of meshes valid (99.77% after post-processing), and some inputs have no floating-point conforming mesh [Diazzi et al. 2023]. Anvil checks every element with exact orientation predicates after rounding, re-inserts inverted ones locally and otherwise fails with `NotRepresentable { elements }`, suggesting `Envelope`. fTetWild inserts every Thingi10K input triangle in practice without guaranteeing it [fTetWild 2020]; Anvil reports omissions.
+
+Curved elements place boundary control nodes on the classified face in its parameter space, certify validity by positive Bernstein coefficients of the Jacobian determinant, untangle interior nodes, then refine locally. 3D Bézier Guarding covers polynomial boundaries with curved elements free of inversions [Khanteimouri and Campen 2023], and bijective coarse high-order meshing adds a distance bound and a bijective map to the input [Jiang et al. 2021]; Anvil guards faces with polynomial geometry or caches and uses project, certify and untangle elsewhere.
+
+Hex-dominant meshing converts tetrahedra by field-guided polyhedral agglomeration, which keeps topological validity at every step [Gao et al. 2017]; the hex-meshing survey finds no method that is robust, high-quality and automatic at once [hex survey 2022], so Anvil promises hex-dominant output, with all-hex meshes only for sweepable regions. `split_polyhedra` turns remaining polyhedra into tetrahedra and pyramids for FEM, keeping polyhedra for finite volume. Boundary layers advance prisms along smoothed normals with exact collision tests and pyramid transitions; curved layers split one thick curved layer isoparametrically, as for stretched elements around streamlined bodies [Marcon et al. 2019].
+
+### Adaptation and surface remeshing
+
+Adaptation history maps new cells to their parents as a compact parent-index array, expanded to records on request, so Flux transfers Fields by its own rules (Flux names Mmg as its anisotropic reference). Decimation uses quadric error metrics [Garland and Heckbert] but verifies each collapse against the original surface, since the quadric is a heuristic; parallel modification uses deterministic independent sets. Quad mode follows feature-line driven quad remeshing, which fails on under 0.5% of Thingi10K models [Pietroni et al. 2021].
+
+| Capability | Contract | Failure | Oracle id | Phase |
+| --- | --- | --- | --- | --- |
+| `anvil::mesh_from_triangles` | Buffers → Mesh, facet B-rep or point set | `NotManifold { edges, vertices }` | ANV-O-MESH-1 | 0 |
+| `anvil::repair_mesh` | Triangle data → valid Mesh with displacement and area report | `Unrepairable { reason }` | ANV-O-MESH-2 | 1 |
+| `anvil::tetrahedralize` | Body, sizing `Field<Body, Length>`, geometry order, strategy, quality → volume Mesh, boundary bound | `InvalidInput`, `NotRepresentable`, `WorkLimit`, `QualityNotReached { worst, target }` | ANV-O-TET-1, ANV-O-HO-1 | 2 (`Conforming`, curved by projection), 3 (`Envelope`, guarding) |
+| `anvil::untangle` | Mesh → valid curved mesh | `InvalidElement { cell, jacobian_min }` | ANV-O-HO-1 | 2 |
+| `anvil::hex_dominant`, `sweep_mesh` | Tetrahedra → hex-dominant; sweepable region → all-hex; optional `split_polyhedra` | `NotSweepable { reason, faces }` | ANV-O-HEX-1 | 3 (sweep), 4 (hex-dominant) |
+| `anvil::boundary_layer` | Faces (`Query`), first height Field, growth, layers | `LayerCollapsed { faces, achieved_layers }` with the partial mesh | ANV-O-BL-1 | 4 |
+| `anvil::refine_mesh` | Marked simplices → newest-vertex bisection with closure | `InvalidElement` | ANV-O-ADAPT-1 | 2 |
+| `anvil::adapt_mesh`, `optimize_mesh` | Metric `Field<Body, Metric>` → adapted mesh, parent map; node relocation | `QualityNotReached` | ANV-O-ADAPT-1 | 3 |
+| `anvil::polyhedral_mesh` | Tetrahedra → boundary-conforming polyhedral dual, prisms kept | `NonPlanarFace { cells, deviation }` | ANV-O-POLY-1 | 3 |
+| `anvil::common_refinement` | Two discretizations of one interface → overlay with both parents | `NotSameInterface { gap }` | ANV-O-MESH-4 | 4 |
+| `anvil::remesh`, `decimate`, `smooth` | Isotropic, metric or quad remeshing; verified-bound decimation; Taubin and bilaplacian smoothing; face-group ids kept | `FeatureConflict { edges }` with the closest feasible target | ANV-O-REM-1 | 1 (decimate), 2, 3 (quads) |
+| `anvil::segment_mesh` | Mesh → face groups by curvature and normals | — | ANV-O-MESH-3 | 3 |
+
+## Subdivision surfaces
+
+A `SubD` Body is a Catmull-Clark cage with real-valued semi-sharp and infinitely sharp edge creases, corner sharpness, boundary rules and an `EntityId` per cage element, following OpenSubdiv's conventions, whose limit surface matches RenderMan to numerical precision [OpenSubdiv repository]. Regular faces are bicubic B-spline patches. Faces near extraordinary vertices or creases use feature-adaptive subdivision, which computes the true limit up to machine precision [Nießner et al. 2012], and crease-free neighbourhoods may use Stam's eigen-analysis, which needs at most one extraordinary vertex per face and ignores creases [Stam 1998].
+
+Where a fixed adaptive depth near creases and extraordinary vertices stops short of the limit, the geometric convergence of subdivision gives a certified bound per depth, recorded as that face's conversion bound. Curvature at extraordinary vertices is reported as singular.
+
+**Decision D-ANV-13:** Anvil implements Catmull-Clark subdivision with semi-sharp creases natively in Rust, following OpenSubdiv's rules and using OpenSubdiv as an oracle. *Why:* limit surfaces must evaluate identically on CPU and in Wasm and feed exact B-rep faces; OpenSubdiv is C++ with CUDA, Metal and OpenGL back ends and licensed as Apache 2.0 with a modified trademark section [OpenSubdiv license]. *Rejected:* linking OpenSubdiv (FFI, no wgpu back end); Loop subdivision as the primary scheme (triangle cages suit meshes, not industrial design).
+
+| Capability | Contract | Failure | Oracle id | Phase |
+| --- | --- | --- | --- | --- |
+| `anvil::subd_edit` | Move, extrude, inset, bevel, crease, insert loop, bridge; untouched cage ids kept | `NonManifoldResult`, `ZeroArea` | ANV-O-SUBD-1 | 2 |
+| `anvil::subd_limit` | Limit points, derivatives and normals at (face, u, v), with the recorded bound near creases | `SingularPoint` for curvature | ANV-O-SUBD-1 | 2 |
+| `anvil::convert` (Mesh → SubD, SubD → BRep, SubD → Mesh) | Cage from a mesh; exact limit faces or NURBS with certified bounds; limit tessellation | `ToleranceNotMet { achieved }` | ANV-O-SUBD-1, ANV-O-CONV-1 | 2 |
+| `anvil::fit` (target SubD) | B-rep or mesh → cage by quad remeshing and least squares | `FitFailed { residual }` | ANV-O-FIT-2 | 4 |
+
+## Planar integer geometry (`anvil-planar`)
+
+`anvil-planar` stores 2D geometry on an integer grid declared per design (ELX uses nanometres): polygons with line and arc edges, an arc stored as three integer points. Predicates are exact in integer arithmetic: orientation, in-circle, and comparisons of segment, arc and polygon distances against squared integer thresholds.
+
+Constructions (offsets, Minkowski sums with a disc, arc intersections) have irrational results, so they snap to the grid in a declared conservative direction: a region that must keep clearance (a copper fill) rounds inward, away from obstacles, and a keep-out or a region that must cover rounds outward. A reconstructed arc is kept only when the snapped arc passes the exact check; otherwise its polygonal approximation, snapped the same way, replaces it. Derived geometry therefore passes the exact rule checks by construction, with no hidden tolerance.
+
+The same crate backs the Anvil operations and compiles into ELX's design-rule, fill and router Wasm components, so both paths give identical results. Flex circuits bend with the sheet-metal `anvil::fold`.
+
+**Decision D-ANV-27:** `anvil-planar` makes predicates exact on stored integer geometry and snaps every construction conservatively in a declared direction, keeping arcs only when they pass the exact check. *Why:* offsets and arc intersections leave the integer grid, and rounding to nearest could place a fill up to about 0.7 grid units too close, so Crucible's own fills would fail its exact checks. *Rejected:* rounding to nearest with a hidden check tolerance (the rule check would no longer be exact); approximating every arc by segments (loses exact arcs that boards and masks use).
+
+| Capability | Contract | Failure | Oracle id | Phase |
+| --- | --- | --- | --- | --- |
+| Exact planar predicates | Integer points, lines and arcs → exact signs and distance comparisons | `Overflow` above the declared coordinate range | ANV-O-PLANAR-1 | 3 |
+| `anvil::planar::boolean` | Polygon sets with arcs, n-ary expression → exact result | — | ANV-O-PLANAR-1 | 3 |
+| `anvil::planar::offset` | Polygons, distance (Minkowski sum with a disc), snap direction → conservative result | `Collapsed { regions }` | ANV-O-PLANAR-2 | 3 |
+| `anvil::planar::distance` | Two polygon sets → exact minimum distance comparison and witnesses | — | ANV-O-PLANAR-1 | 3 |
+| `anvil::planar::medial_axis` | Polygons with arcs → segment Voronoi skeleton, conservatively snapped | `WorkLimit` | ANV-O-PLANAR-2 | 3 |
+
+## Conversions and error propagation
+
+`anvil::convert(body, into, accuracy)` is the only conversion operation and returns a `Body`. Every approximating conversion and fit records on each face it produces a `FaceBound { position, normal }`: a two-sided Hausdorff bound on position and an angle bound on normals, each `Quantified` or `NotQuantified { reason }` (contract 5's `Unknown`; CCR-ANV-8). Fits certify both bounds by certified sampling of distance and normal deviation.
+
+Bounds propagate through later operations by these rules, where θ_min is a certified lower bound of the angle between two surfaces along an edge:
+
+| Construction from bounded faces | Position bound | Normal bound |
+| --- | --- | --- |
+| Trim, split, imprint, Boolean (face kept) | Unchanged | Unchanged |
+| Normal offset by d | p + \|d\|·n | n |
+| Intersection edge, blend spine, contact curve | max(p_a, p_b) / sin θ_min | — (edge) |
+| Rolling-ball blend of radius r on a spine bounded by s | s | 2s / r |
+| Natural-offset corner where faces meet at angle θ | p / sin(θ/2) | n |
+| θ_min not certified above zero (near tangency) | `NotQuantified { NearTangent { edge } }` | `NotQuantified` |
+
+`body.error()` is the largest face position bound, or `NotQuantified` if any face is, and Ingot's `Truth` makes comparisons on an unquantified bound `Undecided`. The bound describes representation error only: uncertainty of `Approx` arguments goes to Ingot's `InputSensitivity` record, never into `body.error()`, and near-tangent configurations that resolve differently after a conversion appear as tolerance growth, not as part of the bound.
+
+**Decision D-ANV-21:** Inclusions in the representation lattice are exact; approximating conversions record per-face `{ position, normal }` bounds that propagate through stated rules with certified conditioning or become `NotQuantified`. *Why:* a Hausdorff bound alone says nothing about normals, so offsets, intersections and blends on approximated faces could otherwise report `Guaranteed` bounds that do not hold. *Rejected:* inheriting the largest source bound (false near tangency and after offsets); one bound per Body (a local conversion would taint every face); RMS metrics (hide the worst deviation). (revised in round 2)
+
+| Capability | Contract | Failure | Oracle id | Phase |
+| --- | --- | --- | --- | --- |
+| BRep → Mesh | Tessellation with certified chord control; face groups keep ids | `WorkLimit { triangles }` | ANV-O-CONV-1, ANV-O-TESS-1 | 0 |
+| BRep or Mesh → Implicit | Exact signed-distance leaf with winding-number sign; zero error | — | ANV-O-CONV-1 | 1 |
+| Mesh → BRep (facet) | Facet faces per face group, ids kept; zero error | — | ANV-O-CONV-1 | 1 |
+| Implicit → Mesh | Certified dual contouring (Implicit representation) | `Uncertified` cells listed | ANV-O-CONV-1 | 1 |
+| Implicit → BRep | Leaf-preserving: kept exact faces trimmed by certified intersection; facet faces elsewhere; fitted NURBS faces `Estimated` until checked | `Ambiguous` near tangency | ANV-O-CONV-1, ANV-O-LEAF-1 | 1 (facet), 3 (fitted) |
+| Mesh → BRep (fitted) | Segment, fit primitives and NURBS, intersect, sew; `Estimated`, or `Guaranteed` after a certified check | `FitFailed { residual }` | ANV-O-FIT-2 | 4 |
+| BRep, Mesh or Implicit → SubD | Quad remesh and cage fit; `Estimated` | `FitFailed` | ANV-O-FIT-2 | 4 |
+| Bound propagation | Rules above, applied by every operation | `NotQuantified` faces listed | ANV-O-CONV-2 | 1 |
+
+## Measurement, analysis and simulation services
+
+Mass properties integrate polynomial fields over trimmed faces by the divergence and Green theorems with adaptive Gauss–Legendre quadrature whose panel remainders are bounded by interval enclosures (B-rep), exact signed-tetrahedron sums with compensated fixed-order reduction (Mesh), and adaptive octrees with two-sided bounds (Implicit); densities may be Fields. Distance runs branch-and-bound over both hierarchies, then Krawczyk on the optimality conditions. Signs for imperfect geometry come from generalized winding numbers on trimmed surfaces [Spainhour and Weiss 2025], accelerated by a hierarchical far-field expansion that turns some 10³-second direct evaluations into sub-second ones [Spainhour, Whitlock and Weiss 2026].
+
+Assembly interference culls Instance pairs with exact integer GPU tests, computes certified distances on the CPU, and computes Boolean volumes only for overlapping pairs, in canonical Instance order; `repo`'s merge rule uses it. Thickness is `Certified`: the GPU locates candidate thin regions, and the CPU computes every canonical value.
 
 ### Services for Flux
 
-```rust
-/// Implemented for every representation (Flux tab, "Division of labor with Anvil").
-pub trait GeometryQuery: Send + Sync {
-    fn classify_box(&self, b: Aabb, tol: f64) -> BoxClass;                         // Inside | Outside | Cut | Uncertified
-    fn closest_point(&self, p: Point3) -> SurfacePoint;                            // EntityId, (u, v), signed distance
-    fn moments(&self, b: Aabb, degree: u8) -> Result<CertifiedMoments, Uncertified>;
-    fn surface_quadrature(&self, b: Aabb, degree: u8) -> Result<SurfaceRule, Uncertified>;
-    fn local_thickness(&self, p: Point3) -> (f64, ErrorBound);
-}
+Anvil implements Flux's `GeometryQuery` for every representation: certified box classification, closest points (Newton on f inside an interval-certified basin for implicits), quadrature, local thickness and region, shell and genus counts for Flux's surrogate-domain connectivity checks. Cut-cell quadrature for implicit and polynomial geometry follows Saye's height-function methods, which give positive weights and high-order accuracy [Algoim]; Algoim states no licence, so Anvil implements the papers. Moment fitting is used only with non-negative least squares and a conditioning check.
 
-/// Thin adapter that Kiln implements by issuing versioned Anvil Ops (tetrahedralize, refine_mesh,
-/// adapt_mesh, optimize_mesh), so every mesh Flux receives is cached and pinned like any other Op result.
-pub trait MeshService {
-    fn tetrahedralize(&self, args: TetrahedralizeArgs) -> Result<(Body, ErrorBound), OpError>;
-    fn refine_mesh(&self, mesh: &Body, marked: &[CellId]) -> Result<(Body, Vec<HistoryRecord>), OpError>;
-    fn adapt_mesh(&self, mesh: &Body, metric: FieldRef) -> Result<(Body, Vec<HistoryRecord>, ErrorBound), OpError>;
-    fn optimize_mesh(&self, mesh: &Body, target: FieldRef) -> Result<Body, OpError>;
-}
-```
+After a local edit, classification is recomputed only for octree cells whose boxes meet the region the edit's `HistoryRecord`s changed. Anvil's shares of Flux's 1 s interactive update are performance targets, measured on GP1, GP2 and GP5 in phase 0. `anvil::shape_velocity` returns `TopologyChange { parameter, entities }` instead of a velocity when a parameter changes B-rep topology, so gradients stay derivatives at a frozen discretization; until it ships in phase 2, UIX ranks edit plans by provenance.
 
-`MeshService` is not a parallel abstraction: it names the subset of Anvil operations Flux's adaptive loop calls, and its only implementation routes through Kiln.
+### Constraint solving
 
-## Build, reuse or avoid
+MEC owns constraint semantics; Anvil runs `solve_constraints` and `analyze_constraints` as `Portable` operations on the canonical `linalg` crate. Each decomposed block uses dense rank-revealing QR or SVD, or above a size cap sparse QR followed by a rank-revealing pass on R.
 
-| Project | License | Decision | Reason |
-| --- | --- | --- | --- |
-| Parasolid, ACIS, CGM | Commercial | Learn from published papers only; benchmark through licensed translator plugins where customers own licenses | Closed source; the contract allows proprietary formats only through licensed plugins. Parasolid's local tolerances and Convergent Modeling, and ACIS and CGM's mixed polyhedral add-ons [ACIS Polyhedra; CGM Modeler], confirm the hybrid direction |
-| Open CASCADE Technology 8.0 | LGPL 2.1 with an additional exception, or commercial [OCCT repository] | Avoid linking; use as a differential oracle in CI tooling outside the core | C++17 [OCCT 8.0]; LGPL linking conflicts with a statically linked Rust and Wasm core; valuable as a second opinion on Booleans, healing and STEP |
-| Truck | Apache 2.0 [Truck repository] | Study; do not adopt | B-spline and NURBS topology in Rust with Booleans and WebGPU rendering; its README describes no per-entity tolerance or provenance model |
-| Fornjot | Archived 19 June 2026; README: "This project has been shut down. Its goals were never reached." [Fornjot repository] | Lesson only | A code-first Rust kernel whose mainline code went over a year without development in favor of experiments, and which lacked "the features for anything more advanced". Anvil's phasing therefore ties every capability to a golden product |
-| Manifold | Apache 2.0 [Manifold repository] | Benchmark and oracle for mesh Booleans and level sets | C++ with Thrust or TBB parallelism; ε-validity is a goal, not a guarantee [Manifold wiki] |
-| Geogram | BSD-3-Clause [Geogram repository] | Oracle for exact mesh CSG, predicates and Delaunay; port ideas | Lévy's exact Weiler-model CSG lives there; C++ |
-| Fidget | MPL 2.0 [Fidget] | Study and benchmark; MPL permits linking, but Anvil's evaluator must share Flux's kernel IR | Rust, Wasm-ready, JIT and interpreter, interval pruning |
-| libfive | Core MPL 2.0; Studio GPL [libfive repository] | Benchmark for implicit meshing | Mature f-rep kernel; Studio's GPL excludes it from the core |
-| OpenSubdiv | Tomorrow Open Source Technology License 1.0 (Apache 2.0 with a modified trademark section) [OpenSubdiv license] | Oracle for limit evaluation | C++ with CUDA, Metal, OpenGL back ends; no wgpu |
-| fTetWild | MPL 2.0 [fTetWild repository] | Oracle and benchmark; port the method | C++ |
-| Attene's CDT | GPL or LGPL by build option [MarcoAttene/CDT] | Port the published method; never link | License incompatible with the core |
-| bichon | MIT, with GPL CGAL dependencies [Jiang et al. 2021] | Study the method | GPL dependency |
-| Axom (winding numbers) | BSD [Spainhour and Weiss 2025] | Oracle for containment queries | C++ HPC library |
-| nTop | Commercial | Learn from it | Field-driven implicit design and lattices at industrial scale [nTop whitepaper]; its 5.0 kernel change altered regenerated geometry slightly [nTop 5.0 notice], which Anvil's behavior versions prevent |
-| Zoo's engine | Engine not stated as open source; the Design Studio app is open source [Zoo Design Studio v1] | Learn from published overview; respect the SSI patent | Zoo states it uses OpenNURBS and Vulkan [Zoo Design Studio v1] |
-| `slotmap` | Zlib [slotmap docs] | Reuse for builder arenas | Generational keys, `no_std` with `alloc` |
-| `inari` | MIT [inari docs] | Reference only | Implements a subset of IEEE 1788-2015 interval arithmetic; its documentation does not state bit-identical results on x86-64, ARM64 and Wasm, which Anvil gets from error-free transformations |
+When a converged block passes a Krawczyk test on the scaled system, the proven box radius is its `Guaranteed` bound and certifies a unique solution on the chosen branch. Otherwise the bound is `Estimated` (residual over an estimated smallest singular value), and a radius above the smallest entity tolerance fails with `IllConditioned { block, condition }`. Ranks are computed modulo 61-bit primes, where full rank certifies full rank over the rationals, and an exact rational kernel vector certifies a deficiency.
 
-**Decision D-ANV-23:** Anvil builds its kernel natively in Rust and links no external geometry kernel; OCCT, Manifold, Geogram, OpenSubdiv, fTetWild, libfive and Axom serve as differential oracles and benchmarks in tooling outside the core. *Why:* the contract requires a Rust core with no GPL or AGPL linking, identical results in native and Wasm builds, and frozen behavior versions, which a C++ dependency cannot guarantee across platforms; oracles from independent implementations catch errors that self-consistent tests miss. *Rejected:* wrapping OCCT (LGPL linking, C++ toolchains in Wasm, no control of numerics or naming); adopting Truck as the base (its data model lacks cellular topology, per-entity tolerances and provenance, so the rewrite would touch every type).
+| Capability | Contract | Failure | Oracle id | Phase |
+| --- | --- | --- | --- | --- |
+| `anvil::mass_properties` | Volume, area, mass, centroid, inertia, each with a bound | — | ANV-O-MP-1 | 0 (meshes), 1 |
+| `anvil::distance`, `closest_point` | Minimum or signed distance, witnesses with `EntityId` and (u, v) | `NotSeparated` when positive distance is required | ANV-O-DIST-1, ANV-O-DIST-2 | 0 (points), 1 |
+| `anvil::interference` | Instances, clearance → separated, touching, clearance or overlapping pairs | `WorkLimit` | ANV-O-DIST-3 | 1 |
+| `anvil::ray_cast` | Rays → first hits with `EntityId`, (u, v), normal | — | ANV-O-DIST-4 | 1 |
+| `anvil::deviation` | Two Bodies → signed deviation Fields, Hausdorff bounds, volumes added and removed | `WorkLimit` | ANV-O-DIST-5 | 1 |
+| `anvil::classify_points`, `classify_box`, `classify_body` | Inside, outside, on or cut, certified with tolerances | — | ANV-O-CLS-1 to ANV-O-CLS-3 | 0 (points), 1 |
+| `GeometryQuery` | Classification, closest point, positive-weight quadrature, thickness, topology counts | `Uncertified { achieved }` | ANV-O-QUAD-1 | 1 |
+| `anvil::shape_velocity` | Parameter → `Field<Faces, Displacement>` per unit change | `TopologyChange { parameter, entities }` | ANV-O-SV-1 | 2 |
+| `anvil::curvature`, `analyze_continuity`, `isophotes` | Curvature Fields; G0 to G3 mismatch along edges with scale-relative default thresholds; isophote and reflection lines | `SingularPoint` | ANV-O-AN-1, ANV-O-AN-2 | 1 (G0 to G2), 2 (G3, isophotes) |
+| `anvil::draft_analysis`, `draft_map` | Draft-angle Fields and classified regions; feasible draw directions | — | ANV-O-AN-3 | 1, 3 (`draft_map`) |
+| `anvil::thickness` | `Sphere` or `Ray` thickness Field, certified minimum location; `Certified` grade | — | ANV-O-AN-4 | 1 |
+| `anvil::medial_axis` | Planar regions → exact segment Voronoi skeleton; solids → certified approximation | `WorkLimit` | ANV-O-AN-5 | 1 (2D), 2 (3D) |
+| `anvil::silhouette`, `project_hlr`, `visibility` | Silhouette curves; visible and hidden edges for drawings; visibility Fields | — | ANV-O-AN-6, ANV-O-AN-7 | 1 (silhouette, hidden lines), 2 |
+| `anvil::tessellate` | Body, chordal tolerance → `DisplayPackage` (faces, edges with continuity, cluster pages, `(EntityId, u, v)` back-references) | `WorkLimit { triangles }` | ANV-O-TESS-1 | 1 |
+| `anvil::tool_contact`, `swept_volume` | First contact of revolved tools; exact per-move envelopes for certified gouge distance; narrow-band stock | `WorkLimit` | ANV-O-MFG-1, ANV-O-MFG-2 | 2 |
+| `anvil::offset_curve` | Planar or on-surface curves; lines and arcs stay lines and arcs | `Degenerate` | ANV-O-MFG-3 | 1 |
+| `anvil::voxelize`, `correlate_grids` | Occupancy or distance grids; exact integer correlation counts (`Certified`) | `WorkLimit { voxels }` | ANV-O-VOX-1, ANV-O-VOX-2 | 1, 2 |
+| `anvil::align`, `fit` | Point-to-plane alignment with deterministic samples; primitive, NURBS or cage fits with residuals | `NotConverged { rms }`, `FitFailed { residual }` | ANV-O-FIT-1, ANV-O-FIT-2 | 1 (primitives), 4 |
+| `anvil::solve_constraints`, `analyze_constraints` | MEC's constraint systems → certified solutions, degrees of freedom, conflicts | `IllConditioned`, MEC's kinds | ANV-O-SOLVE-1 | 1 |
+
+## Fidelity, performance and determinism
+
+### Fidelity
+
+| Fidelity | Anvil's behaviour | Cache |
+| --- | --- | --- |
+| `Preview` | Looser tolerances, surrogates (an implicit offset for a blend), GPU `f32` evaluation; results may show as `Proxy` | Never written to the shared cache |
+| `Interactive` | `Portable` floating-point topology decisions and sampled seeding, validated by `check_body` (whose global separation catches missed intersections) and Krawczyk checks of traced points; a failed validation recomputes at `SignOff` | Cached; never consumed by `SignOff` checks or releases |
+| `SignOff` | Certified decisions in rounds | Cached; required by releases and `SignOff` checks, and recomputed in the background after `Interactive` results |
+
+Operations without uncertain decisions (analytic constructions, tessellation) map `Interactive` and `SignOff` to one effective fidelity.
+
+**Decision D-ANV-28:** Anvil maps the three fidelities to surrogates, validated floating-point decisions and certified decisions. *Why:* certified SSI and round decisions cost time that drags and early-edit rebuilds cannot spend, while validation keeps `Interactive` Bodies valid and `SignOff` keeps releases certified. *Rejected:* certified decisions at every fidelity (misses the rebuild targets); unvalidated floating-point results (invalid Bodies reach dependents).
+
+### Determinism
+
+Contract 7.3 and PLT's mechanism table own the general rules. Anvil adds: canonical geometric orders everywhere (D-ANV-25); decision rounds against frozen tolerances (D-ANV-4); reductions only through `det_sum` and `exact_sum`; local work limits; no NaN at any boundary; and mesh modification in rounds of maximal independent sets whose priority hashes the element's geometric key and the round number, so results are identical for any thread count.
+
+**Decision D-ANV-22:** Anvil parallelizes by data-defined decomposition with canonical merge order, fixed reduction trees and geometric independent-set priorities. *Why:* identical bits for any thread count without locks around floating-point state. *Rejected:* single-threaded certified mode (misses the rebuild targets); colouring or randomized schedules (results would follow thread count or seeds). (revised in round 2)
+
+Within an operation, work splits by data (patch pairs, octree cells, faces), SIMD uses PLT's canonical lanes, and the GPU runs integer broad phases, preview tessellation and evaluation, the WGSL tape interpreter and `correlate_grids`, each with a registered CPU path.
+
+### Performance targets
+
+PLT owns contract 13.3's rows, measured on the reference laptop (Intel Core Ultra 7 258V, 8 cores, AVX2). Anvil's shares and operation targets:
+
+| Workload | Target |
+| --- | --- |
+| Rebuild after an early edit, GP1-class prismatic benchmark (2 s row) | Anvil share ≤ 1.2 s at `SignOff`, since analytic pairs certify in closed form |
+| ABC-derived 200-feature corpus (p90 10 s row) | Anvil share ≤ 7 s p90 at `Interactive`; `SignOff` recertification p90 ≤ 30 s (CCR-ANV-7) |
+| Drag preview | Contract 13.3's 80 ms row: Anvil supplies cost estimates and `Preview` paths; later dependents show `Proxy` or `Stale` |
+| Boolean of two 500-face analytic and NURBS bodies | ≤ 200 ms at `Interactive` |
+| 50-edge constant-radius fillet chain | ≤ 500 ms at `Interactive` |
+| Tessellation of a 10,000-face part at 0.01 mm chord | ≤ 200 ms |
+| Interference of a 1,000-part assembly from warm cache | ≤ 1 s |
+| Conforming tetrahedralization of 10⁶ elements | ≤ 10 s on 8 cores |
+| Flux interactive update, Anvil stages | Rebuild ≤ 150 ms; classification and distance ≤ 200 ms |
+| GP2 lattice sections at 50 µm, no global mesh | ≤ 60 s, peak memory ≤ 2 GiB |
+| GP2 lattice mesh export at 2 × 10⁷ triangles | ≤ 60 s on the high band |
+| Million-triangle mesh Boolean | Set by the phase 0 bake-off |
+
+A phase 0 spike measures certified SSI and Boolean costs on ABC face pairs and publishes the 200-feature benchmark's operation mix and per-operation budgets before these targets freeze.
+
+| Capability | Contract | Failure | Oracle id | Phase |
+| --- | --- | --- | --- | --- |
+| `Preview` fidelity | Surrogates and GPU evaluation; never in the shared cache | — | ANV-O-FID-1 | 1 |
+| `Interactive` fidelity | Floating-point decisions validated after the fact | Validation failure recomputes at `SignOff` | ANV-O-FID-1 | 1 |
+| `SignOff` recertification | Certified results replace `Interactive` ones in the background | — | ANV-O-FID-1 | 1 |
+| Deterministic parallel scheduling | Identical bits for any thread count, ISA level and GPU presence | — | ANV-O-DET-1 | 0 |
+| Performance budgets | The targets above, per merge batch | Regressions in deterministic work counts block merges | ANV-O-PERF-1 | 1 |
 
 ## State of the art
 
-Targets in this table are targets, measured on the phase-0 reference laptop unless stated.
+Figures in the last column are targets unless quoted.
 
-| Component | Best published method | Leading implementation to beat | Crucible's choice | How we measure |
+| Area | Best published method | Leading implementation to beat | Crucible's choice (build, reuse or avoid) | How we measure |
 | --- | --- | --- | --- | --- |
-| Linear predicates | Adaptive expansion arithmetic [Shewchuk 1997]; indirect predicates for constructed points [Attene 2020] | Shewchuk's public-domain C; Geogram | Own build-time generator in safe Rust, both families (D-ANV-5) | Throughput on random and near-degenerate inputs; target within 1.2× of Shewchuk's C; exactness against rational arithmetic on 10⁸ fuzzed cases |
-| Mesh Booleans | Exact local arrangements [EMBER 2022]; exact arrangements with indirect predicates [Cherchi et al. 2022]; exact Weiler model [Lévy 2024]; topological aggregation [trueform 2026] | Manifold; EMBER's reported 1.6 ms geometric mean on 1,000 Thingi10K pairs | Exact arrangement on unquantized `f64` with checked output rounding (D-ANV-20) | Thingi10K pairs and Lévy's thingiCSG; target 100% valid outputs, at most 2× EMBER's per-pair time (deviation reason as in the performance targets), and faster than the current Manifold release on the same pairs |
-| B-rep Booleans | Imprint, join and select with local tolerances [Jackson 1995]; cellular arrangement | Parasolid, ACIS, CGM; OCCT 8.0 as the open reference | Cellular arrangement with certified SSI and tolerance rule (D-ANV-19) | Boolean pairs built from ABC models with rigid offsets, including coincident and tangent cases; target a success rate above OCCT 8.0's with 100% `check_body`-valid outputs; Parasolid compared through a licensed plugin where a partner holds a license |
-| Surface-surface intersection | Topology-guaranteed B-spline SSI [Yang et al. 2023]; interval algebraic topology analysis [Cheng et al. 2023] | ACIS, OCCT, SISL as compared in Yang et al. | Subdivision, normal-cone loop exclusion, Krawczyk on the critical-point system, certified marching (D-ANV-16) | Reconstructed hard-case suites of both papers plus face pairs from ABC; target correct branch topology on every suite case and at most 2× OCCT time on transversal cases. Deviation: certification costs time, and correct topology comes first |
-| GPU SSI acceleration | GPU box hierarchies with curvature-inflated bounds [Krishnamurthy et al. 2008]; dense sampling with distance thresholds (patented) [US12229885B1] | Zoo's engine | GPU sampling orders work, exact integer GPU culling prunes, CPU certified solves decide (D-ANV-17) | Output equality with and without GPU; candidate-set equality with CPU; speedup on ABC face pairs and 1,000-part assemblies; target ≥ 3× over the CPU-only path on the reference laptop |
-| Tolerance model | Local tolerances on vertices and edges [Jackson 1995] | Parasolid; CGM's tolerant modeling [CGM Modeler] | Scale-relative resolution, per-entity tolerances, certified three-way decisions with capped growth (D-ANV-3, D-ANV-4) | Healing success and tolerance-growth statistics on ABC's STEP files [STEP distribution unverified]; MEMS and ship-scale suites |
-| Implicit evaluation | Interval tape pruning on GPU [Keeter 2020]; Lipschitz pruning [Barbier et al. 2025]; affine range analysis [Sharp and Jacobson 2022] | Prospero challenge: a NEON interpreter at 0.29 ms on an M1 MacBook Air (bytecode generation excluded); Fidget at 6.3 ms on an M1 Max; MPR at 3.9 ms on a V100 [Prospero] | SIMD interpreter with interval, affine and Lipschitz pruning; shared kernel IR; WGSL interpreter for previews (D-ANV-11) | Prospero 1024² render; target within 2× of 0.29 ms on comparable CPU hardware with bytecode generation excluded, and total time including tape compilation reported |
-| Implicit meshing | Manifold dual contouring; occupancy-based dual contouring [Hwang and Sung 2024] | libfive; Fidget | Certified adaptive dual contouring with monotone-cell certification | Hausdorff error to dense references, manifoldness 100%, time at fixed accuracy; target ≤ libfive time at equal accuracy |
-| Tetrahedral meshing | Conforming CDT with indirect predicates [Diazzi et al. 2023]; envelope meshing [fTetWild 2020] | TetGen (378 failures of 4,408); fTetWild | Both strategies; exact validity check after rounding | The 4,408 valid Thingi10K models; target 100% success, with the conforming stage within the published 4.3 s single-core mean and quality improvement timed separately |
-| Curved high-order meshing | 3D Bézier guarding [Khanteimouri and Campen 2023]; bijective coarse high-order meshes [Jiang et al. 2021] | bichon | Guarding on polynomial faces, project-certify-untangle elsewhere | 100% positive Bernstein Jacobian coefficients; boundary error; element count against bichon |
-| Hex-dominant meshing | Field-guided polyhedral agglomeration [Gao et al. 2017] | The authors' implementation [license unverified] | Adopt the method; all-hex only by sweeping | Validity 100%; hex fraction reported on a Thingi10K subset, no promise |
-| Boundary layers | Semi-structured curvilinear layers with isoparametric splitting [Marcon et al. 2019] | NekMesh [license unverified] | Advancing layers with exact collision tests; isoparametric splitting for curved layers | First-layer height within 5% on 95% of faces (target); validity 100% |
-| Quad remeshing | Feature-line driven quad remeshing, under 0.5% failures on Thingi10K [Pietroni et al. 2021] | The authors' results | Adopt for quad mode | Failure rate on Thingi10K; target ≤ 0.5% |
-| Decimation | Quadric error metrics [Garland and Heckbert] | Not verified for this draft; chosen in phase 1 [unverified] | QEM with verified Hausdorff bound per collapse | Hausdorff error at fixed triangle budgets on Thingi10K |
-| Subdivision surfaces | Feature-adaptive limit evaluation [Nießner et al. 2012]; exact evaluation [Stam 1998] | OpenSubdiv | Native Rust implementation with OpenSubdiv rules (D-ANV-13) | Limit positions within 10⁻¹² relative of OpenSubdiv (target); evaluation throughput at least OpenSubdiv's CPU path |
-| Containment and signed distance | Generalized winding numbers [Jacobson et al. 2013]; trimmed NURBS [Spainhour and Weiss 2025]; hierarchical acceleration [Spainhour, Whitlock and Weiss 2026] | Axom | Adopt all three, certified near-surface correction | Classification accuracy at ±τ/2 and ±2τ; time per query against Axom |
-| GPU NURBS evaluation | Elastic tessellation with tensor-core evaluation [ETER] | ETER (CUDA; 3.7 million patches at 30 fps) | wgpu `f32` evaluation for previews and display; CPU canonical | Patches per second at one-pixel error; target 10⁶ patches at 30 fps on the reference GPU. Deviation: lower than ETER because the portable wgpu path cannot assume CUDA tensor cores |
-| Mesh repair | Exact arrangement plus winding-number classification [Jacobson et al. 2013; Cherchi et al. 2022] | Geogram, whose exact pipeline Lévy evaluates for mesh repair on Thingi10K [Lévy 2024] | As described under mesh repair | All 10,000 Thingi10K models; target 100% valid outputs |
-| Mesh offsets | Feature-preserving mitered offsets [Cao et al. 2024] | The methods Cao et al. compare against, including Zint et al. 2023 | Adopt the method for meshes; exact Minkowski construction for B-reps | Thingi10K subset: offset error, feature preservation, validity |
-| Blends | Rolling-ball blends; setback vertex blends [Várady publication list] | Parasolid, ACIS, CGM | Staged program with stated implicit fallback | Success rate on fillet chains from ABC models; target above OCCT 8.0's at stage 1 |
-| Persistent naming | Combined topology and geometry identification [persistent naming review 2018] | Commercial history-based systems [unverified] | Provenance hashes with lineage and typed resolution errors (D-ANV-14, D-ANV-15) | Query survival under 16 seeded perturbations (D-AGT-8) on golden products; target 100% resolve-or-typed-error, zero silent re-selections |
-| Correctly rounded math | CORE-MATH (all C23 binary64 functions except compound) [correct rounding page] | LLVM libc | PLT `detmath` | Bit-identity across Tier 1 targets |
+| Predicates | Adaptive expansions [Shewchuk 1997]; indirect predicates [Attene 2020] | Shewchuk's public-domain C; Geogram, BSD-3-Clause [Geogram repository] | Build in Rust (D-ANV-5); Geogram as oracle | Throughput within 1.2× of Shewchuk's C; exactness against rationals |
+| Mesh Booleans | Local arrangements [EMBER 2022]; indirect-predicate arrangements [Cherchi et al. 2022]; exact Weiler model [Lévy 2024]; topological aggregation [trueform 2026] | Manifold, Apache 2.0 [Manifold repository]; EMBER's 1.6 ms geometric mean on 1,000 Thingi10K pairs | Bake-off (D-ANV-20); Manifold and Geogram as oracles, never linked | Thingi10K [Thingi10K 2016] pairs and thingiCSG: 100% valid; time per pair set by the bake-off |
+| B-rep Booleans and tolerances | Imprint, join and select with local tolerances [Jackson 1995] | Parasolid, ACIS and CGM, with mixed polyhedral add-ons [ACIS Polyhedra; CGM Modeler]; OCCT 8.0, LGPL 2.1 with an exception [OCCT repository; OCCT 8.0] | Build (D-ANV-4, D-ANV-19); OCCT as differential oracle outside the core | ABC-derived pairs [ABC 2019] with coincident and tangent cases: success above OCCT 8.0, 100% valid |
+| Surface–surface intersection | Topology-guaranteed SSI [Yang et al. 2023]; interval algebraic topology [Cheng et al. 2023] | ACIS, OCCT and SISL as compared by Yang et al. | D-ANV-16 | Hard-case families and ABC face pairs: correct topology on every case; ≤ 2× OCCT time on transversal pairs (deviation: certification cost) |
+| GPU acceleration of SSI | GPU box hierarchies [Krishnamurthy et al. 2008]; thresholded sampling, patented [US12229885B1] | Zoo's engine (its application is open source; the engine is not stated to be) [Zoo Design Studio v1] | D-ANV-17 | Identical output with and without a GPU; ≥ 3× over the CPU path on ABC face pairs |
+| Blends | Rolling-ball and setback vertex blends [Várady publication list] | Parasolid, ACIS, CGM; OCCT's fillet builder, which rejects contour ends where four or more edges meet [OCCT MakeFillet] | Staged program (D-ANV-29) | Re-fillet benchmark: 95% at phase 1, 97% at phase 2; OCCT on the same corpus |
+| Implicit evaluation | GPU interval pruning [Keeter 2020]; Lipschitz pruning [Barbier et al. 2025]; affine range analysis [Sharp and Jacobson 2022] | Prospero: a NEON interpreter at 0.29 ms (M1 Air), Fidget 6.3 ms (M1 Max), MPR 3.9 ms (V100) [Prospero]; Fidget, MPL 2.0 [Fidget]; nTop, whose 5.0 kernel may regenerate geometry slightly differently [nTop whitepaper; nTop 5.0 notice] | D-ANV-11; Fidget and libfive (MPL 2.0 core, GPL Studio) [libfive repository] as benchmarks | Prospero 1024²: within 2× of 0.29 ms on comparable hardware, tape generation reported separately |
+| Implicit meshing | Manifold dual contouring; occupancy-based dual contouring [Hwang and Sung 2024] | libfive; Fidget | Certified adaptive dual contouring | Hausdorff error against dense references; 100% manifold; ≤ libfive time at equal accuracy |
+| Tetrahedral meshing | Conforming CDT [Diazzi et al. 2023]; envelope meshing [fTetWild 2020] | TetGen (378 failures of 4,408); fTetWild, MPL 2.0 [fTetWild repository]; Attene's CDT, GPL or LGPL [MarcoAttene/CDT] | Build both; port methods, never link GPL code | 4,408 valid Thingi10K models: 100% success; conforming stage within the published 4.3 s single-core mean |
+| Curved and hex-dominant meshes | 3D Bézier guarding [Khanteimouri and Campen 2023]; bijective coarse meshes [Jiang et al. 2021]; field-guided agglomeration [Gao et al. 2017; hex survey 2022] | bichon, MIT with GPL CGAL dependencies [Jiang et al. 2021]; Gao et al.'s code [licence unverified] | Build | 100% positive Jacobian coefficients; boundary error; element count against bichon; hex fraction reported |
+| Boundary layers | Semi-structured curvilinear layers [Marcon et al. 2019] | NekMesh [licence unverified] | Build | First-layer height within 5% on 95% of faces |
+| Remeshing and decimation | Feature-line driven quad remeshing [Pietroni et al. 2021]; quadric error metrics [Garland and Heckbert] | The authors' published results; decimator not selected [unverified] | Build with verified bounds | ≤ 0.5% quad failures on Thingi10K; Hausdorff error at fixed budgets |
+| Subdivision | Feature-adaptive limits [Nießner et al. 2012]; exact evaluation [Stam 1998] | OpenSubdiv [OpenSubdiv repository] | Build (D-ANV-13); OpenSubdiv as oracle | Limits within 10⁻¹² relative of OpenSubdiv |
+| Containment and signed distance | Generalized winding numbers [Jacobson et al. 2013; Spainhour and Weiss 2025; Spainhour, Whitlock and Weiss 2026] | Axom, BSD [Spainhour and Weiss 2025] | Adopt all three, certified near the surface | Classification at ±τ/2 and ±2τ; time per query against Axom |
+| Cut-cell quadrature | Saye's height-function quadrature [Algoim] | Algoim, licence not stated | Implement from the papers | Positive weights; exact on polynomials to the rule's degree |
+| GPU NURBS evaluation | Elastic tessellation [ETER] | ETER, CUDA, 3.7 million patches at 30 fps | wgpu `f32` for previews and display | 10⁶ patches at 30 fps on the reference GPU (deviation: no tensor cores through wgpu) |
+| Mesh repair and offsets | Arrangements with winding numbers [Jacobson et al. 2013; Cherchi et al. 2022]; mitered offsets [Cao et al. 2024] | Geogram [Lévy 2024]; methods Cao et al. compare | Build | Every Thingi10K model repaired valid; offset error, feature preservation |
+| Persistent naming | Combined topology and geometry identification [persistent naming review 2018] | Commercial history-based systems [unverified] | D-ANV-14, D-ANV-15, D-ANV-25 | Zero silent re-selections (ANV-O-NAME-2); Git round trips (ANV-O-SITE-1) |
+| Rust kernels | NURBS topology with Booleans [Truck repository] | Truck, Apache 2.0; Fornjot, archived 19 June 2026, "goals were never reached" [Fornjot repository] | Not adopted; Fornjot's lesson ties every capability to a golden product | — |
+| Supporting crates | Correctly rounded math [correct rounding page]; arenas [slotmap docs]; intervals [inari docs] | CORE-MATH; `slotmap`, Zlib; `inari`, MIT | `detmath` (PLT); reuse `slotmap`; `inari` as reference (no cross-target identity stated) | Bit identity on every Tier 1 target |
+
+**Decision D-ANV-23:** Anvil builds its kernel natively in Rust and links no external geometry kernel; OCCT, Manifold, Geogram, OpenSubdiv, fTetWild, libfive and Axom serve as differential oracles and benchmarks outside the core. *Why:* the core must be Rust, free of GPL linking, identical in native and Wasm builds and frozen per version, which C++ dependencies cannot guarantee; independent implementations catch errors that self-consistent tests miss. *Rejected:* wrapping OCCT (LGPL linking, C++ in Wasm, no control of numerics or naming); building on Truck (no cellular topology, per-entity tolerances or provenance).
 
 ## Platform notes
 
 | Risk | Platforms | Decision |
 | --- | --- | --- |
-| Transcendental functions differ across libm implementations | All | Only PLT `detmath`; Rust's `sin` and `exp` are banned in Anvil crates by a lint, since their precision "varies by platform" [Rust f64 docs] |
-| Hardware FMA absent on the x86-64-v2 baseline | Windows and Linux x86-64 | TwoProduct uses Dekker splitting there and `mul_add` elsewhere; both give the exact error term, so bits match (D-PLT-2 dispatch) |
-| Flush-to-zero or denormals-are-zero set by a foreign library | All native | Operation entry asserts the IEEE default control state, as Flux does; a violation is a typed internal error |
-| NaN bit patterns non-deterministic | All, including Wasm | Finiteness checked at every construction; the encoding rejects NaN and infinity |
-| Relaxed SIMD instructions may behave differently across platforms; Wasm 3.0 defines an optional deterministic profile [Wasm 3.0] | Browsers and Wasm components | Anvil never emits relaxed SIMD; canonical lanes use only deterministic SIMD128 operations |
-| wasm32 memory ceiling of 4 GiB | Browsers | Body leaves stream from the CAS; operations whose fuel estimate exceeds the browser memory budget run on a team server or cloud worker with identical results, by the `cpu-f64` class |
-| No JIT on iPadOS App Store builds, where Wasm runs on the Pulley interpreter (PLT tab) | Tier 2 | The tape interpreter is the canonical evaluator (D-ANV-11), so no feature depends on JIT |
-| Wasm threads need cross-origin isolation | Browsers | Without it, operations run single-threaded with identical results, only slower |
-| WebGPU missing or limited, for example Chrome on most Linux GPUs and Firefox on Linux (PLT tab) | Browsers | Every GPU kernel has a CPU path; integer culling falls back to CPU hierarchies, previews to CPU tessellation |
-| GPU driver variance in `f32` math | All GPU | GPU results never define canonical outputs (D-ANV-17); preview differences across vendors are accepted and labeled |
-| Long GPU dispatches reset by the OS (Windows timeout detection) | Windows | Dispatches split into chunks under the PLT time budget; a lost device falls back to CPU |
-| SVE not yet usable from stable Rust | ARM64 servers | NEON paths with the same canonical lanes, per the PLT tab |
-| 32-bit x87 rounding | Not Tier 1 | Unsupported; RFC 3514 lists it as a known violation |
-
-All Anvil behavior is identical on Tier 1 desktops and browsers. Tier 2 devices run the same code; limits of memory and threads only lengthen times or move large operations to a server. Tier 3 platforms join the `cpu-f64` class only after the determinism suite passes, as the PLT tab requires.
+| Elementary functions differ between libraries | All | Only `detmath`; a lint bans Rust's `sin` and `exp`, whose precision the documentation calls non-deterministic [Rust f64 docs] |
+| No hardware FMA at x86-64-v2, and none deterministic in Wasm | x86-64 baseline, browsers | Dekker splitting (always on wasm32), `mul_add` by ISA level elsewhere; identical error terms |
+| Flush-to-zero set by a foreign library | Native | Operation entry asserts the IEEE default state; a violation is a typed internal error |
+| Non-deterministic NaN bits [RFC 3514; Wasm nondeterminism] | All | Finiteness checked at every construction; the encoding rejects NaN and infinity |
+| Relaxed SIMD may differ across platforms; Wasm 3.0 offers an optional deterministic profile [Wasm 3.0] | Browsers, Wasm components | Never emitted |
+| Browser memory | Browsers | Contract 9's tiers: estimates above 512 MiB run in a heavy worker, larger ones remotely, with identical canonical results |
+| No JIT for App Store apps | iPadOS | Wasm runs in WebKit with Pulley as fallback (contract 7.4); the interpreter-first tape design needs no JIT |
+| WebGPU missing or limited | Some Linux and Firefox configurations | Every GPU path has a CPU path |
+| GPU driver variance and timeout resets | All GPUs, Windows | GPU results never canonical; known-answer tests per pipeline (contract 7.3); chunked dispatches; device loss is an Abort and reruns on the CPU |
+| Tier 1 preview targets in phase 1 | Windows ARM64, Linux ARM64, Safari, Firefox | Same canonical bits, verified by the determinism suite before general availability |
 
 ## Interfaces with other subsystems
 
@@ -1619,118 +897,139 @@ All Anvil behavior is identical on Tier 1 desktops and browsers. Tier 2 devices 
 
 | To | What | Types |
 | --- | --- | --- |
-| Ingot and std | The operation catalog with behavior versions; role vocabularies per operation; query plan evaluation | `Body`, `EntityId`, `HistoryRecord`, `Query` resolution results and `ResolveError`, `OpError` with `Fix`es, `ErrorBound` |
-| Kiln | Pure, deterministic operations with canonical argument hashing, fuel accounting and cancellation points; the operation registry with version status | `Op` cache-key inputs (name, version, argument hashes), `Canonical` encodings, Body content hashes |
-| CAS | Canonical Body encodings; brick caches for implicits; tessellation levels | SHA-256 content hashes |
-| Flux | `GeometryQuery` on all representations; `tetrahedralize`, `hex_dominant`, `boundary_layer`, `refine_mesh`, `adapt_mesh`, `optimize_mesh`, `untangle`, `polyhedral_mesh`; `shape_velocity`; `implicit_from_field`; `common_refinement`; display tessellation with `(EntityId, u, v)`; deterministic hierarchies | `Body`, `Field`, `ErrorBound`, `HistoryRecord` |
-| Mechanical (MEC) | Every operation in its lists, under the canonical names above; `solve_constraints` and `analyze_constraints` as versioned operations; per-entity tolerances; recognition of aspects and relations | `Body`, `EntityId`, `Field` |
-| Manufacturing (MFG) | `section`, `offset_curve`, `medial_axis`, `tool_contact`, `swept_volume`, `distance`, `interference`, `deform`, `split`, `extend`, `visibility`, `draft_map`, `voxelize`, `correlate_grids`, `fit`, `boolean` | `Body`, `Field`, `ErrorBound` |
-| Electronics (ELX) | Extrusion of board outlines and copper as multi-region Bodies; imprint and conformal meshing for electro-thermal models | `Body` with regions |
-| UI (UIX) | Display tessellations with levels of detail and back-references; GPU preview kernels for NURBS, SubD and implicits; analysis Fields | `Body` (Mesh), `Field` |
-| Agents (AGT) and `api` | `inspect.entity` data (kind, geometry type, adjacency, provenance chain); query resolution with ranked fixes; deterministic perturbation runs for D-AGT-8 | `EntityId`, `HistoryRecord`, `ResolveError` |
-| `io/` | Building, healing and matching imported Bodies; NURBS approximation for export; tessellation for 3MF, glTF, STL and OBJ | `Body`, `ErrorBound` |
+| Ingot and std | Operations with versions, role vocabularies and per-parameter `Query` use; `anvil::resolve` with ranked, compiling fixes; tangent rules and `shape_velocity`; `check_body` | `Body`, `EntityId`, `HistoryRecord`, `ResolveError`, `OpError` |
+| Kiln | `OpImpl`s with grades, effective-fidelity maps, cost estimates and two-stage keys; `GeometryId` and `ObjectId`; `Failure` values only, never Aborts | `OpKey` inputs, `GeometryId`, `ObjectId` |
+| `repo` | Interference and regional deviation for the merge rule; `GeometryId`s for revision identity | `Body`, `EntityId` |
+| Flux | `GeometryQuery` with positive-weight quadrature; `mid_surface`, `member_axes`, lattice strut graphs; meshing and adaptation operations; `shape_velocity`; `implicit_from_field`; `common_refinement`; display tessellation with back-references | `Body`, `Field`, `FaceBound` |
+| MEC | The operations catalog and phases in the capability tables, copied verbatim; blend targets of D-ANV-29; the constraint solver; per-entity tolerances | `Body`, `EntityId`, `Field` |
+| MFG | Sections, offsets, tool contact, per-move envelopes, distance, interference, deform, visibility, voxels, grid correlation, toolpath wire Bodies | `Body`, `Field` |
+| ELX | `anvil-planar` operations, `fold` for flex circuits, convex decomposition | `Body` |
+| UIX | `DisplayPackage`; the WGSL tape interpreter for implicits during edits; control-vertex previews; exact measures, sections, silhouettes, ray casts | `DisplayPackage`, `Body` |
+| AGT and `api` | Entity inspection with provenance; fixes; geometry diffs (volumes added and removed, Hausdorff deviation) | `EntityId`, `ResolveError` |
+| ECO and `io/` | Builders, healing within the CAx-IF corpus in phase 1, the imported-id rule (D-ANV-31) and `import_map`, the topology normal form and `exchange_form`, tessellation for 3MF, including beam lattices [3MF beam lattice repository; 3MF beam lattice spec] | `Body`, `ErrorBound` |
+| PLT | Per operation: grade, GPU paths with their roles, cross-class agreement and determinism-suite corpora | `DeterminismGrade` |
+
+Canonical names for names used in round 1 (contract 7.1 makes this catalog canonical):
+
+- MEC: `section_body` → `section`; `extend_face` → `extend`; `implicit_from_brep`, `brep_from_implicit`, `subd_to_brep` → `convert`; `fit_nurbs`, `fit_primitive` → `fit`; `icp` → `align`; `thickness_ray` → `thickness` with `method: Ray`; `sample_surface` → `sample`; `evaluate_curve` → `evaluate`; `approximate_curve`, `approximate_surface` → `approximate`; `offset_body` → `offset`; `draft_faces` → `draft`; `delete_face`, `replace_face` → `delete_faces`, `replace_faces`; `helix` → `curve` with `Helix`.
+- MFG: `slice` → `section`; `offset_curves_2d` → `offset_curve`; `medial_axis_2d` → `medial_axis`; `extend_surface` → `extend`; `tool_drop`, `tool_push` → `tool_contact`; `collide` → `interference`.
+- ELX: `planar_boolean`, `planar_offset` → `planar::boolean`, `planar::offset`; the proposed flex bend operation → `fold`.
 
 ### Anvil requires
 
-| From | What | Canonical names and types |
-| --- | --- | --- |
-| Ingot (ING) | A stable syntax-node identity per call site, delivered as `OpSite`; lowering of `Query` to `QueryPlan`; lockfile entries for operation pins; dimension checking before operations run | `OpSite`, `Query`, lockfile |
-| Kiln (KLN) | `OpSite` as an input of every Anvil Op, cached in two stages (CCR-ANV-5); fuel budgets per Op; cancellation that discards results; scheduling of independent Ops; storage of Preview results outside the shared cache | `Op`, CAS |
-| Flux (FLX) | `flux-field` below `anvil-mesh` (CCR-FLX-6); `Sampler` with requested accuracy and error per sample; Lipschitz or gradient bounds per Field where known; Field domains `Body`, `Faces` and `Edges` | `Field`, `ErrorBound`, `Sampler` |
-| Platform (PLT) | `detmath` correctly rounded functions with interval-friendly accuracy guarantees; `simd` canonical lanes; `gpu` with a CPU fallback per kernel; deterministic `runtime` combinators; toolchain archiving for frozen behavior versions | `PlatformClass` (`cpu-f64` for every canonical Anvil result) |
-| `repo` | Syntax-tree CRDT node identities stable across merges, which `OpSite` depends on | Node ids |
-| Mechanical (MEC) | Role vocabularies for features, delivered as `FeatureRole` attributes; constraint semantics for `solve_constraints` | `EntityId`, attributes |
+| From | What |
+| --- | --- |
+| PLT | `detmath`, canonical `simd` lanes, `det_sum` and `exact_sum`, `gpu` with registered CPU paths and known-answer tests, `linalg`, toolchain archiving for frozen versions |
+| Kiln | Two-stage keys, effective fidelity in keys, Aborts never cached, `Preview` results outside the shared cache, `rng` streams keyed without names |
+| Flux | The `field` crate below Anvil; `Sampler`s with per-sample error and gradient bounds; the filtered, projected density for extraction; the shell and beam criterion that marks regions |
+| Ingot | Text-derived `OpSite`s; `QueryPlan`s; named sub-entities of sketch helpers (`rect` gives `left`, `right`, `bottom`, `top`); `InputSensitivity` records; the `Truth` rule |
+| MEC | Feature role vocabularies and `FeatureRole` attributes; constraint semantics; glyph outlines from `text` |
 
 ## Oracles
 
-Oracles live in the protected `oracles/anvil/` directory. Every operation's oracle also runs `check_body` on outputs, checks history coverage, and replays the run on every Tier 1 target for bit identity.
+Oracles live in the protected `oracles/anvil/` directory. Held-out ABC and Thingi10K subsets, chosen by a fixed hash rule, stay outside the agent-readable tree.
 
-| Id | Verifies | Method | Phase |
-| --- | --- | --- | --- |
-| ANV-O-DET-1 | Determinism | Every corpus run repeated with 1, 2, 7 and 64 threads, with and without GPU, on all Tier 1 targets; output hashes identical | 0 |
-| ANV-O-SCALE-1 | Scale invariance | Corpus models with their frame at the origin, scaled by 2⁻²⁰ to 2²⁰; outputs equal the scaled outputs bit for bit | 0 |
-| ANV-O-PRED-1 | Exact predicates | 10⁸ random and adversarial near-degenerate cases against rational arithmetic | 0 |
-| ANV-O-TOL-1 | Tolerance rule | Synthetic coincident, near-coincident and tangent pairs at distances τ/2, τ, 2τ; decisions and recorded growth match the specification | 1 |
-| ANV-O-GEOM-1 to 3 | Evaluation, sampling, approximation | Closed forms for analytic geometry; NURBS against exact rational evaluation in big rationals; certified deviation of approximations | 0 |
-| ANV-O-OP-1 to 8 | Construction operations | Closed-form volumes, areas, centroids (prisms, Pappus solids, tori, springs); interpolation of sections and networks; continuity | 0 to 2 |
-| ANV-O-SSI-1 to 3 | Intersections | Closed-form quadric pairs; the hard-case families of Yang et al. and Cheng et al. reconstructed as test cases; branch counts and topology; random rigid perturbations below τ must not change topology | 1 |
-| ANV-O-BOOL-1 | Boolean algebra | A ∪ A = A, A − A = ∅, A ∩ B ⊆ A, De Morgan identities; volumes satisfy inclusion-exclusion within bounds | 1 |
-| ANV-O-BOOL-2 | Manifold's perturbation cases | Touching cubes merge in a union; an equal-height difference cuts through; self-difference is empty | 1 |
-| ANV-O-BOOL-3 | Mesh Booleans at scale | Thingi10K pairs and thingiCSG: 100% valid outputs; volumes against exact rational references | 1 |
-| ANV-O-BOOL-4 | B-rep Booleans on real models | ABC-derived pairs with coincident and tangent configurations; differential comparison with OCCT 8.0 where both succeed | 2 |
-| ANV-O-BOOL-5, 6 | Split and imprint | Piece volumes sum to the input; imprint leaves volume and area unchanged | 1 |
-| ANV-O-BLEND-1 to 4 | Blends | Closed-form toroidal and cylindrical blends; spine distance; G1 and G2 continuity; volume changes on straight edges | 1 to 4 |
-| ANV-O-OFF-1 to 4 | Offsets, shells, thickening, shrinkwrap | Exact offsets of spheres, cylinders, tori and boxes; Hausdorff distance equals \|d\|; shelled volumes; skin containment | 1 to 2 |
-| ANV-O-DRAFT-1 | Draft | Angles of drafted faces | 2 |
-| ANV-O-TRIM-1, 2 | Trim and extend | Kept sides; continuity at extension | 1 |
-| ANV-O-XF-1, ANV-O-PAT-1 | Transforms and patterns | Round trips; copy counts and placements | 0 to 1 |
-| ANV-O-HEAL-1, 2 | Sewing and healing | Exploded solids re-sew; healed imports pass `check_body` within reported deviation | 1 |
-| ANV-O-DE-1 to 3, ANV-O-REC-1, 2 | Direct edits and recognition | Volume identities; labeled aspect sets | 2 |
-| ANV-O-MID-1 | Mid-surfaces | Known plate and sheet-metal mid-surfaces; thickness Fields | 2 |
-| ANV-O-SEC-1, ANV-O-PROJ-1, 2, ANV-O-PAR-1, ANV-O-SM-1 | Sections, projection, wrap, flattening, unfold | Section areas against integrals; preserved lengths; fold of unfold equals input | 1 to 2 |
-| ANV-O-DEF-1, 2 | Deform and morph | Rigid Fields equal `transform`; deviation bounds | 2 to 3 |
-| ANV-O-MESH-1 to 4 | Mesh construction, repair, segmentation, common refinement | Thingi10K: all repaired outputs valid; volumes against winding-number references; overlay areas | 0 to 4 |
-| ANV-O-TET-1 | Tetrahedralization | 4,408 valid Thingi10K models: no inverted elements, boundary conformity or envelope bound, region volumes | 2 |
-| ANV-O-HO-1 | Curved elements | Positive Bernstein Jacobian coefficients; boundary error | 2 to 3 |
-| ANV-O-HEX-1, ANV-O-BL-1 | Hex-dominant and boundary layers | Validity; conformity; first-layer heights | 3 to 4 |
-| ANV-O-REM-1 | Remesh, decimate, smooth | Reported Hausdorff bounds hold under certified measurement | 1 to 3 |
-| ANV-O-SUBD-1 | Subdivision | Limit positions against OpenSubdiv; regular cages equal bicubic B-splines | 3 |
-| ANV-O-IMP-1 to 4 | Implicits | Interval enclosures contain sampled values; Lipschitz bounds hold on random segments; pruned tapes equal full tapes in each region; iso-surfaces of analytic Fields within the reported bound | 1 |
-| ANV-O-LAT-1 | Lattices | Volume fractions of TPMS and strut lattices; minimum thickness | 1 |
-| ANV-O-CONV-1 | Conversions | Every conversion's reported bound holds under independent certified Hausdorff measurement | 1 |
-| ANV-O-MP-1 | Mass properties | Closed forms; agreement across representations within bounds | 0 to 1 |
-| ANV-O-DIST-1 to 5 | Distance, closest point, interference, ray casting, deviation | Closed forms for analytic pairs; agreement across representations | 0 to 1 |
-| ANV-O-AN-1 to 7 | Analyses | Closed-form curvature, continuity, draft, thickness, medial axes, silhouettes, visibility | 1 to 3 |
-| ANV-O-CLS-1 to 3 | Classification | Points at ±τ/2 and ±2τ; agreement across representations | 0 to 1 |
-| ANV-O-TESS-1 | Tessellation | Certified chord bounds; watertightness; EntityIds on face groups | 0 |
-| ANV-O-NAME-1 | History coverage and soundness | The four properties of `HistoryRecord` on every operation in the corpus | 0 |
-| ANV-O-NAME-2 | EntityId stability | For each golden product, 16 seeded parameter perturbations within declared ranges: every query resolves to the same lineage or returns a typed error; zero silent re-selections | 1 |
-| ANV-O-NAME-3 | Worked examples | The four worked examples in this tab, as executable tests | 1 |
-| ANV-O-NAME-4 | Import matching | Edited copies of ABC models with known edits, re-exported through STEP | 2 |
-| ANV-O-VER-1 | Behavior versions | Frozen-module hashes; golden output hashes of every active, deprecated and retired version reproduced after toolchain upgrades | 0 |
-| ANV-O-ENC-1 | Encoding | Round trip is bit-identical; every past major version decodes; canonical text form matches binary | 0 |
-| ANV-O-SV-1 | Shape velocity | Finite differences agree within step-size error | 2 |
-| ANV-O-FIT-1, 2, ANV-O-VOX-1, 2, ANV-O-MFG-1 to 3, ANV-O-DRAPE-1 | Fitting, voxels, manufacturing geometry, draping | As listed in the catalog | 1 to 4 |
-| ANV-O-FUZZ-1 | Robustness under random use | Property-based generation of operation sequences (primitives, Booleans, blends, offsets, patterns, conversions) with random and near-degenerate placements; every result is valid, deterministic and consistent with the algebraic identities, or a typed error; failures are minimized automatically and added to the corpus | 0 onward |
-| ANV-O-PERF-1 | Performance regressions | The State of the art benchmarks and the targets table, run per merge batch on the reference laptop; deterministic work counts (subdivisions, predicate escalations, allocations) block merges on regression, and wall-clock regressions above 10% are flagged for human review | 1 onward |
-
-Held-out models never shown to agents include ABC and Thingi10K subsets selected by a fixed hash rule and stored outside the agent-readable tree, as the contract requires.
+| Id | Verifies | Pass criterion |
+| --- | --- | --- |
+| ANV-O-DET-1 | Determinism | The corpus at 1, 2, 7 and 64 threads, on forced x86-64 v2, v3 and v4, ARM64 and wasm32, with and without a GPU, gives identical output hashes |
+| ANV-O-DET-2 | Order-free tolerance rounds | Chains of three or more entities spaced at τ ± ρ/2⁹, with shuffled pair orders and 1 to 64 threads, give identical bits |
+| ANV-O-LABEL-1 | Label invariance | Golden products rebuilt with re-randomized `EntityId`s and `OpSite`s give identical `GeometryId`s and check values |
+| ANV-O-SITE-1 | Text-derived names | Golden products exported to Git, re-imported and rebuilt keep every `EntityId` |
+| ANV-O-CACHE-1 | Cross-design sharing | Two designs that build the same geometry at different sites share every geometric-stage entry along a 20-operation chain |
+| ANV-O-SCALE-1 | Scale invariance | Bodies framed at the origin and scaled by 2⁻²⁰ to 2²⁰ give the scaled outputs bit for bit |
+| ANV-O-PRED-1 | Predicates | 10⁸ random and near-degenerate cases give the signs of rational arithmetic |
+| ANV-O-TOL-1 | Decision rule | Coincident, near-coincident and tangent pairs at τ/2, τ and 2τ give the specified decisions and recorded growth |
+| ANV-O-VALID-1 | Body checker | Every planted violation of the four conditions is reported; valid Bodies give no report |
+| ANV-O-VALID-2 | Global separation | Planted far-field clashes in `offset_faces`, `move_faces`, `draft`, `shell`, `thicken` and `blend` corpora all fail with `SelfIntersecting` |
+| ANV-O-VER-1 | Frozen versions | Frozen module hashes are unchanged; every version's golden output hashes, retired ones from archived Wasm builds, reproduce after toolchain and `detmath` upgrades |
+| ANV-O-ENC-1 | Encoding | Binary and text round trips are bit-identical; every past major version decodes; decode(encode(v)) = v for every operation output, signed zeros included |
+| ANV-O-ENC-2 | Minor-version invariance | Golden-corpus identities are unchanged across minor encoding releases |
+| ANV-O-GEOM-1 to ANV-O-GEOM-3 | Evaluation, sampling, approximation | Closed forms for analytic geometry and exact rational NURBS evaluation agree; samples are deterministic and cover; certified deviation stays within the request |
+| ANV-O-LAW-1 | Law curves and surfaces | Interval enclosures contain dense samples; evaluation equals the kernel IR reference |
+| ANV-O-PROC-1 | Procedural nesting | Flattened constructions stay within propagated bounds; cost on blend-heavy ABC parts is reported |
+| ANV-O-NF-1 | Topology normal form | An `exchange_form` re-imported keeps analytic and NURBS geometry bit-identical, procedural geometry within its stored bound and topology equal in normal form |
+| ANV-O-HEAL-1 | Sewing | Exploded solids re-sew exactly; ABC STEP files close, with free edges reported |
+| ANV-O-HEAL-2 | Healing | Healed CAx-IF and ABC imports pass `check_body` within the reported deviation |
+| ANV-O-NAME-1 | History | Coverage, kind, soundness and canonical order hold on every operation of the corpus, transient pieces included |
+| ANV-O-NAME-2 | Query stability | Over full declared ranges, endpoints included, and ±10%, every golden-product query resolves to the same lineage, raises a typed error or reports `RankSwap`; zero silent re-selections |
+| ANV-O-NAME-3 | Worked example | The worked example runs with the stated records, errors and fixes |
+| ANV-O-NAME-4 | Imported names | Supplier re-exports keep ids where persistent ids exist; edited ABC copies re-exported through STEP match their ground-truth pairs |
+| ANV-O-NAME-5 | Fixes | Every `Fix` on the golden products and the `ResolveError` corpus compiles, resolves and matches its description |
+| ANV-O-COPY-1 | Copies | `half + mirror(half, plane.yz)` and two-Instance features give distinct ids; queries on the seed resolve to the seed only |
+| ANV-O-SSI-1 to ANV-O-SSI-3 | Surface intersection | Closed-form quadric and NURBS–analytic pairs exact in branch count and topology; Yang et al.'s and Cheng et al.'s hard-case families topologically correct and stable under perturbations below τ; general ABC face pairs equal a high-precision reference |
+| ANV-O-CONTACT-1 | Tangential contact | Fillet on fillet, cylinder on plane, sphere in cylinder and a blend face cut through its contact curve each give one tangential edge and no spurious coincidence region |
+| ANV-O-BOOL-1 to ANV-O-BOOL-6 | Booleans, split, imprint | Algebraic identities and inclusion–exclusion within bounds; Manifold's three cases; Thingi10K and thingiCSG pairs 100% valid with exact reference volumes; ABC B-rep pairs differential against OCCT 8.0; split pieces sum to the input; imprint keeps volume and area |
+| ANV-O-TRIM-1, ANV-O-TRIM-2 | Trim, extend | Kept sides as specified; continuity at extended edges |
+| ANV-O-XF-1 | Transforms | Round trips within 8 ulp of the largest coordinate; exact for frame-grid translations and axis permutations |
+| ANV-O-PAT-1, ANV-O-PAT-2 | Patterns | Copy counts, keys and placements; a circular pattern of holes in a cylinder with reuse equals the unreused result within the reported bound |
+| ANV-O-HULL-1 | Hulls, Minkowski sums, decompositions | Hulls equal exact rational hulls; convex sums equal closed forms; decomposed parts are convex and their union lies within the bound |
+| ANV-O-BLEND-1 to ANV-O-BLEND-4 | Blend geometry | Closed-form blends on planes, cylinders and cones; spines at distance r within τ; G1 and G2 continuity; volume change on straight edges |
+| ANV-O-BLEND-5 | Blend benchmark | The re-fillet benchmark meets 95% on stage-1 configurations at phase 1 and 97% on all configurations at phase 2 |
+| ANV-O-BLEND-6 | Blend regrowth | Edits next to blends rebuild them with the same parameters and ids, or fail with `BlendRegrowFailed` |
+| ANV-O-OFF-1 to ANV-O-OFF-4 | Offsets, shells, thickening, shrinkwrap | Exact offsets of spheres, cylinders, tori and boxes at Hausdorff distance \|d\|; shelled volumes exact; skins within g |
+| ANV-O-DRAFT-1 | Draft | Drafted faces measure the requested angle within 10⁻⁹ rad |
+| ANV-O-DE-1 to ANV-O-DE-3, ANV-O-REC-1, ANV-O-REC-2 | Direct edits, recognition | Volume identities after moves and deletions; removed aspects' volumes; labelled ABC aspects with precision ≥ 0.98 on holes and fillets |
+| ANV-O-OP-1 to ANV-O-OP-8 | Construction | Closed-form volumes, areas and centroids of primitives, prisms, Pappus solids and springs; region areas; interpolated sections; network continuity |
+| ANV-O-MID-1, ANV-O-AXIS-1 | Dimensional reduction | Known mid-surfaces and thickness Fields of plates and sheet metal; axes, areas and second moments of rectangular, tube and I sections; strut graphs equal generator graphs |
+| ANV-O-SEC-1, ANV-O-PROJ-1, ANV-O-PROJ-2, ANV-O-PAR-1, ANV-O-SM-1, ANV-O-DRAPE-1 | Sections, projection, wrap, flattening, folding, draping | Section areas against integrals; lengths kept on developable targets; angle distortion within the reference; fold of unfold within τ; hemisphere drapes against published shear patterns |
+| ANV-O-DEF-1, ANV-O-DEF-2 | Deform, morph | Rigid Fields reproduce `transform`; deviation within bounds |
+| ANV-O-IMP-1 to ANV-O-IMP-4 | Implicits | Enclosures contain samples; Lipschitz bounds hold on random segments; pruned tapes equal full tapes per region; analytic iso-surfaces within the bound |
+| ANV-O-LAT-1 | Lattices | Volume fractions against closed forms or high-resolution references; certified minimum thickness |
+| ANV-O-LEAF-1 | Leaf preservation | In a B-rep joined with a lattice, kept faces carry their ids, attributes and PMI, and conversion keeps them exact |
+| ANV-O-MESH-1 to ANV-O-MESH-4 | Meshes | Builders reject non-manifold data; every Thingi10K model repairs valid with winding-number volumes; labelled segmentations; overlay areas sum to each side's |
+| ANV-O-TET-1, ANV-O-HO-1 | Tetrahedra, curved elements | The 4,408 valid Thingi10K models mesh without inverted elements, conforming or within the envelope; every Jacobian Bernstein coefficient positive |
+| ANV-O-HEX-1, ANV-O-BL-1 | Hex-dominant meshes, boundary layers | Valid and conforming; first-layer heights within 5% on 95% of faces |
+| ANV-O-ADAPT-1, ANV-O-POLY-1 | Adaptation, polyhedral meshes | Positive Jacobians, edge lengths within the metric band, volume-conserving parent maps; closed cells with positive volumes and zero face-area sums |
+| ANV-O-REM-1 | Remesh, decimate, smooth | Reported Hausdorff bounds hold under certified measurement |
+| ANV-O-SUBD-1 | Subdivision | Limits within 10⁻¹² relative of OpenSubdiv; regular cages equal bicubic B-splines; recorded crease bounds hold |
+| ANV-O-PLANAR-1, ANV-O-PLANAR-2 | Planar geometry | Predicates and distances equal rational references; every derived fill in the design-rule corpus passes the exact checker with zero tolerance |
+| ANV-O-CONV-1, ANV-O-CONV-2 | Conversions, propagation | Every reported bound holds under independent certified measurement; supports perturbed within their bounds keep derived faces within propagated bounds, near-tangent blends included |
+| ANV-O-MP-1 | Mass properties | Closed forms; agreement across representations within bounds |
+| ANV-O-DIST-1 to ANV-O-DIST-5 | Distance, interference, ray casts, deviation | Closed forms for analytic pairs; overlap volumes equal Boolean volumes; offset copies deviate by exactly the offset |
+| ANV-O-CLS-1 to ANV-O-CLS-3 | Classification | Correct at ±τ/2 and ±2τ; agreement across representations |
+| ANV-O-QUAD-1 | Simulation queries | Quadrature weights positive and exact on polynomials to the rule's degree; implicit closest points converge inside certified basins |
+| ANV-O-AN-1 to ANV-O-AN-7 | Analyses | Closed-form curvature, continuity, draft, thickness, medial axes, silhouettes and visibility |
+| ANV-O-SV-1 | `shape_velocity` | Finite differences agree within the step error; topology changes return `TopologyChange` |
+| ANV-O-TESS-1 | Tessellation | Certified chord bounds; watertight; face groups carry source ids |
+| ANV-O-MFG-1 to ANV-O-MFG-3, ANV-O-VOX-1, ANV-O-VOX-2, ANV-O-FIT-1, ANV-O-FIT-2 | Manufacturing geometry, voxels, fitting | Cutters against analytic surfaces; planted gouges found by per-move distance; swept spheres and cylinders exact; voxel volumes converge at first order; correlation equals direct integer correlation; known transforms and primitives recovered |
+| ANV-O-SOLVE-1 | Constraint solving | Blocks of 100 to 2,000 unknowns with known rank deficiencies diagnosed exactly; Krawczyk boxes contain reference solutions |
+| ANV-O-FID-1 | Fidelity | Every `Interactive` result passes `check_body`; differing `SignOff` decisions lie within ambiguity bands; `Preview` results never reach the shared cache |
+| ANV-O-FUZZ-1 | Random use | Property-based operation sequences give valid, deterministic results or typed errors; failures are minimized into the corpus |
+| ANV-O-PERF-1 | Performance | Target benchmarks run per merge batch; work-count regressions block merges; wall-clock regressions above 10% go to review |
 
 ## Phasing
 
-| Phase | Anvil deliverables | Gate contribution |
-| --- | --- | --- |
-| 0, foundations | Predicates and generator; intervals; resolution and tolerance types; geometry types (lines, conics, NURBS, planes, quadrics, tori, extrusion and revolution surfaces); cellular topology; `check_body`; encoding and text form; EntityId, history, lineage; `primitive`, `curve`, `extrude`, `revolve`, `transform`, `tessellate`, `mesh_from_triangles`, `classify_points`, `closest_point`, mass properties of meshes; operation registry and freeze check | Determinism suite (ANV-O-DET-1, SCALE-1, PRED-1, VER-1, ENC-1) green on all Tier 1 targets |
-| 1, wedge (machined bracket; topology-optimized lattice bracket) | Certified intersections and SSI with GPU work ordering and broad phase; primitive fitting; voxelization; cellular Booleans for every representation pair; constant-radius blends and chamfers; offsets, shells, thickening; split, trim, extend, imprint; patterns and mirroring; sweep and loft; sew and heal; section and projection; `make_regions`; implicit DAG, evaluators, pruning, brick cache, Field leaves and `implicit_from_field`, lattices, implicit meshing; geometry access (`evaluate`, `sample`, `intersect`, `approximate`); `classify_box` and `classify_body`; mesh repair and decimation; conversions; mass properties for all; distance, interference, ray casting, deviation; curvature, continuity to G2, thickness, 2D medial axis, silhouettes and hidden lines; `GeometryQuery`; `offset_curve`, `tool_contact` and 3-axis `swept_volume` | Golden product 1: exact bracket with fillets, drawings, toleranced checks. Golden product 2: lattice bracket from Flux density Fields, meshed for printing with stated error |
-| 2, mechanical depth (gearbox; welded frame with sheet-metal guards) | Variable-radius and conic blends; draft; helices; boundary, fill, blend and match surfaces; isophotes, draft analysis and visibility; shrinkwrap; triangle remeshing and smoothing; direct edits, recognition, defeaturing; mid-surfaces; unfold and fold; deform; parameterize and wrap; G3 analysis; conforming tetrahedralization with curved boundary elements by projection; `refine_mesh`; `untangle`; shape velocity; import matching; 3D medial axis; 5-axis swept volumes; grid correlation | Golden products 3 and 4: gears, shafts, housings, weldment mid-surfaces and sheet metal, contact meshes for Flux |
-| 3, product breadth (molded enclosure with PCB) | Setback vertex blends of any valence; subdivision surfaces and conversions; envelope tetrahedralization; Bézier guarding; sweep meshing; mesh segmentation; metric adaptation and node optimization; polyhedral meshes; quad remeshing; morphing; draft maps; GPU preview tessellation | Golden product 5: drafted, shelled enclosure with blends; multi-region electro-thermal meshes with the PCB |
-| 4, full multiphysics (drone) | Blends on blends and G3 sections; hex-dominant meshing; boundary layers; mesh-to-B-rep and subdivision-cage fitting; scan alignment; common refinement for interface transfer; kinematic draping | Golden product 6: airframe surfaces, boundary-layer meshes for airflow, composite plies |
-| 5 and later (proposed) | Ship-scale models with block-structured hull meshing; MEMS process emulation (layer deposition and etch as implicit and cellular operations); trivariate spline volumes for isogeometric analysis | New golden products per domain, coordinated with Flux's proposals |
+Gate contributions follow contract 13; the operation-to-phase detail is in the capability tables.
+
+| Phase | Anvil's contribution to the gate |
+| --- | --- |
+| 0 | Predicates, analytic geometry, topology, `EntityId` and the encoding by month 6 (contract 13.2); Anvil's corpus green in the determinism suite (ANV-O-DET-1, ANV-O-SCALE-1, ANV-O-PRED-1, ANV-O-VER-1, ANV-O-ENC-1, ANV-O-LABEL-1, ANV-O-SITE-1); freedom-to-operate review commissioned; re-fillet benchmark built; mesh Boolean bake-off and certified SSI and Boolean cost spike run before targets freeze |
+| 1 | Chain A for GP1: analytic and NURBS–analytic SSI and Booleans, tessellation and `DisplayPackage` (months 6 to 12), then stage 1 blends, chamfers, shells, holes, patterns, hidden lines and `exchange_form` for STEP AP242 (months 12 to 24). Chain B for GP2: implicit tapes on kernel IR v0, lattices from Flux Fields, leaf-preserving conversion, mesh and beam-lattice output for 3MF. Blend benchmark at 95% on stage 1. SSI stays a release risk until counsel's opinion arrives |
+| 2 | GP3 and GP4: general NURBS SSI, free-form offsets, stage 2 blends, direct edits, recognition, mid-surfaces and member axes for frames and guards, sheet-metal unfolding, conforming tetrahedra with curved elements for contact, tool contact and per-move envelopes for machining, SubD, import matching; blend benchmark at 97% |
+| 3 | GP5: corners of valence four and above, envelope meshing and guarding, adaptation and polyhedral meshes, `anvil-planar` for the board, draft maps, G3 surfaces, general wrap |
+| 4 | GP6: G3 blend sections, hex-dominant meshes and boundary layers for airflow, scan fitting, common refinement, kinematic draping |
+| 5 to 7 | GP7 masks and process emulation with `anvil-planar`, implicit and cellular operations; member axes for GP8 and GP14; block-structured hull meshing for GP13; flattening for GP16 |
 
 ## Open questions
 
-1. **Retention window.** D-ANV-18 keeps every behavior version executable forever, natively for at least 5 years and then as Wasm components. PLT and Kiln must confirm the CI cost of replaying deprecated versions and the toolchain archiving this needs.
-2. **Freedom to operate.** D-ANV-17 needs counsel's review of US 12,229,885 B1 before the GPU work-ordering path ships in phase 1; other GPU geometry patents were not searched for this draft.
-3. **Resolution default.** 2⁻³⁰ of the diagonal is a proposal. Phase 0 must measure tolerance-growth rates on ABC imports at 2⁻²⁶, 2⁻³⁰ and 2⁻³⁴ before freezing it.
-4. **Implicit-to-B-rep fidelity.** Recovering exact analytic faces from implicit leaves (phase 3) has no published method with guarantees that this draft verified; the facet path is the fallback.
-5. **Blend success targets.** No public benchmark of fillet success rates across kernels was found; Anvil must build one from ABC models and agree its target with MEC.
-6. **WGSL accuracy.** The ulp bounds of WGSL arithmetic could not be verified; until they are, GPU interval results serve previews only.
-7. **Feature roles.** The `FeatureRole` attribute answers MEC's open question 5 on feature-level roles; ING must confirm how Ingot features declare them.
-8. **Hex-dominant license.** The license of the field-guided agglomeration reference code was not verified; the method is published, and Anvil implements it independently either way.
-9. **trueform.** The July 2026 mesh-CSG paper claims large speedups with exact predicates; its license and full results must be reviewed before phase 1 locks the mesh Boolean design.
+1. **Retention cost.** D-ANV-18 keeps every version executable, natively for at least five years and then as archived Wasm builds; PLT and Kiln must confirm the CI cost.
+2. **Freedom to operate.** Counsel's opinion on claims 1, 6, 11 and 16 of US 12,229,885 B1 and any continuations, for both paths, is pending; other GPU geometry patents were not searched.
+3. **Resolution default.** Phase 0 measures tolerance growth on ABC imports at 2⁻²⁶, 2⁻³⁰ and 2⁻³⁴ of the diagonal before 2⁻³⁰ freezes.
+4. **Mesh Boolean method.** The bake-off result and trueform's licence decide D-ANV-20's implementation.
+5. **WGSL accuracy.** Until PLT verifies WGSL's error bounds, GPU intervals serve previews only.
+6. **Fitted implicit-to-B-rep faces** have no verified guarantee; facet faces are the fallback until phase 3.
+7. **Unverified licences.** Gao et al.'s hex-dominant code, NekMesh and Algoim; Anvil implements the published methods either way.
+8. **R2-36, applied in part.** The implicit fallback states its deviation per instance by certified measurement, not as a closed form in r, since the smooth union's departure from a circular section depends on the dihedral angle.
+9. **R1-16, applied in part.** Anvil states its two stage budgets; the other stages, and morphing versus `Proxy` for geometric drags, are Flux's.
+10. **R6-32, applied in part.** Direct slicing is MFG's, whose slicer arrives in phase 2; Anvil keeps the section-stack target.
+11. **Owned elsewhere.** R2-09 item 5 and R2-26's text layout belong to MEC; shared findings R1-02, R1-18, R1-19, R1-35, R1-38, R1-57, R2-15, R2-44 and R6-42 are applied to Anvil's part and left to the owning tabs otherwise.
 
 ## Contract change requests
 
-- **CCR-ANV-1. `ErrorBound` lives in `anvil-geom`.** Accept CCR-FLX-1's definition `{ value, norm, kind }` and place the type in `anvil-geom`, the lowest crate that reports geometric error, with `flux-field` depending on it. *Reason:* one type, and geometry-level code cannot depend on `flux-field`, which sits above `anvil-topo`.
-- **CCR-ANV-2. `EntityId` formula.** Amend section 5 to "hash of (kind, operation site, role, generating entity ids, discriminator)", where the operation site is the call's structural identity and excludes argument values. *Reason:* hashing parameter values into the "operation id" would rename every downstream entity on every dimension edit (D-ANV-14).
-- **CCR-ANV-3. Canonical operation names.** Adopt the canonical names in the operations catalog (for example `anvil::section` for `section_body` and `slice`, `anvil::convert` for the representation-specific conversions, `anvil::fit`, `anvil::interference`, `anvil::tool_contact`) across the MEC and MFG tabs. *Reason:* one name per concept.
-- **CCR-ANV-4. `Query` outcomes.** Add `Note` outcomes to section 5's `Query`: a successful resolution may carry notes such as `Merged` and `FragileAnchor`, and checks may forbid notes. *Reason:* merges change an entity's extent without changing its meaning; users need to see this without the query failing.
-- **CCR-ANV-5. `OpSite` as an Op input.** State in section 5 that an Anvil `Op`'s inputs include its operation site, so the site enters the cache key of the cheap relabeling step while the geometric core stays cached without it. *Reason:* EntityIds depend on the operation site (CCR-ANV-2), so two calls with identical inputs at different sites produce Bodies with different EntityIds.
-- **CCR-ANV-6. Predicates for curved geometry.** Amend section 7's "adaptive exact predicates for topological decisions" to "exact adaptive predicates for linear decisions; certified enclosures with explicit, recorded tolerance rules for decisions on curved geometry". *Reason:* exact predicates on NURBS, offset and blend surfaces require algebraic degrees that are impractical, while certified enclosures give the same freedom from contradictory decisions (D-ANV-4).
+- **CCR-ANV-7. Fidelity of the rebuild rows.** In contract 13.3, rename "Exact rebuild after an early edit" to "Rebuild after an early edit", state the GP1-class 2 s row at `SignOff` and the corpus p90 10 s row at `Interactive`, and add a `SignOff` recertification row (p90 ≤ 30 s, target). *Reason:* "exact" is not a fidelity name, and certified decisions on general NURBS cost more than an interactive rebuild can spend (R2-09).
+- **CCR-ANV-8. `Unknown` bounds.** In contract 5 (`Body`), replace "become `Unknown`" with "become `NotQuantified`". *Reason:* one name per concept; `Component` already defines `NotQuantified { reason }`.
 
 ## Sources
-
-Each entry gives the citation key used in this tab, then the page opened.
 
 | Key | Source |
 | --- | --- |
@@ -1782,6 +1081,7 @@ Each entry gives the citation key used in this tab, then the page opened.
 | CGM Modeler | [Spatial, CGM Modeler](https://www.spatial.com/solutions/3d-modeling/cgm-modeler) |
 | OCCT 8.0 | [Open CASCADE Technology 8.0.0 release announcement](https://occt3d.com/dev/content/open-cascade-technology-800-release/index.html) |
 | OCCT repository | [OCCT repository](https://github.com/Open-Cascade-SAS/OCCT) |
+| OCCT MakeFillet | [OCCT reference, BRepFilletAPI_MakeFillet](https://occt3d.com/dev/doc/refman/html/class_b_rep_fillet_a_p_i___make_fillet.html) |
 | Truck repository | [Truck repository](https://github.com/ricosjp/truck) |
 | Fornjot repository | [Fornjot repository](https://github.com/hannobraun/fornjot) |
 | Várady publication list | [Várady, publication list, SZTAKI](https://eprints.sztaki.hu/view/creators/V=E1rady=3AT=2E=3A=3A.html) |
@@ -1793,8 +1093,12 @@ Each entry gives the citation key used in this tab, then the page opened.
 | Thingi10K 2016 | [Zhou and Jacobson, "Thingi10K", arXiv 1605.04797](https://arxiv.org/abs/1605.04797) |
 | ABC 2019 | [Koch et al., "ABC: A Big CAD Model Dataset for Geometric Deep Learning", CVPR 2019](https://openaccess.thecvf.com/content_CVPR_2019/html/Koch_ABC_A_Big_CAD_Model_Dataset_for_Geometric_Deep_Learning_CVPR_2019_paper.html) |
 | persistent naming review 2018 | ["Mechanisms of Persistent Identification of Topological Entities in CAD Systems: A Review", Alexandria Engineering Journal](https://doaj.org/article/bf42fdae16584d0ba2d824137aba6599) |
+| Algoim | [Algoim, high-order quadrature and closest points for implicitly defined geometry](https://algoim.github.io/) |
+| CAx-IF PMI 4.1 | [CAx-IF Recommended Practices for PMI (AP242), version 4.1, 20 June 2024](https://www.mbx-if.org/home/wp-content/uploads/2024/06/rec_pracs_pmi_v41.pdf) |
+| OpenSCAD cheat sheet | [OpenSCAD cheat sheet](https://openscad.org/cheatsheet/) |
 | RFC 3514 | [Rust RFC 3514, float semantics](https://rust-lang.github.io/rfcs/3514-float-semantics.html) |
 | Rust f64 docs | [Rust `f64` documentation](https://doc.rust-lang.org/std/primitive.f64.html) |
+| Rust 1.86.0 release | [Rust 1.86.0 stabilized APIs, releases.rs](https://releases.rs/docs/1.86.0/) |
 | correct rounding page | [Correct rounding of elementary functions in IEEE 754 formats](https://reliable-computing.org/correctrounding.html) |
 | Wasm 3.0 | [WebAssembly 3.0 announcement](https://webassembly.org/news/2025-09-17-wasm-3.0) |
 | Wasm nondeterminism | [WebAssembly nondeterminism](https://www.webassembly.org/docs/nondeterminism/) |
@@ -1802,3 +1106,4 @@ Each entry gives the citation key used in this tab, then the page opened.
 | slotmap docs | [slotmap documentation](https://docs.rs/slotmap/latest/slotmap/) |
 | inari docs | [inari documentation](https://docs.rs/inari/latest/inari/) |
 | 3MF beam lattice repository | [3MF Beam Lattice extension repository](https://github.com/3MFConsortium/spec_beamlattice) |
+| 3MF beam lattice spec | [3MF Beam Lattice Extension specification 1.2.0](https://github.com/3MFConsortium/spec_beamlattice/blob/master/3MF%20Beam%20Lattice%20Extension.md) |
