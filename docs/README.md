@@ -35,7 +35,7 @@ Round 2 is in progress: each tab is revised against contract v4.2 and the review
 | ING | v2 | 19,600 | 47 (6) | No |
 | ANV | v2 | 19,900 | 61 (8) | v2 |
 | FLX | v2 | 17,900 | 66 (7) | No |
-| COV | v1 | 17,500 | 33 (5) | No |
+| COV | v2 | 17,800 | 33 (5) | No |
 | KLN | v1 | 25,500 | 79 (12) | No |
 | MEC | v1 | 19,600 | 45 (2) | No |
 | MFG | v1 | 23,900 | 41 (3) | No |
