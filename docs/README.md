@@ -38,7 +38,7 @@ Round 2 is in progress: each tab is revised against contract v4.2 and the review
 | COV | v2 | 17,800 | 33 (5) | No |
 | KLN | v1 | 25,500 | 79 (12) | No |
 | MEC | v2 | 17,900 | 45 (2) | No |
-| MFG | v1 | 23,900 | 41 (3) | No |
+| MFG | v2 | 17,800 | 41 (3) | No |
 | ELX | v1 | 23,200 | 36 (4) | No |
 | AGT | v1 | 22,300 | 42 (7) | No |
 | UIX | v1 | 25,700 | 42 (3) | No |
