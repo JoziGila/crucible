@@ -1,3 +1,10 @@
+<p align="center"><sub><i>
+One Rust platform to rule them all,<br>
+One Rust platform to find them,<br>
+One Rust platform to bring them all<br>
+And in the darkness bind them.
+</i></sub></p>
+
 <p align="center">
   <img src=".github/assets/banner.svg" alt="Crucible: design, simulate, make and release physical products from one typed model" width="100%">
 </p>
