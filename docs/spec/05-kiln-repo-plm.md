@@ -112,14 +112,14 @@ Two evaluation-wide limits are Aborts (contract 7.1): a demand-depth limit on ne
 
 ### Scheduling and cancellation
 
-Scheduling never changes a result: nodes share no mutable state, concurrent demands share one execution, and collections such as diagnostics merge in canonical order. Kiln runs nodes on PLT's pools, by the request's `PriorityClass` from `base`.
+Scheduling never changes a result: nodes share no mutable state, concurrent demands share one execution, and collections such as diagnostics merge in canonical order. Kiln runs nodes on PLT's pools, choosing the `PoolLane` from the request's `PriorityClass` (AGT's, in `base`).
 
-| Class | Demand source | Pool | Preemption |
+| Class | Demand source | Lane | Preemption |
 | --- | --- | --- | --- |
-| `Interactive` | A person waiting: viewport, selection, drag, own rebuild | Interactive | Never |
-| `Agent` | Agent sessions | Background | By `Interactive`, at node boundaries |
-| `Ci` | Proposal CI, merge queue, releases | Background | By `Interactive` |
-| `Batch` | Explorations, benchmarks, prefetch, background `SignOff` | Background | By all; resumes from cached nodes |
+| `Interactive` | A person waiting: viewport, selection, drag, own rebuild | `Foreground` | Never |
+| `Agent` | Agent sessions | `Background` | By `Interactive`, at node boundaries |
+| `Ci` | Proposal CI, merge queue, releases | `Background` | By `Interactive` |
+| `Batch` | Explorations, benchmarks, prefetch, background `SignOff` | `Background` | By all; resumes from cached nodes |
 
 A background node that an interactive node awaits is promoted. A drag lane holds one request in flight and one pending; within 100 ms it recomputes the dragged feature plus the dependents that fit an 80 ms estimate, at least ten when cheap. Later dependents show `Proxy` where the change is affine on them, else `Stale` (contract 13.3).
 
@@ -151,7 +151,7 @@ An outcome is provisional when its fidelity is below the check's declared one (d
 
 ### Cost and budgets
 
-Every node records CPU and GPU time, memory, bytes moved and remote price, attributed to principal, repository, branch and Proposal. Requests carry `base`'s `Budget`. Kiln returns a priced upper bound from per-operation cost models, `api` reserves it, and metering charges actual use (AGT); an estimate above what remains returns `BudgetExceeded` with cheaper options.
+Every node records CPU and GPU time, memory, bytes moved and remote price, attributed to principal, repository, branch and Proposal. Requests carry AGT's `Budget` (in `base`). Kiln returns a priced upper bound from per-operation cost models, `api` reserves it, and metering charges actual use (AGT); an estimate above what remains returns `BudgetExceeded` with cheaper options.
 
 An Op estimated above 10 core-seconds receives a work budget (fuel or an iteration cap) from the reserved amount and reaches a safe point at least every 10 core-seconds. Exhausting it is the Abort `BudgetExhausted`, reported with the last step checkpoint, so a cap is exceeded by at most one safe-point interval (R6-29). The work budget never enters a key, because a value either completes or is not written.
 
@@ -369,7 +369,7 @@ A Proposal is a branch, a rationale and a CI report; CI evaluates the head and t
 
 1. **Source.** Files merge three ways over their block trees: blocks match by block id, or by GumTree for files edited outside Crucible; child order merges by Parent-Child-Successor triples as in Mergiraf; order-insensitive lists merge as sets; text merges on tokens. `ingot.lock` merges per entry, and different pins of one package or operation conflict.
 2. **Compilation and resolution.** The merge compiles and every `Query` resolves; a failure on neither parent is `Conflict::Semantic`.
-3. **Verdicts.** No check's verdict on the merge is worse than on each parent that defines it, ordered `Pass` > `Undecided` > `Fail` > `Error`, at the declared fidelity on protected branches and `Interactive` elsewhere. `Skipped` counts as undefined, and a `Pass` whose `conditional_on` gains components ranks below one without them (CCR-KLN-8). A worse verdict is `Conflict::Check`.
+3. **Verdicts.** No check's verdict on the merge is worse than on each parent that defines it, ordered `Pass` > `Undecided` > `Fail` > `Error`, at the declared fidelity on protected branches and `Interactive` elsewhere. `Skipped` counts as undefined, and a `Pass` whose `conditional_on` gains components ranks below one without them (contract 7.1). A worse verdict is `Conflict::Check`.
 4. **Interference.** Interference between Instances that neither parent has is `Conflict::Interference`.
 5. **Geometric provenance.** Both sides modify, split or delete the same base entity, or one side's new entity intersects the other side's modified region at or below the merge clearance (default 0 mm): `Conflict::Geometric`.
 6. **Connectivity.** A merged net that unions nets distinct in the base and in each side is `Conflict::NetMerge`, naming pins, nets and Changes; renamed nets match by provenance. The rule covers circuit nets, harness connections and `std::systems` interface connections (R4-03).
@@ -473,7 +473,7 @@ PLM is not a separate vault: lifecycle records are signed CAS records in the des
 
 ### Items
 
-An Item is the lifecycle identity of something releasable: a `Part`, `Assembly`, `Document`, `Software` item, `Purchased` catalog part under an internal number, or `Program` (NC program, routing, work instruction or inspection plan). A Part carries its number in Ingot through MEC's `part(…, item:)`, while revisions, states, effectivity and signatures live in records, because releasing must not edit what it releases. An Item record holds number, kind, name, classification, home repository and path, make or buy, unit of measure and labels.
+An Item is the lifecycle identity of something releasable (contract 2): a `Part`, `Assembly`, `Document`, `Software` item, `Purchased` catalog part under an internal number, or `Program`, a manufacturing program (NC program, routing, work instruction, inspection plan). A Part carries its number in Ingot through `part(…, item:)`, while revisions, states, effectivity and signatures live in records, because releasing must not edit what it releases. An Item record holds number, kind, name, classification, home repository and path, make or buy, unit of measure and labels.
 
 A numbering policy sets the format and whether gaps are allowed. The server leases clients blocks of 20 numbers for offline work; unused numbers return as void records after 30 days, and where gaps are forbidden the server replaces provisional numbers at first push.
 
@@ -490,6 +490,8 @@ Phase 2 change orders take a human interchangeability verdict; the computed chec
 A revision's `ItemDefinition` holds the `GeometryId`s of the Part or Assembly with PMI attached by canonical entity number, the `Material` version, properties, the BOM by value and documents by semantic content (views, annotations, notes). The revision record adds the label, source `ChangeId`, release tag, classes of cited results and signatures.
 
 **Decision D-KLN-26:** Revision identity is content-based: an Item is modified since release exactly when its `ItemDefinition` differs from every definition its revision records. An engine or std upgrade that keeps topology, PMI, properties and document content, and moves geometry only within the definition tolerance (default the smaller of 0.1 µm and 1% of the Item's tightest tolerance), adds its definition to the revision through the upgrade Proposal. Lifecycle-bound text (revision label, dates, approvers, serials, MEC's revision markers, ELX silkscreen revisions) is filled at output time and excluded from the definition. *Why:* refactors change no `GeometryId` (R3-01), bit-level upgrades must not mark released Items modified (R4-17), and a title block cannot be part of the revision it prints. *Rejected:* revision on any source change; `ObjectId` identity (renames would void releases); PDF bytes in the definition. (revised in round 2)
+
+The definition digest is the identity of an `ItemDefinition` with late-bound fields as placeholders, for every Item kind: MEC's title blocks and embossed markings, and the silkscreen revision, date and serial text of ELX's boards and library parts.
 
 Revision labels are letters skipping I, O, Q, S, X and Z, as ASME Y14.35 practice recommends [unverified], or numbers; in-work iterations are Changes and need none.
 
@@ -539,7 +541,7 @@ The where-used index gains usage edges (parent revision, child Item, quantity, e
 | Parts policy | Approved `Purchased` Items; recorded waivers | Policy check fails without a waiver | KLN-O-PLM-11 | 2 |
 | Interchangeability | Interface comparison | Unmodelled interfaces need a human verdict | KLN-O-PLM-3 | 3 |
 | Revisions and states | Revision records; policy state machine | Guard failures name every unmet condition | KLN-O-PLM-1 | 1 (`InWork`, `Released`), 2 |
-| Definition equivalence | Definition tolerance; late-bound fields | Out-of-tolerance upgrades mark Items modified | KLN-O-PLM-9 | 2 |
+| Definition equivalence | Definition digests; definition tolerance; late-bound placeholders | Out-of-tolerance upgrades mark Items modified | KLN-O-PLM-9 | 2 |
 | Effectivity | Records and configuration points | Gaps and overlaps fail the consistency check | KLN-O-PLM-4 | 3 |
 | Variants and 150% BOM | `#[configuration]`; abstract interpretation; SAT checks | Dead usages, collisions and unbuildable configurations reported | KLN-O-PLM-5 | 3 |
 | BOM views | EBOM, MBOM and service BOM nodes | Reconciliation failure is a check failure | KLN-O-PLM-6 | 1 (EBOM), 2 |
@@ -555,7 +557,7 @@ The where-used index gains usage edges (parent revision, child Item, quantity, e
 | Engineering change order (ECO) | A Proposal with lifecycle scope: affected Items with from and to revisions, effectivity, stock disposition, plan |
 | Manufacturing change order (MCO) | A Proposal under the MCO policy class (D-KLN-38) |
 | Change notice (ECN) | A signed record created by the release, delivered as an event, with acknowledgements |
-| Deviation | A temporary departure for given serials or lots, with expiry; granted by the `deviation` Act |
+| Deviation | A temporary departure for given serials or lots, with expiry; granted by the `grant_deviation` Act |
 
 An order starts from requests on a branch from the named release; agents prepare work as Proposals under it. Impact analysis covers where-used, open orders on the same Items, interchangeability, MBOM reconciliation, compliance and dispositions. Submission moves affected Items to `InReview` and freezes the branch. Release goes through the release Act. `act.prepare` produces a plan whose subject is the order's `ApprovalSubject`, and the order's approvals are that plan's Approvals, so one signature serves both (R3-22); the merge, tag, revision records, effectivity and notice commit in one metadata transaction. Downstream acknowledgements are tracked until the order closes.
 
@@ -727,7 +729,7 @@ A desktop is a full peer that works offline and connects to any number of remote
 
 **Decision D-KLN-33:** The desktop is local-first: the local repository is authoritative for unpushed work, and everything except remote services (shared cache, cloud workers, relays for other machines) works offline. *Why:* engineers work on aircraft, at plants and on secure networks, and local-first makes interactive latency independent of the network. *Rejected:* a thin client over a cloud model (fails offline and air-gapped).
 
-**Decision D-KLN-44:** A browser origin runs one engine. The first tab's engine worker takes a Web Lock and owns every OPFS write handle (CAS packs, journal, SQLite on `opfs-sahpool`); other tabs run the UI only and reach that engine through a `MessagePort` brokered by a `SharedWorker`, and when the owner closes, the next tab takes the lock and replays the journal. *Why:* sync access handles lock files exclusively and `opfs-sahpool` fails in a second tab, so two engines would fail or corrupt state (R6-15). *Rejected:* one engine per tab; the `opfs` VFS (needs `SharedArrayBuffer`).
+**Decision D-KLN-44:** A browser origin runs one engine. The first tab's engine worker takes a Web Lock and owns every OPFS write handle (CAS packs, journal, SQLite on `opfs-sahpool`); other tabs run the UI only and reach that engine through a `MessagePort` brokered by PLT's service worker (D-PLT-29), and when the owner closes, the next tab takes the lock and replays the journal. *Why:* sync access handles lock files exclusively and `opfs-sahpool` fails in a second tab, so two engines would fail or corrupt state (R6-15). *Rejected:* one engine per tab; the `opfs` VFS (needs `SharedArrayBuffer`).
 
 ### Sync, scale and recovery
 
@@ -769,8 +771,8 @@ AGT owns the method catalog; this tab supplies repository behavior within contra
 | `edit.apply`, `edit.revert`, `edit.create_branch`, `edit.undo` | Edit | Own branches only |
 | `evaluate.*`, `evaluate.cancel` | Evaluate | Within budget |
 | `compare.diff`, `compare.merge_preview` | Compare | Allowed |
-| `propose.*`, `propose.change_request`, `propose.change_order`, `propose.policy` | Propose | Drafts only; a person submits; never `propose.policy` |
-| Act classes `release`, `deviation`, `declassify`, `purge` and the `release_data` family | Act | May prepare `release` and data-release plans; never approve |
+| `propose.*`, `propose.change_request`, `propose.change_order`, `propose.policy`, `propose.declassify`, `propose.purge` | Propose | Drafts only; a person submits; never policy, declassification or purge |
+| Act classes `release`, `grant_deviation`, the `release_data` family and `run_rig_test` | Act | May prepare plans; never approve |
 
 **Decision D-KLN-34:** Events carry identifiers and states, never design content; receivers fetch content through `api` with their own credentials. ECO owns the envelope (CloudEvents), delivery and signing (D-ECO-12); this tab defines its event types and carries a per-repository sequence number in the CloudEvents `sequence` extension attribute. *Why:* thin events keep policy, labels and audit in one place, and one envelope serves every tab (R3-23). *Rejected:* full payloads (bypass policy); this tab's round 1 envelope and HMAC signing. (revised in round 2)
 
@@ -785,8 +787,8 @@ ECO's ERP and PLM connectors send Items, EBOM lines with reference designators a
 1. A runner registers as a service principal with a TPM-held key and advertises rigs, instruments, consumables and its safety envelope.
 2. It pulls requests over an outbound connection, so factory networks need no inbound ports.
 3. A request names its artifacts (programs, print jobs, firmware), its procedure (Ingot, or a Wasm component in a tool world with instrument access granted as a capability, never during evaluation) and its budget in rig minutes.
-4. Crucible transfers programs and never issues cycle start, resume, jog, `Start` or `StoreAndStart`; a person starts machine tools, robots, lasers, presses and furnaces at the device (contract 7.6). The runner enforces its envelope locally, and emergency stops are hardware.
-5. Only rigs a named safety officer declares `unattended_safe` in a signed site policy (closed fixtures with interlocks) run after an Approval without on-site confirmation. Runners never self-declare it, machine tools, robots and lasers never receive it, and every test from an agent branch needs an Approval of its program digest (R4-01).
+4. Crucible transfers programs only through the transfer Acts `send_to_machine`, `send_robot_program`, `store_machine_job` and `send_print_job`, and never issues cycle start, resume, jog, `Start` or `StoreAndStart`; a person starts machine tools, robots, lasers, presses and furnaces at the device, and printers start only through the restricted `start_print` (contract 7.6). The runner enforces its envelope locally, and emergency stops are hardware.
+5. Only rigs a named safety officer declares `unattended_safe` in a signed site policy (closed fixtures with interlocks) run through the `run_rig_test` Act, after an Approval of the test plan's digest and without on-site confirmation. Runners never self-declare it, and machine tools, robots and lasers never receive it (R4-01).
 6. The runner returns the Evidence record: raw data in the CAS, instruments with calibration records, environment, operator and procedure version. A record from an instrument past calibration is invalid, and checks over it fail with `CalibrationExpired`.
 
 Checks use the measurement uncertainty MFG and FLX define, and Evidence records feed traceability and the physical gates, kept out of calibration (contract 13.1). In phase 1, external metrology for GP1 and GP2 enters as Evidence records signed by the lab's principal.
@@ -796,7 +798,7 @@ Checks use the measurement uncertainty MFG and FLX define, and Evidence records 
 | `api` methods | Eight groups; labels on every response | Denials name the missing permission | KLN-O-API-1 | 1 |
 | Events | Event types; ECO's envelope; `sequence` attribute | Retries, then dead letter (ECO) | KLN-O-EVENT-1 | 2 |
 | Evidence records | Signed; newest valid record per check; pinned by releases | `CalibrationExpired`; without a record the check stays `Undecided` | KLN-O-HW-1 | 1 (lab records), 2 |
-| Physical test Acts | Pull-based requests; transfer only; site safety policy | Envelope violations abort and are recorded | KLN-O-HW-1 | 2 |
+| Physical test Acts | Pull-based requests; transfer Acts and `run_rig_test`; site safety policy | Envelope violations abort and are recorded | KLN-O-HW-1 | 2 |
 
 ## State of the art
 
@@ -844,25 +846,29 @@ Vendor pages for the PLM rows gave only general claims, except Windchill's effec
 
 | To | Provides | Types |
 | --- | --- | --- |
-| ANV, FLX, Wasm components | Operation contract, effective fidelity, two-stage keys, Aborts, derivatives, `Checkpoint` retention | `OpImpl`, `OpCx`, `OpKey`, `Differentiable` |
+| ANV, FLX, Wasm components | Operation contract, effective fidelity, two-stage keys, uncached Aborts, `Preview` outside the shared cache, name-free random streams, derivatives, `Checkpoint` retention, two-builder agreement | `OpImpl`, `OpCx`, `OpKey`, `Differentiable` |
 | Every tab | Memoized, progressive evaluation with cost estimates; the CAS | `Kiln::demand`, `ResultEvent`, `ResultStatus`, `CasStore`, `ObjectId` |
-| ING | Demand-depth and fuel limits; `Pending` on `Undecided` below the ceiling; block maps | `Abort`, `ResultStatus` |
-| UIX, AGT, CI | Changes, merge, diffs, Proposals, live documents, presence, locks, span provenance | `ChangeId`, `MergeDriver`, `Conflict` |
-| MEC, MFG, ELX | Items, revisions, late-bound fields, effectivity, BOM views, where-used, orders, MCOs, parts policy | Item and revision records |
-| AGT | Labels and write-down at `repo`; signature records for Act approvals; the audit log; `release_data` | `Labels`, signature records |
-| ECO, UIX | Event types with sequence numbers; connector mappings; data for UIX's Item place (R4-31) | Event types, Item records |
+| ING | Keys with `OpSite`, code hashes and limits; split outputs; evaluation limits; `Pending` below the ceiling; span integrity; block-id mapping | `Abort`, `ResultStatus` |
+| COV | Evidence record lookup; label joins; human-only waivers; policy allowances and `min_evidence_level` | `CheckOutcome`, `Labels` |
+| UIX, AGT, CI | Changes, merge, diffs, Proposals, comments, review verdicts, live documents, presence, locks, span provenance; Items and where-used (R4-31) | `ChangeId`, `MergeDriver`, `Conflict` |
+| MEC, MFG, ELX | Items, revisions, definition digests, effectivity, BOM views, the 150% BOM, where-used, orders, MCOs, `Program` Items, parts policy, recipient records, Evidence pins | Item and revision records |
+| AGT | Labels and write-down at `repo`; `RecipientRecord`s; declassification and signature records; the audit log; `release_data`; lifecycle methods; Cedar | `Labels`, signature records |
+| ECO | Leaf inputs; Ops keyed by determinized hashes; event types with sequence numbers; data-package records; the system-of-record policy; the regulated cloud mode | Event types, Item records |
+| PLT | Grades and class acceptance; key composition; uncached Aborts; small-object packing; cost hints; what attestation signs | `DeterminismGrade`, `OpKey` |
 
 ### What this tab requires
 
 | From | Requirement |
 | --- | --- |
-| ING | Text-derived `OpSite`s; block-local parsing; dependency recording; `#[configuration]` regions; `ING6401` only at the ceiling |
-| ANV | Graded `OpImpl`s with fidelity maps and two-stage keys; `GeometryId`; canonical outputs; interference and history for merge; defeaturing and envelopes |
+| ING | Front-end stages; text-derived `OpSite`s; block-local parsing; dependency recording; free-text span classes; `#[configuration]` regions; `part(…, item:)`; `ING6401` only at the ceiling |
+| ANV | Graded `OpImpl`s with fidelity maps, cost estimates and two-stage keys; `Failure`s, never Aborts; `GeometryId`; canonical outputs; interference, deviation and history for merge; defeaturing and envelopes |
 | FLX | Cost models, safe points, step checkpoints; `Differentiable` operations; Fields by virtual partition; calibration tables as pinned data |
-| PLT | Pools; `det_sum`, `det_reduce`, `exact_sum`; `detmath`; the mechanism table; the dispatch rule; memory tables; the crypto provider; label-aware egress |
-| AGT | Method catalog; context labels; the approval page; budgets and admission |
-| MEC, MFG, ELX, COV | `part(…, item:)`, `bom_item`, revision markers; MBOM rules, programs with simulation evidence, as-built and QIF records, substance rules; net partitions and firmware Items; `Material` composition |
-| ECO | Event envelope and signing; ERP and PLM connectors; the supply chain; data packages as External inputs |
+| COV | Envelope and Material records; calibration chains as Ops; External Op keys; `DataLicence` values; `Material` composition; release checks |
+| PLT | `PoolLane`s; `det_sum`, `det_reduce`, `exact_sum`; `detmath`; the mechanism table; the dispatch rule; memory tables; storage and the journal; worker images; attestation; the crypto provider; label-aware egress |
+| AGT | Method catalog; admission; `Budget` and `PriorityClass`; context labels; Proposal fields, risk classes and auto-merge; the approval page |
+| MEC, MFG, ELX | Parts with item numbers, `bom_item`, revision markers; MBOM rules, program subjects, as-built and QIF records, substance rules; net partitions, `bare_board_invariant`, Software items, lifecycle placeholders |
+| UIX | Comment anchors and review verdicts |
+| ECO | Event envelope, signing and delivery; determinized hashes; ERP and PLM connectors; the watermark transform; the supply chain; data packages as External inputs |
 
 ## Oracles
 
@@ -948,6 +954,8 @@ Oracles live in `oracles/kln/`, which agents can read but not write; held-out se
 | 4 | GP6: scale targets (100,000-Instance assemblies, cloud cells); evidence as Flux validation data; multi-region replication |
 | 5 and later | Certification evidence packages (DO-178C and DO-254 style traceability [unverified scope]); program-scale effectivity; federation between primes and suppliers at scale |
 
+KLN phases none of contract 13.4's shared capabilities.
+
 ## Open questions
 
 1. **Hashing large values.** If browsers miss 1 s per GiB, should derived values, which need no FIPS approval, use BLAKE3's tree mode?
@@ -958,17 +966,16 @@ Oracles live in `oracles/kln/`, which agents can read but not write; held-out se
 6. **Part 11 and AS9100 assessment.** Which assessor and package format customers expect.
 7. **End-to-end mode and caching.** Should a customer-hosted cache tier inside the boundary restore sharing?
 8. **Definition tolerance.** MEC should confirm the default of the smaller of 0.1 µm and 1% of the tightest tolerance.
-9. **`SharedWorker` coverage** on every Tier 1 browser [unverified]; the fallback is a lock-holder handoff over `BroadcastChannel`.
-10. **Findings declined in part.**
+9. **Findings declined in part.**
     - R3-03: an unavailable retired version stays a `Failure`, not an Abort, because contract 7.2 rules so and archived Wasm builds make retired versions available everywhere.
     - R2-06: calls do not become CRDT blocks inside `OpSite`; contract 5's text-derived `OpSite` already names calls by operation and occurrence index, stable when stages are appended or wrapped.
     - R3-20: per-build signing keys give way to contract 7.8's attestation service bound to workload identity.
 
 ## Contract change requests
 
-- **CCR-KLN-6. Evidence records for inputs without geometry.** Contract 2 addresses an Evidence record by "the `GeometryId`s of the inputs it tested". Proposed: "by the check it serves and the identities of the inputs it tested (`GeometryId`s for geometric inputs, `ObjectId`s otherwise, as in 7.2 item 3)". *Reason:* firmware, Material coupon and electrical tests test inputs that have no `GeometryId`.
-- **CCR-KLN-7. Add Item to the glossary.** "Item: the lifecycle identity of a releasable thing (Part, Assembly, Document, Software item, Purchased catalog part, Program) with an item number; its revisions are the only meaning of revision." *Reason:* section 5 uses `ItemDefinition` and approval pages list Items, but the glossary does not define the term.
-- **CCR-KLN-8. Complete the merge verdict order.** Add to 7.1: "`Skipped` counts as undefined; a `Pass` whose `conditional_on` gains components ranks below a `Pass` without them." *Reason:* the order covers four of five verdicts and would let a merge make a release-ready check conditional without a conflict.
+- CCR-KLN-6, Evidence records for inputs without geometry: accepted in contract v5, section 2 (Evidence record).
+- CCR-KLN-7, Item: accepted in contract v5, section 2.
+- CCR-KLN-8, merge verdict order: accepted in contract v5, section 7.1 (`repo`).
 
 ## Sources
 
