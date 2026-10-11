@@ -60,7 +60,7 @@ MCP 2026-07-28 removes protocol-level sessions, so every request carries its ver
 
 `shard_key` is HMAC-SHA-256 of the repository id under the tenant's routing key, truncated to 16 bytes, because mirrored headers are visible to network intermediaries [S3] and repository names reveal programmes. `requestState` is sealed with AEAD and bound to the principal, a digest of the original request and a 15-minute expiry, as the spec requires when it affects authorization [S5]. `edit.apply` becomes the tool `edit_apply`, since some model APIs restrict tool names [unverified for every provider].
 
-Hosts must treat tool annotations and skill content as untrusted [S3][S8]. Crucible's trust in role skills is its own policy for the hosted crew after `policy:admin` approval of the manifest; external hosts apply their own.
+Hosts must treat tool annotations and skill content as untrusted [S3][S8]. Crucible's trust in approved role skills binds only the hosted crew.
 
 ### Sessions, identity and delegation
 
@@ -266,7 +266,7 @@ Rust types in `core/api` are the single source of truth. A build step emits JSON
 
 ## Method catalog
 
-Every method is `<group>.<name>` in the eight groups of contract section 7.6. ECO's registry, event and archive methods and KLN's lifecycle methods join these groups, and release, yank, export and deviation grants are Act classes. A breaking change creates a new version such as `edit.apply@2`, and the old one is served for at least twelve months [S2].
+Every method is `<group>.<name>` in the eight groups of contract section 7.6. ECO's registry, event, archive and capability methods and KLN's lifecycle methods join these groups, and release, yank, export and deviation grants are Act classes. A breaking change creates a new version such as `edit.apply@2`, and the old one is served for at least twelve months [S2].
 
 Methods marked † change state or spend budget, so they need an idempotency key and, except `session.open`, a session. Read and Inspect methods accept a `ChangeRef` (a Change, `branch@head` or a tag), and every result carries its labels. Approvals are not methods: assigned humans give them on the server's approval page (D-AGT-20).
 
@@ -288,9 +288,9 @@ Methods marked † change state or spend budget, so they need an idempotency key
 | `read.value` | `ValueRef` → typed value; marks the context `data_untrusted` | `read.unknown_handle` | AGT-O-17 | 1 |
 | `read.bom`, `read.where_used` | KLN's EBOM, then MBOM, service BOM and where-used | `read.not_found` | AGT-O-1 | 1 (EBOM), 2 |
 | `read.catalog` | Filters → catalog part summaries | `catalog.filter_invalid` | AGT-O-1 | 2 |
-| `read.package`, `read.search_packages`, `read.package_bundle` | ECO registry metadata, search and signed offline bundles | `registry.not_found` with nearest names | AGT-O-1 | 1 (`read.package`), 2 |
+| `read.packages`, `read.package`, `read.registry_bundle` | ECO registry search, package metadata and signed offline bundles | `package.not_found` with nearest names | AGT-O-1 | 1 (`read.package`), 2 |
 | `read.events` | Source, cursor → events in sequence order | `events.cursor_expired` | AGT-O-1 | 1 |
-| `read.subscribe` | Create or delete a webhook subscription; thin payloads only (ECO) | `events.url_refused` | AGT-O-22 | 2 |
+| `read.subscribe`, `read.unsubscribe` | Create or delete a webhook subscription; people with `maintainer` or `admin` only; thin payloads (ECO) | `events.url_refused` | AGT-O-22 | 1 |
 | `read.machine_data` | Machine → state and as-run records from MFG's gateway | `mfg.gateway_unreachable` | AGT-O-1 | 2 |
 | `read.audit` | Filter → audit entries; needs `audit:read` | `auth.scope_denied` | AGT-O-20 | 1 |
 | `inspect.scene` | Root, depth, include → `SceneGraph` | `build.failed` (partial graph), `inspect.too_large` (cursor) | AGT-O-3 | 1 |
@@ -308,6 +308,7 @@ Methods marked † change state or spend budget, so they need an idempotency key
 | `edit.undo` † | One repository transaction from KLN's log; own branches only | `edit.not_owner` | AGT-O-6 | 0 |
 | `edit.create_branch`, `edit.reset_branch` † | Create a branch owned by the session's principal; reset an own unprotected branch | `edit.branch_exists`, `edit.branch_protected` | AGT-O-6 | 0 |
 | `edit.import_archive` † | ECO repository archive → a new design repository | `archive.incomplete` listing missing objects | AGT-O-1 | 1 |
+| `edit.grant_capability`, `edit.revoke_capability` † | A scoped Wasm component capability grant or revocation in `ingot.lock` (ECO) | `policy.denied` naming the rule | AGT-O-7 | 1 |
 | `evaluate.build` † | Targets, `Fidelity`, `estimate_only` → `BuildReport` | `budget.exceeded`, `build.failed` | AGT-O-11 | 0 |
 | `evaluate.checks` † | Selection, `Fidelity` → `CheckOutcome`s | As above | AGT-O-1 | 0 |
 | `evaluate.simulate` † | Study, `Fidelity` → Fields with `ErrorBudget`s and validity zones | `flux.study_invalid`; zones flag, never hide | AGT-O-1 | 1 |
@@ -319,7 +320,7 @@ Methods marked † change state or spend budget, so they need an idempotency key
 | `evaluate.cancel` † | Evaluation → status; cancellation is an Abort | — | AGT-O-1 | 0 |
 | `compare.diff` | From, to, levels → `SemanticDiff` with an optional overlay snapshot | `compare.unrelated` (computed and flagged) | AGT-O-14 | 1 |
 | `compare.merge_preview` | Base, left, right → KLN's conflicts and merged result, nothing written | — | AGT-O-6 | 1 |
-| `compare.resolve` | Manifest, lockfile → a new lockfile and its diff, not applied (ECO) | `registry.unsatisfiable` with the explanation | AGT-O-1 | 1 |
+| `compare.resolve` | Manifest, lockfile → a new lockfile and its diff, not applied (ECO) | `package.unsatisfiable` with the explanation | AGT-O-1 | 1 |
 | `propose.create`, `propose.update` † | Title, rationale, target, parent, draft, ready → `Proposal` | `propose.preconditions_failed`, `propose.closed` | AGT-O-14 | 1 |
 | `propose.get`, `propose.list` | Proposals, with free text as handles | — | AGT-O-8 | 1 |
 | `propose.review` † | Verdict, findings → `Review` | `propose.self_review_forbidden` | AGT-O-7 | 1 |
@@ -387,7 +388,7 @@ Marks follow Set-of-Mark prompting, which let GPT-4V beat a fine-tuned referring
 
 **Decision D-AGT-9:** Agent snapshots come from UIX's headless renderer with a `RenderProfile` in the request and the snapshot key, and return marks, legend and extrema as data plus a plain-text summary. Snapshots are non-canonical: they carry `PlatformClass::Unverified` and the renderer identity, never enter an `OpKey` or an approval subject, and are compared by ꟻLIP thresholds [S62]; byte identity holds only on one pinned CI renderer image. *Why:* software rasterizers generate code at run time for the host CPU [S61], so byte identity across the canonical class cannot hold (R6-26), and locale, theme and units change legends (R3-35). *Rejected:* calling CPU renders canonical; images without structured side data (vision models misread small labels and colours). (revised in round 2)
 
-Proposals and benchmarks use the review profile: `en`, SI with millimetres, light theme. Snapshots attached to a Proposal are stored once as Assets, so reviewers, verifiers and approvers see the same bytes. More than 64 marks returns `render.too_many_marks` with a fix that narrows the targets.
+Proposals and benchmarks use the review profile: `en`, SI with millimetres, light theme. Snapshots attached to a Proposal are stored once as Assets, so reviewers, verifiers and approvers see the same bytes.
 
 **Decision D-AGT-26:** A snapshot is untrusted and instruction-capable when the geometry or appearance of any visible Body derives from an untrusted Asset. Agent snapshots default to `appearance: Neutral`, which drops imported textures. A context that must stay free of `instruction_tainted` asks about an untrusted snapshot only through `inspect.ask_render`, a quarantined vision call with a fixed template whose answers are mark ids, booleans or counts. *Why:* embossed letters and texture maps can carry instructions, yet tainting every snapshot of an assembly with one supplier part would make vision useless (R5-17). *Rejected:* treating every snapshot as trusted; tainting every snapshot that contains a supplier part.
 
@@ -591,7 +592,7 @@ Within a class, Kiln shares capacity among principals by dominant resource [unve
 | Merge queue | Children merge in dependency order with CI per merge | Conflicts return to the worker as typed input | AGT-O-12 | 2 |
 | Exploration | `std::explore`: Sobol, NSGA-II and III, Bayesian optimization; deterministic in synchronous mode | `explore.no_feasible_point`; failures counted | AGT-O-13 | 2 |
 | Multi-fidelity exploration | Hypervolume knowledge gradient | Falls back to single-fidelity search, reported | AGT-O-13 | 3 |
-| Priority classes | Four classes with preemption at Op boundaries | — | AGT-O-11 | 1 |
+| Priority classes | Four classes with preemption at Op boundaries | — | AGT-O-11 | 0 |
 
 ## Proposals and review
 
@@ -624,7 +625,7 @@ pub struct Proposal {
 `Rationale` holds a summary, requirement ids, design choices with evidence ids, deviations and known limitations. Before `propose.create` without `draft`, the server checks:
 
 1. The head builds at each target's declared fidelity.
-2. Every `Error`-severity check has the verdict `Pass` at its declared fidelity; a conditional pass counts only under a covering policy allowance (contract section 5, CCR-AGT-7). Waiving a check in source is a loosening, hence R3.
+2. Every `Error`-severity check has the verdict `Pass` at its declared fidelity; a conditional pass counts only under a covering policy allowance (contract sections 5 and 7.6). Waiving a check in source is a loosening, hence R3.
 3. Snapshots exist at the head: a `Grid4` of each changed Part or Assembly, a geometry-overlay diff and an overlay for each changed study result.
 4. The rationale has a summary and, where the repository declares requirements, at least one requirement link.
 5. Every Change on the branch carries complete provenance.
@@ -633,13 +634,13 @@ A failure returns `propose.preconditions_failed` with the failing items and fixe
 
 ### CI report
 
-`service:ci` produces the `CiReport` on untrusted-evaluation workers in single-use microVMs, which hold no attestation key and write only to the Proposal's namespace (contract section 7.8). No agent can write or edit it, and `evaluate.ci` gives agents the identical report in advance. After merge, trusted builders recompute what releases and `SignOff` gates need.
+`service:ci` produces the `CiReport` on untrusted-evaluation workers (contract section 7.8). No agent can write or edit it, and `evaluate.ci` gives agents the identical report in advance. After merge, trusted builders recompute what releases and `SignOff` gates need.
 
 A `CiReport` names the Change and lockfile digest and holds build and check outcomes per platform class, cross-class agreement, every `CheckOutcome`, margin and metric deltas against the target's head, validity-zone flags, oracle integrity (protected paths untouched or approved) and usage.
 
 ### Risk classification
 
-The server classifies every Proposal from its semantic diff and the labels of its authoring contexts. No model takes part.
+The server classifies every Proposal from its semantic diff and the labels of its authoring contexts.
 
 | Class | Meaning | Examples |
 | --- | --- | --- |
@@ -754,7 +755,7 @@ A span becomes trusted only through `propose.endorse_text`, a human action that 
 
 **Decision D-AGT-24:** Every model context carries a label, the join of the `Labels` of every value returned to it (contract section 7.6). Reading free text or images sets `instruction_tainted`; reading any untrusted value sets `data_untrusted`. Every write carries at least the context's label, a write to a lower-labelled destination fails with `label.write_down` unless a declassification record names it, and untrusted typed values travel by `ValueRef` so their labels follow exactly. *Why:* a model context is a derivation path that Kiln never sees, so ITAR content read in one repository could otherwise be written unlabelled into another (R5-01). *Rejected:* labelling only Kiln derivations; treating untrusted typed values as non-tainting, since they steer edits and re-enter as trusted literals.
 
-For the hosted crew the context is the conversation; for external hosts it is the OAuth token family, shared by every session that family opens, and a fresh label needs a fresh authorization grant. Writes are edits, Proposals, comments, reviews, exploration records and Act payloads. A declassification record is signed through `propose.declassify` by two people, one an export officer, and KLN stores it.
+An external host gets a fresh label only through a fresh authorization grant. Writes are edits, Proposals, comments, reviews, exploration records and Act payloads. A declassification record is signed through `propose.declassify` by two people, one an export officer, and KLN stores it.
 
 ### Taint and the Rule of Two
 
@@ -850,12 +851,12 @@ Act methods cover every effect outside Crucible, and every Act is two-phase (con
 | `request_quote`, `order` | Data release | RFQs and purchase orders | Orders compensable | 2 |
 | `share_external`, `notify_external` | Data release | Sharing with another organization; outside messages | Access revocable | 2 |
 | `publish_package` | Data release | A public registry version | Yankable | 2 |
-| `publish_passport` | Data release | A digital product passport (MFG) | Superseded | 4 |
+| `publish_passport` | Data release | A digital product passport (MFG) | Superseded | 3 |
 | `send_to_machine` | Physical effect | A posted NC program to a DNC queue or program store | Irreversible once run | 2 |
 | `store_machine_job` | Physical effect | OPC UA job `Store` only | Revocable before start | 2 |
 | `send_print_job`, `start_print` | Physical effect | A print job; a restricted start | Cancellable | 2 |
 | `send_robot_program` | Physical effect | A robot program to its controller | Irreversible once run | 2 |
-| `run_rig_test` | Physical effect | A test on a KLN hardware rig | Irreversible | 2 |
+| `run_rig_test` | Physical effect | A test on an `unattended_safe` KLN rig | Irreversible | 2 |
 
 **Decision D-AGT-20:** Every Act is two-phase. `act.prepare` produces a deterministic `ActionPlan` whose digest is the approval subject. `act.commit` creates an approval request that Cedar policy assigns to named approvers and delivers only to their Crucible inbox. The model receives `act.approval_pending` with a request id, never a URL, and approvers decide on one server-generated page after phishing-resistant WebAuthn user verification [S60], on desktops and tablets only. *Why:* a URL that reaches a model can be forwarded to a busy approver, and MCP itself requires servers to verify who opens an elicitation URL [S54] (R5-04). *Rejected:* URL-mode elicitation through the agent's client; approval by any holder of authority; form elicitation in the host; standing pre-approvals. (revised in round 2)
 
@@ -893,11 +894,11 @@ A release plan's digest covers the `ApprovalSubject`'s `ObjectId`, the tag and t
 
 Recipient-record changes follow D-AGT-27, cannot come from a context with either integrity flag, and take effect after 24 h with notice to the previous contact (KLN). Agent writes on branches shared with another organization need `act:share_external` and are refused to `instruction_tainted` contexts. Webhooks carry thin payloads without design content (ECO), so they are not data release.
 
-**Decision D-AGT-31:** Physical-effect Acts only transfer data to a device, or start a print or a rig test under restrictions. Crucible never issues cycle start, resume, jog, `Start` or `StoreAndStart` to machine tools, robots, lasers, presses or furnaces; a person starts them at the device. Agents may prepare transfer Acts, only assigned humans approve them, and no agent or remote approval can give an on-site confirmation. *Why:* an approved plan or a compromised approver must never start motion where nobody is standing (R4-01, R5-18). *Rejected:* remote starts through OPC UA job methods; transfers committed by agents; MFG's round 1 `start_build`.
+**Decision D-AGT-31:** Physical-effect Acts only transfer data to a device, or start a print or a rig test under restrictions. Crucible never issues cycle start, resume, jog, `Start` or `StoreAndStart` to machine tools, robots, lasers, presses or furnaces; a person starts them at the device. Agents may prepare transfer Acts, only assigned humans approve them, and no agent or remote approval can give an on-site confirmation. *Why:* an approved plan or a compromised approver must never start motion where nobody is standing (R4-01, R5-18). *Rejected:* remote starts through OPC UA job methods; transfers committed by agents; a remote build start (MFG, round 1).
 
 - `send_to_machine` delivers an approved, hash-bound program to a DNC queue or program store. Its subject is the posted program and its simulation evidence; MFG's gateway re-verifies header, tool lengths and offsets, and edited programs return as Proposals.
 - `start_print` exists only for printers whose profile declares thermal-runaway protection and enclosure or smoke detection, needs an on-site confirmation at the printer or with a site-bound key, and is off by default.
-- `run_rig_test` runs on KLN's hardware runner; only rigs a named safety officer declared `unattended_safe` run without on-site confirmation (CCR-AGT-8).
+- `run_rig_test` runs on KLN's hardware runner, only for rigs under an `unattended_safe` site policy, after an Approval of the test plan's digest (contract 7.1, 7.6).
 - Machine data collection is a Read, `read.machine_data`.
 
 These classes ship in phase 2 with MFG's transfer capabilities, since contract section 13.2 defers CAM, posts and slicing; no device transfer exists without them.
@@ -1045,27 +1046,30 @@ A grant exposes at most 60 tools, and a new method needs a benchmark gain over c
 | To | Provides | Types |
 | --- | --- | --- |
 | All tabs | The `api` catalog; sessions; labels at the boundary; budgets; idempotency; errors; the audit entry schema | API method |
-| KLN | Admission; `Budget` and `PriorityClass` fields; context labels on writes; Proposal fields, risk classes, auto-merge decisions | `Budget`, `Proposal` |
-| UIX | Proposal, risk and provenance data; `ActionPlan`s and approval requests; agent events and `session.control` | `Proposal`, `ActionPlan` |
-| MFG | Physical-effect Act classes over posted programs and their evidence; `read.machine_data` | Act class |
-| ECO | `std::agents`, `std::explore`; registry, event and archive methods; data-release Acts | Package, Act class |
-| PLT | `Usage` as the resource record | `Usage` |
+| ING | `SourcePatch` application in `edit.apply`; `read.*` and `inspect.describe` returning free-text spans as handles | API method |
+| KLN | Admission; `Budget` and `PriorityClass` fields; context labels on writes; Proposal fields, risk classes, auto-merge decisions; the approval page's content (D-AGT-20) | `Budget`, `Proposal` |
+| UIX | `inspect.render` and `inspect.ask_render`; Proposals with plans, verifier reports, risk classes and provenance; open questions; `ActionPlan`s and approval requests; agent event streams and `session.control` | `Proposal`, `ActionPlan`, `ChangeProvenance` |
+| MFG | Physical-effect, `request_quote` and `publish_passport` Act classes, approved over posted programs and their evidence; `read.machine_data`; Proposals; the CAM programmer role (phase 2) | Act class |
+| ELX | Datasheet extraction into ELX's records, labelled `data_untrusted`; budget caps for long tool runs | Proposal |
+| ECO | Catalog entries for ECO's methods; Act classes and the `release_data` family; `ExternalText` and instruction authority; untrusted-snapshot rules (D-AGT-26); audit; MCP subscriptions; `std::agents` and `std::explore` | Package, Act class |
+| PLT | Message types and canonical JSON; the `ApiError` shape that `Guidance` errors map into; `Usage` as the resource record | `Usage`, `ApiError` |
 | Every tab that ships a model | The training-data rule (D-AGT-22) | — |
 
 ### What AGT requires
 
 | From | Requirement |
 | --- | --- |
-| ING | `SourcePatch` fixes; the formatter; doc comments and templates; `ExternalText`; `CheckOutcome` and the decision rule; `#[was]`; `ING-L-FragileSelector` |
-| KLN | Evaluations with priority classes, safe points, work budgets and Aborts; labels as memo outputs; span-level integrity; `RecipientRecord`s; declassification and signature records; the transparency log; two worker pools; semantic merge; lifecycle methods; Cedar |
-| ANV | Entity provenance; `Query` resolution with ranked fixes and `RankSwap`; bounded measurements; geometry diffs; sections |
-| FLX | Study Evaluations; regularized goals; `ErrorBudget`s and zones; plan explanations; cost estimates; Field sampling |
-| COV | Validity envelopes; typed `ValidityError`s with escalation |
+| ING | Diagnostics with `SourcePatch` fixes; the formatter; metadata for tool schemas; doc comments and templates; `ExternalText` and free-text span classes; `CheckOutcome` and the decision rule; `#[was]`; `ING-L-FragileSelector` |
+| KLN | Evaluations with priority classes, safe points, work budgets and Aborts; labels as memo outputs and write-down at `repo`; Changes, semantic merge and diffs; span-level integrity; `RecipientRecord`s; declassification and signature records; the audit log in the transparency logs; two worker pools; lifecycle methods; Cedar |
+| ANV | Entity inspection with provenance; `Query` resolution with ranked fixes and `RankSwap`; exact measures and sections; geometry diffs (volumes added and removed, Hausdorff deviation) |
+| FLX | Study Evaluations; regularized goals; `ErrorBudget`s and zones; plan explanations (`SolvePlan`); cost estimates; Field sampling; gradients and surrogates for `std::explore` |
+| COV | Validity envelopes; the coverage map and limit records; typed `ValidityError`s with escalation |
 | UIX | The headless renderer with `RenderProfile`; the review view; the approval page; steering controls |
-| MFG | DFM rules; CAM; cost with intervals; the machine gateway that re-verifies programs and captures edits; printer profiles |
-| MEC, ELX | Std features with doc metadata; tolerance stacks; electronics checks for golden product 5 |
-| ECO | Package signing; registry, event and archive behavior; importers emitting `ExternalText`; partner connectors |
-| PLT | Keychain; a stdio sandbox; WebAuthn authenticators; GPU timestamp accounting |
+| MFG | Act payloads for its Act classes; DFM rules and machinability reports; CAM; cost with intervals; `MfgError` fixes; the machine gateway that re-verifies programs and captures edits; printer profiles |
+| MEC | Std features with doc metadata; tolerance stacks; `SolveReport`s, `ContinuityReport`s and check Fields |
+| ELX | Electronics checks; Proposals from placement, routing, matching and decoupling tools; datasheet record templates with page references |
+| ECO | Signing for `std::agents` and `std::explore`; licence metadata; registry, event and archive behavior; importers emitting `ExternalText`; `release_data` members for archive, mirror, bundles, partners and connectors |
+| PLT | The `api` transport, `cli` exit codes and `Usage` measurement; keychain; a stdio sandbox; WebAuthn authenticators |
 
 ## Oracles
 
@@ -1093,20 +1097,22 @@ Oracles live in `oracles/agents/`, readable but never writable by agents; held-o
 | AGT-O-18 | Query robustness | Scores agree with a labelled set of robust and fragile queries; seeded rank swaps inside declared ranges are reported as `RankSwap` |
 | AGT-O-19 | Verifier efficacy | The planted-defect catch rate meets its target |
 | AGT-O-20 | Audit | One entry per call in KLN's log; shredding an identity key leaves the log verifiable and the person unidentifiable |
-| AGT-O-21 | Physical safety | No Act plan schema can express a machine start; `start_print` and non-`unattended_safe` rig tests are refused without on-site confirmation; no agent principal or remote approval supplies one |
+| AGT-O-21 | Physical safety | No Act plan schema can express a machine start; `start_print` without on-site confirmation and `run_rig_test` on a rig outside an `unattended_safe` policy are refused; no agent or remote approval supplies on-site confirmation |
 | AGT-O-22 | Data release | Every egress path runs the data-release checks; seeded failing recipients are refused; recent recipient changes show the banner |
 | AGT-O-23 | Training data | Eligibility follows labels and licences; canaries are not extractable; withdrawals complete within 30 days |
 | AGT-O-24 | Delegation grants | Exchange without a live grant, for non-agent scopes, or for Approvals or `policy:admin` is refused; tokens are sender-constrained |
 
 ## Phasing
 
+No AGT capability appears in contract 13.4's shared phase table.
+
 | Phase | AGT contribution to the gate |
 | --- | --- |
 | 0 | `core/api` types and schemas; Session, Read, Edit and core Evaluate methods; idempotency; errors and the docs pipeline; MCP server on stdio and HTTP; the Rust SDK; source-level descriptions; audit entries; policy enforcement. AGT-O-1, 4, 5, 6, 7, 16 and 20 green |
 | 1 | GP1 and GP2 worked with agents through external MCP hosts: Inspect, Compare, Propose, CI reports and risk classes; context labels and write-down; `release`, `send_to_supplier` and `export` with the full approval flow; Rust and Python SDKs; three roles; the benchmark harness and injection suite. Golden tasks on GP1 and GP2 reach pass^1 ≥ 80% and pass^4 ≥ 60% on the best qualified endpoint (targets); AGT-O-8, 9, 17 and 22 green |
 | 2 | Hosted crew, delegation grants, model gateway and extraction; TypeScript SDK; nine further roles; swarms; exploration; auto-merge; physical-effect and remaining data-release Acts. Swarm tasks on GP3 and GP4 beat the single-agent baseline at no more than 3× its cost (target); AGT-O-21 and 24 green |
-| 3 | Hypervolume knowledge gradient; training opt-in with canary tests; a public bounty; an interpreter evaluated for `instruction_tainted` roles. Golden tasks on GP5 at the phase 1 thresholds (target) |
-| 4 | Validation against physical test data with correlation checks; `publish_passport`. GP6 explorations confirm at least 3 Pareto-optimal variants at `SignOff` (target) |
+| 3 | Hypervolume knowledge gradient; training opt-in with canary tests; a public bounty; an interpreter evaluated for `instruction_tainted` roles; `publish_passport`. Golden tasks on GP5 at the phase 1 thresholds (target) |
+| 4 | Validation against physical test data with correlation checks. GP6 explorations confirm at least 3 Pareto-optimal variants at `SignOff` (target) |
 | 5 and later | A compliance-evidence role; agents across organizations if A2A is adopted after review |
 
 ## Open questions
@@ -1125,15 +1131,15 @@ Oracles live in `oracles/agents/`, readable but never writable by agents; held-o
 12. **Findings declined in part.**
     - R3-53: the title stays "Agents (AGT)", because the brief fixes the title line and the README keys on it; the rest is applied.
     - R4-01: moving `send_to_machine`, `send_print_job` and `start_print` to phase 1 is declined, because contract section 13.2 defers CAM, posts and slicing to phase 2; the Acts ship with the effects they govern.
-    - R5-18: the name `queue_program` is declined in favour of R4-01's shared list; `send_to_machine` carries R5-18's meaning (delivery to a DNC queue, start at the machine).
+    - R5-18: its rename of `send_to_machine` is declined in favour of contract 7.6's list; `send_to_machine` carries R5-18's meaning (delivery to a DNC queue, start at the machine).
     - R4-05: program headers, offset verification, edit capture and drip-feed DNC belong to MFG, and moving DNC to phase 1 conflicts with section 13.2.
     - R6-02 item 6: phase 1 has the three roles section 13.2 names, not two.
 
 ## Contract change requests
 
-- **CCR-AGT-7. What "pass every check" means.** In section 7.6, read it as: every `Error`-severity check has the verdict `Pass` at its declared fidelity, a conditional pass counting only under a covering policy allowance; `Undecided`, `Fail` and `Error` block. *Reason:* with three-valued checks and three severities, the phrase is ambiguous for warnings and for `Undecided`.
-- **CCR-AGT-8. Rig tests as a restricted physical-effect Act.** Add `run_rig_test` beside `start_print` in sections 2 and 7.6. *Reason:* section 2 allows only transfer Acts and `start_print`, while section 7.1 lets `unattended_safe` rigs run after an Approval.
-- **CCR-AGT-9. Owners for `Budget` and `PriorityClass`.** Mark them [AGT, in `base`] in section 5. *Reason:* section 5 places them in `base` without an owner, and this tab defines their fields.
+- **CCR-AGT-7.** Passing every check: accepted in contract v5, section 7.6.
+- **CCR-AGT-8.** Rig tests as a restricted Act: accepted in contract v5, sections 2 and 7.6.
+- **CCR-AGT-9.** Owners of `Budget` and `PriorityClass`: accepted in contract v5, section 5.
 
 ## Sources
 
