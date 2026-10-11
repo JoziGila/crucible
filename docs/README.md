@@ -36,7 +36,7 @@ Round 2 is in progress: each tab is revised against contract v4.2 and the review
 | ANV | v2 | 19,900 | 61 (8) | v2 |
 | FLX | v2 | 17,900 | 66 (7) | No |
 | COV | v2 | 17,800 | 33 (5) | No |
-| KLN | v1 | 25,500 | 79 (12) | No |
+| KLN | v2 | 17,900 | 79 (12) | No |
 | MEC | v2 | 17,900 | 45 (2) | No |
 | MFG | v2 | 17,800 | 41 (3) | No |
 | ELX | v2 | 17,300 | 36 (4) | No |
