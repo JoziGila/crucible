@@ -17,20 +17,19 @@ The spec work is in round 2: each subsystem tab is revised against the binding c
 
 ## Where things stand (2026-10-11)
 
-- Contract v4.2: rulings on round 1 (section 14), the review (15) and the first revised tabs (16), and one shared phase table (13.4, from CCR-FLX-9).
+- Contract v5: rulings on round 1 (section 14), the review (15) and every round 2 change request (16), and one shared phase table (13.4).
 - All twelve subsystem tabs are v2 and pass the check. ANV v2 is published in the Claude Doc; the others are not.
-- The revised tabs filed new contract change requests, now waiting for a ruling.
+- Every change request filed in round 2 is ruled; all were accepted, some merged.
 - The Overview is the pre-review text. The Adversarial review and Decisions log tabs are not written.
 - The repository is public at github.com/JoziGila/crucible (`origin`). Commit with the personal identity already configured.
 
 ## Plan for the rest of round 2
 
-1. **Rule on the new change requests.** `python3 docs/tools/extract.py` gathers every tab's requests into `docs/build/extracts/ccr.md`. Accept, revise or decline each in contract section 16 and bump to v5.
-2. **Consistency pass.** Update citations of accepted requests (ANV still cites CCR-ANV-7 and CCR-ANV-8; FLX cites CCR-FLX-8 and CCR-FLX-9). FLX moves electro-thermal coupling and FMU export and SSP to phase 4 and DFN to phase 5 (contract 13.4). Make each row of "Interfaces with other subsystems" match the other tab's row (`docs/build/extracts/interfaces.md`), each phase match contract section 13, and each name match the glossary. Finish with `python3 docs/tools/check.py --all -q` clean.
-3. **Adversarial review tab**, `docs/spec/13-adversarial-review.md`: the six reviews, each Critical finding and how it was resolved (contract ruling or tab change), the declined findings with reasons, and what the review changed overall. Draw on `docs/review/`, the packets, contract sections 14 to 16 and each tab's Open questions.
-4. **Decisions log**, `docs/spec/14-decisions-log.md`: every decision, grouped by tab, one line each with its reason, marked where revised in round 2 (`docs/build/extracts/decisions.md`).
-5. **Overview update.** Bring `docs/spec/00-overview.md` to the contract: the canonical example (6), principles (3), layering (4), per-region Flux discretization (7.1), the roadmap with phases 0 to 7 and GP1 to GP16 (13.1), the program plan (13.2), scope, risks, patents, and the Flux rename as an open question. Redraw both diagrams in `docs/spec/diagrams/`.
-6. **Close the round.** All checks clean, the status table in `docs/README.md` current, every tab published, then tag `round-2`.
+1. **Consistency pass.** Every request is now ruled (contract 16): each tab replaces its filed requests with a citation of the contract section that now holds the rule. FLX moves electro-thermal coupling and FMU export and SSP to phase 4 and DFN to phase 5 (contract 13.4). Make each row of "Interfaces with other subsystems" match the other tab's row (`docs/build/extracts/interfaces.md`), each phase match contract section 13, and each name match the glossary. Finish with `python3 docs/tools/check.py --all -q` clean.
+2. **Adversarial review tab**, `docs/spec/13-adversarial-review.md`: the six reviews, each Critical finding and how it was resolved (contract ruling or tab change), the declined findings with reasons, and what the review changed overall. Draw on `docs/review/`, the packets, contract sections 14 to 16 and each tab's Open questions.
+3. **Decisions log**, `docs/spec/14-decisions-log.md`: every decision, grouped by tab, one line each with its reason, marked where revised in round 2 (`docs/build/extracts/decisions.md`).
+4. **Overview update.** Bring `docs/spec/00-overview.md` to the contract: the canonical example (6), principles (3), layering (4), per-region Flux discretization (7.1), the roadmap with phases 0 to 7 and GP1 to GP16 (13.1), the program plan (13.2), scope, risks, patents, and the Flux rename as an open question. Redraw both diagrams in `docs/spec/diagrams/`.
+5. **Close the round.** All checks clean, the status table in `docs/README.md` current, every tab published, then tag `round-2`.
 
 ## Running revisions with subagents
 

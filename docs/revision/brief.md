@@ -1,6 +1,6 @@
 # Round 2: revise a tab (brief for each tab's revision agent)
 
-Six adversarial reviewers attacked the round 1 drafts and found 295 problems, 23 of them Critical. The contract is now v4.2 and binding. Your job: revise your tab so it conforms to the contract and fixes every finding in your packet, cut it to length with taste, and pass the spec check. Anvil (`docs/spec/02-anvil.md`) and Flux (`docs/spec/03-flux.md`) are already revised; they show the target shape.
+Six adversarial reviewers attacked the round 1 drafts and found 295 problems, 23 of them Critical. The contract is now v5 and binding. Your job: revise your tab so it conforms to the contract and fixes every finding in your packet, cut it to length with taste, and pass the spec check. Anvil (`docs/spec/02-anvil.md`) and Flux (`docs/spec/03-flux.md`) are already revised; they show the target shape.
 
 ## 1. Read
 

@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="docs/README.md"><img alt="Status: open specification" src="https://img.shields.io/badge/status-open%20specification-4c8dff?style=flat-square"></a>
-  <a href="docs/contract.md"><img alt="Contract v4.2" src="https://img.shields.io/badge/contract-v4.2-1f2843?style=flat-square"></a>
+  <a href="docs/contract.md"><img alt="Contract v5" src="https://img.shields.io/badge/contract-v5-1f2843?style=flat-square"></a>
   <a href="docs/spec/"><img alt="12 subsystem specs" src="https://img.shields.io/badge/spec-12%20subsystems-1f2843?style=flat-square"></a>
   <a href="docs/review/"><img alt="Adversarial review: 295 findings" src="https://img.shields.io/badge/adversarial%20review-295%20findings-1f2843?style=flat-square"></a>
   <a href="LICENSE"><img alt="Code: Apache-2.0 WITH LLVM-exception" src="https://img.shields.io/badge/code-Apache--2.0%20WITH%20LLVM--exception-1f2843?style=flat-square"></a>
