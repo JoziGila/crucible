@@ -7,36 +7,36 @@ Ingot is Crucible's design language: pure, strict and statically typed, with uni
 | ING owns | Others own |
 | --- | --- |
 | Syntax, grammar, formatting, editions | Operation semantics and behavior versions (ANV, FLX) |
-| Types: `Quantity<D>`, `Tol<T>`, `Approx<T>`, `Truth`, `Expr<T>`, `CheckOutcome` (in `base`), records, enums, traits | `ErrorBound` and `ErrorBudget` layouts in `base`; `Field` (FLX) |
-| `OpSite`; query syntax and lowering; the decision rule for `Truth` and checks | `EntityId`, lineage and `anvil::resolve` (ANV) |
-| Evaluation semantics, `Failure` and `Abort` in the language, per-call limits | Scheduling, caching, labels, evaluation-wide limits and the determinism policy (KLN); mechanisms (PLT) |
+| Types: `Quantity<D>`, `Tol<T>`, `Approx<T>`, `Truth`, `Expr<T>`, `CheckId`, `CheckOutcome` | `ErrorBound`, `ErrorBudget`; `Field` (FLX) |
+| `CallSite`; query syntax and lowering; the decision rule for `Truth`; the gate predicate | `EntityId`, lineage and `anvil::resolve` (ANV) |
+| Evaluation semantics, `Failure` and `Abort` in the language, per-call limits | Scheduling, caching, labels, evaluation-wide limits, limit outcomes (KLN); determinism mechanisms (PLT) |
 | The interpreter, the Ingot IR and the deferred code generator | The kernel IR (FLX, `kernels`); the determinizer (PLT) |
-| Diagnostics, fixes and check semantics | Release policy (`repo`); the verifier and `api` (AGT) |
+| Diagnostics, fixes and check semantics | Release policy, policy allowances and Waiver records (KLN); the verifier and `api` (AGT) |
 | Modules, manifest language keys, lockfile `[language]`, semantic-version rules | Registry and signing (ECO); lockfile storage and merge (KLN) |
-| `#[ingot::feature]` and WIT bindings | WIT worlds and capabilities (ECO) |
-| Feature metadata, language service, debugger, tests | Dialog rendering, code panel and viewport (UIX); agent tools (AGT) |
+| `#[ingot::feature]`, the guest SDK and WIT bindings | WIT worlds and capabilities (ECO) |
+| Feature metadata, language service, debugger, tests | Dialog rendering and code panel (UIX); agent tools (AGT) |
 
 | Crate (contract section 12) | Contents | Phase |
 | --- | --- | --- |
 | `ingot-syntax` | Lexer, block-local parser, lossless tree, formatter, edition migrations | 0 |
-| `ingot-types` | Name resolution, inference, dimension and tolerance algebra, traits, diagnostics catalog | 0 |
-| `ingot-ir` | Ingot IR (IIR), lowering, `OpSite` derivation, the reference interpreter, differentiation | 0 |
-| `ingot-bindgen`, `ingot-macros` | WIT bindings and `#[ingot::feature]` | 1 |
+| `ingot-types` | Name resolution, inference, dimension and tolerance algebra, diagnostics catalog | 0 |
+| `ingot-ir` | Ingot IR (IIR), lowering, `CallSite`s, the reference interpreter, differentiation | 0 |
+| `ingot-bindgen`, `ingot-macros` | WIT bindings, the generated guest SDK `ingot_sdk`, `#[ingot::feature]` | 1 |
 | `ingot-service` | Language server, structural edits, test runner; debugger and notebooks | 1; 2 |
 | `ingot-codegen` | IIR to WebAssembly, entering only when justified ("Execution") | 2 at the earliest |
 
 Every Ingot crate is `forbid(unsafe_code)`.
 
-1. **Pure.** No expression observes time, randomness, files, network, thread order, memory addresses or entity names. Randomness is an explicit keyed value.
-2. **Strict and bounded.** Call by value, left to right. Every node ends in a value or a typed `Failure`; every Evaluation ends or aborts.
+1. **Pure.** No expression observes time, randomness, files, network, thread order, addresses or entity names; randomness is an explicit keyed value.
+2. **Strict and bounded.** Call by value, left to right; every node ends in a value or a typed `Failure`.
 3. **Physics in types.** Dimensions, affine quantities, tolerances and approximation error are types.
-4. **Geometry by provenance, names from text.** Code never holds an entity index, and call-site identities come from source text only.
+4. **Names from text.** Code never holds an entity index, and call-site identities come from source text only.
 5. **One program, three editors.** Every GUI action and agent edit is a minimal edit of the lossless tree.
-6. **No privileged code.** std is ordinary Ingot; operations and Wasm components are reached through `extern` declarations anyone can write.
-7. **Errors are values with fixes; the environment is never a value.** A `Failure` has a code, a reason, a location and typed fixes. An `Abort` is not a value.
-8. **No macros.** Builder blocks, attributes and generics cover what macros would; code generation happens only outside the language.
+6. **No privileged code.** std is ordinary Ingot, reaching operations through `extern` declarations anyone can write.
+7. **Errors are values with fixes.** A `Failure` has a code, a reason, a location and typed fixes; an `Abort` is not a value.
+8. **No macros.** Builder blocks, attributes and generics cover what macros would.
 
-**Decision D-ING-1:** Ingot is a pure, strict, expression-oriented language with immutable values, full type inference inside bodies, and required type signatures on every named function, feature and record. *Why:* signatures let each module type-check alone, bounding recompilation to it and its dependents, and they generate dialogs and documentation. *Rejected:* whole-program inference (errors appear far from causes); dynamic typing as in CadQuery and OpenSCAD (unit errors surface late or never); mutable variables (they break the dataflow lowering); lazy evaluation (costs and failures would depend on demand order, and Kiln is already demand-driven).
+**Decision D-ING-1:** Ingot is a pure, strict, expression-oriented language with immutable values, inference inside bodies, and required signatures on named items. *Why:* signatures let each module type-check alone, bound recompilation, and generate dialogs and documentation. *Rejected:* whole-program inference (distant errors); dynamic typing as in CadQuery (late unit errors); mutation (breaks dataflow lowering); laziness (demand-dependent costs).
 
 ### The language at a glance
 
@@ -57,23 +57,23 @@ pub feature bracket(
 ) -> Part {
     let outline = rect(width, 40mm)
     let base = sketch(plane.xy) { outline } |> extrude(thickness)
-    let web = base.face(role: end_cap).edge(role: side(outline.top)) |> rib(height: 20mm, t: thickness)
+    let web = base.edge(role: end(outline.top)) |> rib(height: 20mm, t: thickness)
     let body = base + web
     let solid = body |> fillet(body.edges(new), 2mm)
     let p = part(solid, name: "Bracket").material(alu_6061_t6)
     let clamp = base.face(role: start_cap)
     let study = static_stress(p, fixed: clamp, force: load, on: web.face(role: end_cap))
-    let stress = study.von_mises.max(over: p.away_from(clamp, 2 * thickness))
+    let stress = study.von_mises.max(over: p.away_from([clamp, web.face(role: end_cap)], 2 * thickness))
     p.require(stress < 0.6 * p.material.yield_strength(at: 20degC))
 }
 // width + load  →  error ING3001: cannot add Length and Force
 ```
 
-`thickness` arrives as a `Tol<Length>`: the body computes with the nominal, and `extrude` attaches the tolerance as PMI (D-ING-4). The web's edge is chosen by the role of the rectangle's `top` edge, never by rank. `stress` is an `Approx<Stress>` over a region away from the clamp (FLX), so the check is three-valued (D-ING-7).
+`thickness` arrives as a `Tol<Length>`: the body computes with the nominal, and `extrude` records the tolerance as PMI (D-ING-4). The web's edge is chosen by its role, `end(outline.top)`, never by rank. `stress` is an `Approx<Stress>` away from the clamp and the loaded face (FLX), so the check is three-valued (D-ING-7).
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
-| Canonical example | Contract section 6 compiles and evaluates with the outcome kinds stated there | Any other diagnostic or outcome fails the oracle | ING-O-31 | 1 |
+| Canonical example | Contract section 6 compiles, and its check decides at `SignOff` | Any other diagnostic or outcome fails the oracle | ING-O-31 | 1 |
 | Purity | No expression observes time, randomness, files, network, thread order, addresses or names | Not expressible | ING-O-1 | 0 |
 
 ## Lexical syntax and grammar
@@ -85,13 +85,15 @@ pub feature bracket(
 | Encoding | UTF-8 in NFC, normalized by the platform layer on load; non-NFC input that bypassed it fails with `ING0002` |
 | Hidden characters | Bidirectional controls, zero-width characters and Unicode tag characters are rejected anywhere in source (`ING0003`); string literals write them as escapes such as `\u{200B}` |
 | Line endings | LF; CRLF is accepted and normalized by the formatter |
-| Identifiers | Letters, digits and `_`, not starting with a digit; Unicode letters follow UAX #31 default identifiers [unverified: UAX #31 not opened]; `ING-L-MixedScript` flags mixed scripts |
+| Identifiers | UAX #31 default identifiers (an `XID_Start` character, then `XID_Continue` characters), with `_` added to the start set as the standard allows; `ING-L-MixedScript` flags mixed scripts |
 | Case | `snake_case` for functions, features, variables, fields and modules; `PascalCase` for types, traits and enum variants; deny-by-default lint `ING-L-Naming` |
 | Statements | A newline ends a statement unless inside brackets, after a binary operator, `,` or `\|>`, or before a line starting with `.`, `\|>`, `else`, `and`, `or` or `±`. No semicolons |
 | Comments | `//` and nesting `/* … */`; `///` documents the next item and `//!` the module, both CommonMark |
 | Attributes | `#[name(args)]` on the next item, parameter, field or statement; `#![name(args)]` on the module |
+| Keywords | `and`, `as`, `else`, `enum`, `extern`, `false`, `feature`, `fn`, `for`, `if`, `impl`, `in`, `let`, `match`, `not`, `or`, `pub`, `record`, `require`, `self`, `Self`, `trait`, `true`, `try`, `type`, `use`, `where` |
+| Contextual keywords | `kind` at item position, `table` before `{`, `package` and `super` in paths |
 
-Keywords: `and`, `as`, `else`, `enum`, `extern`, `false`, `feature`, `fn`, `for`, `if`, `impl`, `in`, `let`, `match`, `not`, `or`, `pub`, `record`, `require`, `self`, `Self`, `trait`, `true`, `try`, `type`, `use`, `where`. Contextual keywords: `kind` at item position, `table` before `{`, `package` and `super` in paths. There is no `while` and no `return`; `%` is the percent suffix, so remainders are the functions `rem` and `mod`.
+There is no `while` and no `return`. `%` is the percent suffix, so remainders are the functions `rem` and `mod`.
 
 ### Literals and units
 
@@ -108,15 +110,22 @@ Keywords: `and`, `as`, `else`, `enum`, `extern`, `false`, `feature`, `fn`, `for`
 
 A unit attaches to its number with no space, so `2in` is two inches and `2 in r` tests membership. The lexer takes the longest unit name, and letters that form no unit are an error (`ING0201`). A compound unit sits in brackets, and an exponent needs digits after `e`, so `1eV` is one electronvolt.
 
-The unit table is closed per edition. It holds SI units with SI prefixes, the radian, accepted non-SI units (`min`, `h`, `L`, `t`, `bar`, `eV`, `deg`, `rev`, `arcmin`, `degC`, `degF`, `degR`), US customary units (`in`, `ft`, `thou`, `lb`, `lbf`, `psi`) and D-ING-3's rotational units. Prefixes compose only where defined, so `ft` is never a femtotonne.
+The unit table is closed per edition, and packages cannot add units; the knot is the constant `std::units::knot`. Prefixes compose only where defined, so `ft` is never a femtotonne.
 
-Packages cannot add units; the knot is a constant, `std::units::knot`. Canonical spellings are ASCII (`um`, `deg`, `degC`, `ohm`); the formatter rewrites `µm`, `°`, `Ω` and `+-`, and `±` is the one non-ASCII token.
+| Unit set | Members |
+| --- | --- |
+| SI | SI units with SI prefixes; the radian |
+| Accepted non-SI | `min`, `h`, `L`, `t`, `bar`, `eV`, `deg`, `rev`, `arcmin`, `degC`, `degF`, `degR` |
+| US customary | `in`, `ft`, `thou`, `lb`, `lbf`, `psi` |
+| Rotational | D-ING-3's named units |
 
-**Decision D-ING-2:** Every dimensional literal carries its unit, no file or package declares a default unit, and the compiler converts a literal to its SI value by exact rational arithmetic with one correct rounding. *Why:* a default unit makes a bare number mean different things in different files (KCL's documentation calls such a number "possibly any of them"), and exact conversion makes `25.4mm == 1in` hold bit for bit everywhere. *Rejected:* KCL's `defaultLengthUnit` (meaning depends on file context); multiplying by a floating-point factor (double rounding makes equal lengths unequal); a unitless zero accepted as any quantity (`0mm` is explicit).
+Canonical spellings are ASCII (`um`, `deg`, `degC`, `ohm`). The formatter rewrites `µm`, `°`, `Ω` and `+-`, and `±` is the one non-ASCII token.
+
+**Decision D-ING-2:** Every dimensional literal carries its unit, nothing declares a default unit, and literals convert to SI by exact rational arithmetic with one rounding. *Why:* KCL's documentation calls a bare number "possibly any of them", and exact conversion makes `25.4mm == 1in` hold bit for bit. *Rejected:* KCL's `defaultLengthUnit` (meaning depends on the file); a floating-point factor (double rounding); a unitless zero.
 
 ### Grammar
 
-The grammar is LL(1) after the lexer, except that `{` after an expression needs a second token to separate record literals, blocks and builder blocks. Builder blocks follow only a call's closing parenthesis, and one ending an `if`, `match` or `for` head needs parentheses, as a record literal does.
+The grammar is LL(1) after the lexer, except that `{` after an expression needs a second token to separate record literals, blocks and builder blocks. A builder block follows only a call's closing parenthesis and needs parentheses in an `if`, `match` or `for` head.
 
 ```ebnf
 file         = {inner_attr} {item} ;
@@ -199,7 +208,7 @@ for_expr     = "for" pattern "in" expr block ;
 
 Precedence, loosest first: `|>`; ranges; `or`; `and`; `not`; comparisons (chainable); `±`; `+` and `-`; `*`, `/` and `&`; unary minus; `^`; postfix. On Bodies and sets, `+`, `-` and `&` are union, difference and intersection. `x |> f(a)` means `f(x, a)`, methods come only from `impl` blocks and traits, and a call followed by a block passes it as a builder.
 
-Named arguments may appear anywhere; positional arguments fill the remaining parameters in order, and `ING-L-NameArguments` asks for names after the second positional argument. Within one block each `let` name is unique (`ING1102`), so every statement has a stable textual name; inner blocks may shadow outer names. There is no ad hoc overloading: one name has one signature.
+Named arguments may appear anywhere, and positional arguments fill the remaining parameters in order; `ING-L-NameArguments` asks for names after the second. Within one block each `let` name is unique (`ING1102`), so every statement has a stable textual name. There is no ad hoc overloading: one name has one signature.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -217,23 +226,25 @@ Named arguments may appear anywhere; positional arguments fill the remaining par
 | --- | --- |
 | `Bool` | `true`, `false` |
 | `Int` | 64-bit signed; overflow fails with `ING6101`, never wraps |
-| `Real` | Finite binary64, exactly `Quantity<1>`; an operation that would produce NaN or an infinity fails with `ING6102` at that expression |
+| `Real` | Finite binary64, exactly `Quantity<1>`; producing NaN or an infinity fails with `ING6102` |
 | `Quantity<D>` | A `Real` in coherent SI units with dimension `D`; checked at compile time, erased at run time |
 | `Temperature` | An absolute temperature, affine ("Affine quantities") |
 | `Complex<Q>` | Pairs of one dimension; the imaginary unit is `im` |
-| `Decimal` | Exact decimals at 10⁻⁹ in a 128-bit integer, for `Money<C>` and counted data; a literal adopts it exactly or fails (`ING2003`) |
-| `String`, `ExternalText` | Immutable NFC text; untrusted text from outside the design, written `external("…")` with its origin and never implicitly a `String` (AGT) |
+| `Decimal` | Exact decimals at 10⁻⁹ in a 128-bit integer, for `Money<C>` and counted data; products and quotients round half to even; inexact literals fail (`ING2003`) |
+| `String`, `ExternalText` | Immutable NFC text; untrusted text with origin, written `external("…")`, never implicitly a `String` (AGT) |
 | `Tol<T>`, `Approx<T>`, `Truth`, `Expr<T>` | Tolerances, approximations, three-valued results, staged symbolic values |
-| `Body`, `Part`, `Assembly`, `Instance`, `Field<D, V>`, `Material` | Handles to values Kiln holds ("Geometry in the language") |
+| `Body`, `Part`, `Assembly`, `Instance`, `InstanceSet`, `Field<D, V>`, `Material` | Handles to values Kiln holds |
 | `Query<K>`, `Entity<K>` | Selections and resolved entities of kind `Face`, `Edge`, `Vertex`, `Region`, `Point` or `ShapeAspect` |
 | `Point3`, `Vec3<D>`, `Direction`, `Transform`, `Plane`, `Axis`, `CoordSys` | Geometric values; `Point3` is affine over `Length` |
 | `Seed`, `Rng` | Explicit randomness ("Evaluation") |
 
-`width / 2mm` is a `Real`, so every dimensionless ratio is one type. `Int` multiplies quantities directly (`i * 6mm`); an `Int` above 2⁵³ in magnitude fails that conversion with `ING6103` rather than rounding.
+`width / 2mm` is a `Real`, so every dimensionless ratio is one type. `Int` multiplies quantities directly (`i * 6mm`); above 2⁵³ in magnitude that fails with `ING6103` rather than rounding.
+
+ISO 4217's list gives at most four minor-unit digits (CLF, UYW), so 10⁻⁹ leaves five more for unit prices of small parts. Where a value becomes an amount payable (MFG), `round_minor(currency)` rounds it to the minor unit, and `ING-L-UnroundedAmount` flags a payable amount without it.
 
 ### Dimensions
 
-A dimension is a vector of rational exponents over eight base dimensions: the seven SI base dimensions plus plane angle `A`. Solid angle is `A²`. Exponents are rational because engineering needs them: fracture toughness is `MPa*m^(1/2)` and noise density `V/Hz^(1/2)`.
+A dimension is a vector of rational exponents over the seven SI base dimensions plus plane angle `A`; solid angle is `A²`. Exponents are rational because fracture toughness is `MPa*m^(1/2)` and noise density `V/Hz^(1/2)`.
 
 ```
 kind Length = L                              // std prelude: named dimensions
@@ -244,7 +255,9 @@ kind AngularFrequency: 1 / T                 // oscillation rate; not an angle p
 type Velocity = Quantity<L / T>
 ```
 
-`kind X = D` names a dimension, and `kind X: D` declares an ISO 80000 quantity kind, which never adds to or compares with another kind of its dimension. Results are unkinded until they meet an annotation, and mixing kinds fails with `ING3002`, which offers an `as` cast. std declares kinds only where confusion causes real errors, such as frequency against angular frequency or activity (mp-units notes that hertz, becquerel and baud share `T⁻¹`).
+`kind X = D` names a dimension, and `kind X: D` declares an ISO 80000 quantity kind, which never adds to or compares with another kind of its dimension. Results are unkinded until they meet an annotation, and mixing kinds fails with `ING3002`, which offers an `as` cast.
+
+The prelude declares kinds only where confusion causes real errors, such as frequency against angular frequency or activity (mp-units notes that hertz, becquerel and baud share `T⁻¹`). A new std kind needs an RFC (ECO) naming a seeded error it prevents, which joins ING-O-4's corpus.
 
 | Expression | Rule |
 | --- | --- |
@@ -256,15 +269,17 @@ type Velocity = Quantity<L / T>
 | `asin`, `acos`, `atan`, `atan2(y, x)` | Return `Angle` |
 | `exp`, `ln`, `log10` | Take and return `Real`; `ln(p / p0)` is the idiom |
 
-Rotational kinds follow the strong angular system of contract section 5: `Torque` is J/rad, `MomentOfInertia` kg·m²/rad², `RotationalStiffness` J/rad² and `AngularVelocity` rad/s. `Nm` is newton metre per radian, and energy is `J` or `[N*m]`. Power τω, work τθ, τ = Iα and ½Iω² type-check without casts, and the type checker verifies that each `Network` port type's power expression is a power.
+Rotational kinds follow the strong angular system of contract section 5: `Torque` is J/rad, `MomentOfInertia` kg·m²/rad², `RotationalStiffness` J/rad² and `AngularVelocity` rad/s. `Nm` is newton metre per radian, and energy is `J` or `[N*m]`. Power τω, work τθ, τ = Iα and ½Iω² type-check without casts, as does each `Network` port's power expression.
 
-An oscillation's angular frequency is an `AngularFrequency` (T⁻¹) and a phase is dimensionless, so ω = √(k/I), the reactance ωL in ohms and `cos(omega * t)` type-check. A rotation becomes a phase only through the constant `radian` or a std function such as `electrical_angle(theta, poles)`. The mp-units page gives angular frequency in rad/s; Ingot keeps rad/s for rotation only (contract section 5).
+An oscillation's angular frequency is an `AngularFrequency` (T⁻¹) and a phase is dimensionless, so ω = √(k/I), the reactance ωL in ohms and `cos(omega * t)` type-check. A rotation becomes a phase only through the constant `radian` or a std function such as `electrical_angle(theta, poles)`. The mp-units guide gives angular frequency in rad/s; Ingot keeps rad/s for rotation only.
 
-**Decision D-ING-3:** Plane angle is a base dimension, never cancelled implicitly, and rotational kinds follow the strong angular system: torque in J/rad, moment of inertia in kg·m²/rad², rotational stiffness in J/rad². Oscillation angular frequency is a kind of T⁻¹ and phase is dimensionless. *Why:* with torque in N·m, the laws of rotation each carried a stray radian (R3-29), and angular frequency in rad/s would put one into ωL. *Rejected:* angle dimensionless as in the SI (`3000rpm` would silently become 314 Hz); torque in N·m beside a base angle, the round 1 choice; implicit cancellation at annotations. (revised in round 2)
+A dimensionless phase would let `sin(f * t)` with `f` in hertz compile without the 2π. The deny-by-default lint `ING-L-HertzPhase` fires when a product with a `Frequency` factor reaches a trigonometric argument without passing through `AngularFrequency`. Its machine-applicable fix rewrites `f * t` as `f.angular() * t`, where `f.angular()` is 2πf.
+
+**Decision D-ING-3:** Plane angle is a base dimension, never cancelled implicitly; rotational kinds follow the strong angular system, oscillation angular frequency is a kind of T⁻¹, and phase is dimensionless. *Why:* with torque in N·m each law of rotation carried a stray radian (R3-29), and ω in rad/s would put one into ωL. *Rejected:* a dimensionless angle (`3000rpm` becomes 314 Hz); torque in N·m beside a base angle; implicit cancellation. (revised in round 2)
 
 ### Inference and scalar flavors
 
-Every named item states its signature; bodies are inferred bidirectionally. Dimension equations are linear over ℚ, so Gaussian elimination yields a most general solution. F# checks units with integer exponents; Ingot allows rational ones and infers dimension arguments at call sites.
+Every named item states its signature; bodies are inferred bidirectionally. Dimension equations are linear over ℚ, so Gaussian elimination yields a most general solution. F# checks units with integer exponents; Ingot allows rational ones.
 
 ```
 fn rms<D>(xs: [Quantity<D>]) -> Quantity<D> { sqrt(sum(xs.map(|x| x * x)) / xs.len()) }
@@ -280,36 +295,36 @@ fn rms<D>(xs: [Quantity<D>]) -> Quantity<D> { sqrt(sum(xs.map(|x| x * x)) / xs.l
 | Compare tolerances | Any `Tol` operand | `ING4101`, with fixes that state the meaning |
 | Mix | A `Tol` and an `Approx` operand | `ING4102`: convert the tolerance with `.limits()` first |
 
-Let bindings are not generalized, and lambdas are monomorphic. Integer literals adopt `Int`, `Real` or `Decimal` from the expected type; there is no other implicit conversion between `Int` and `Real`.
+Let bindings are not generalized. Integer literals adopt `Int`, `Real` or `Decimal` from the expected type, with no other implicit conversion.
 
-A quantity has four flavors, all implementing the trait `Scalar<D>`: exact `Quantity<D>`, `Tol`, `Approx` and `Expr`. Arithmetic and std math are generic over `Scalar`, and a parameter written `Length` accepts any `Scalar<L>` at every call position, in `fn` and `feature` alike. Each call is monomorphized per flavor, and inlay hints show the flavor at each argument.
+A quantity has four flavors, all implementing the trait `Scalar<D>`: exact `Quantity<D>`, `Tol`, `Approx` and `Expr`. Arithmetic and std math are generic over `Scalar`, and a parameter written `Length` accepts any `Scalar<L>` in `fn` and `feature` alike. Each call is monomorphized per flavor.
 
 | Flavor | In the body | Result |
 | --- | --- | --- |
 | `Quantity<D>` | The value | Exact |
-| `Tol<Quantity<D>>` | The nominal; passing the parameter on unchanged forwards its tolerance (D-ING-4) | Exact, unless the parameter itself is returned |
-| `Approx<Quantity<D>>` | The value and its budget, propagated by arithmetic | `Approx`; at a feature or operation boundary only `Guaranteed` bounds pass ("Approximate values as inputs") |
+| `Tol<Quantity<D>>` | The nominal; passing it on forwards the tolerance (D-ING-4) | Exact, unless returned itself |
+| `Approx<Quantity<D>>` | The value and its budget, propagated by arithmetic | `Approx`; only `Guaranteed` bounds cross a feature boundary |
 | `Expr<Quantity<D>>` | A symbolic value; the body is staged (D-ING-9) | `Expr` |
 
-A parameter that must be exact is written `Exact<Length>`. Three coercions remain: `T` to `Option<T>`, an unkinded quantity to a kind, and a value to an enum variant marked `#[implicit]` (`extrude(10mm)` means `extrude(Blind(10mm))`).
+A parameter that must be exact is written `Exact<Length>`. Three coercions remain: `T` to `Option<T>`, an unkinded quantity to a kind, and a value to an `#[implicit]` enum variant (`extrude(10mm)` means `extrude(Blind(10mm))`).
 
-**Decision D-ING-20:** Quantities have four flavors under one trait, `Scalar<D>`. A parameter declared as a quantity accepts every flavor at every call position with one fixed meaning per flavor, and `Exact<D>` opts out. *Why:* round 1 lifted each flavor by its own rule at its own positions, so `rect(other.edge(…).length(), 10mm)` failed to compile and plain functions rejected symbolic values (R3-31). *Rejected:* coercions at feature positions only, the round 1 rule; generic signatures on every helper (ceremony on the commonest code).
+**Decision D-ING-20:** Quantities have four flavors under one trait, `Scalar<D>`: a quantity parameter accepts every flavor at every call position with one meaning per flavor, and `Exact<D>` opts out. *Why:* round 1's per-position lifting rejected `rect(other.edge(…).length(), 10mm)` and symbolic values in plain functions (R3-31). *Rejected:* coercions at feature positions only; generic signatures on every helper (ceremony).
 
 ### Affine quantities
 
-Absolute temperature is a point, as in mp-units' affine space and Pint's offset units. Point minus point is a difference, point plus a difference is a point, and points never add or multiply.
+Absolute temperature is a point, as in mp-units' affine space and Pint's offset units: point minus point is a difference, and points never add or multiply.
 
 | Literal or expression | Type |
 | --- | --- |
 | `20degC`, `68degF`, `absolute_zero + 77K` | `Temperature` |
 | `15K`, `27degR`, `5delta_degC`, `t1 - t2` | `TemperatureDifference` |
 | `t.absolute()` | `TemperatureDifference` above absolute zero, for radiation and gas laws |
-| `200[W/(m*degC)]`, `150[ppm/degC]` | Compound units: `degC` and `degF` inside them mean differences, as datasheets write them |
+| `200[W/(m*degC)]`, `150[ppm/degC]` | Inside compound units `degC` and `degF` mean differences, as datasheets write them |
 | `t1 + t2`, `2 * t` | `ING3201`, with fixes `.absolute()` or a difference |
 
-`Tol<P>` and `Approx<P>` for an affine `P` carry their deviations and bounds in `P::Delta`. `Point3` follows the same rules, and gauge pressure is written `p_atm + 2bar`.
+`Tol<P>` and `Approx<P>` for an affine `P` carry deviations and bounds in `P::Delta`. `Point3` follows the same rules.
 
-Quantities are stored in coherent SI units as binary64, and source keeps literals as written. Display units (UIX) map quantity kinds to units per package, user or view, and a `RenderProfile` carries them into Snapshots; neither changes values. Values print as the shortest round-tripping decimal [unverified: Ryū; paper not opened], and generated literals keep the unit at their position.
+Quantities are stored in coherent SI units as binary64, and source keeps literals as written. Display units (UIX) map kinds to units per package, user or view without changing values. Values print as the shortest round-tripping decimal (Ryū), and generated literals keep the unit at their position.
 
 ### Records, enums, traits and collections
 
@@ -321,15 +336,15 @@ let longer = DowelSpec { ..spec, length: 30mm }        // functional update
 let kind = match extent { Blind(d) if d > 50mm => "deep", Blind(_) | Symmetric(_) => "blind", _ => "through" }
 ```
 
-Records are nominal when declared and structural when written `{ a: Length }`. A structural type may spread another, `{ item: ItemNumber, ..Params<bracket> }`, when shared fields agree (`ING2105`). `Expr<T, Out>` carries the derived outputs its functions declare, so `solve` returns `{ ..Trials, ..Out }` and `result.von_mises` is a typed field (FLX).
+Records are nominal when declared and structural when written `{ a: Length }`. A structural type may spread another, `{ item: ItemNumber, ..Params<bracket> }`, when shared fields agree (`ING2105`). `Expr<T, Out>` carries declared derived outputs, so `result.von_mises` is a typed field (FLX).
 
-Enums are tagged unions with exhaustive `match`, and `#[non_exhaustive]` enums need a wildcard arm outside their package. Type parameters are monomorphized and dimension parameters erased; a bound `D: Dim` passes a dimension when an accessor must check one. Coherence follows Rust's orphan rule, and `dyn Trait` boxes values for heterogeneous lists.
+Enums are tagged unions with exhaustive `match`, and `#[non_exhaustive]` enums need a wildcard arm outside their package. Type parameters are monomorphized and dimension parameters erased; a bound `D: Dim` passes a dimension when an accessor must check one. Coherence follows Rust's orphan rule, and `dyn Trait` boxes heterogeneous values.
 
-A `Field<D, V>` takes a product domain written as a tuple, `Field<(Body, Time), Temperature>`, and quantity kinds name parameter domains. `kind ParticleRadius: L` thus types a DFN particle concentration as `Field<(Body, ParticleRadius), Concentration>` (D-FLX-38; DFN is phase 5 per contract section 13.4).
+A `Field<D, V>` takes a product domain written as a tuple, `Field<(Body, Time), Temperature>`, and quantity kinds name parameter domains. `kind ParticleRadius: L` thus types a DFN particle concentration as `Field<(Body, ParticleRadius), Concentration>` (D-FLX-38).
 
 | std trait | Implemented by |
 | --- | --- |
-| `Eq`, `Ord`, `Hash` | Numbers, strings, records and enums by derivation; `Query` by its canonical plan; `Entity<K>` orders by Anvil's canonical geometric order, never by name |
+| `Eq`, `Ord`, `Hash` | Numbers, strings, records and enums by derivation; `Query` by its canonical plan; `Entity<K>` by canonical geometric order |
 | `Affine` | `Temperature`, `Point3`, with an associated `Delta` |
 | `Scalar<D>` | The four quantity flavors |
 | `Transformable` | Bodies, Parts, points, planes, coordinate systems, queries |
@@ -346,25 +361,24 @@ A `Field<D, V>` takes a product domain written as a tuple, `Field<(Body, Time), 
 | `Range<T>` | `0..8`, `20mm..=400mm`, `..=5mm` | Also the interval type; `x in r` is a `Truth` for an `Approx` `x` |
 | `Table<R>` | `table { … }`, `table("rows.csv")` | Rows of a record type, units checked against headers |
 
-`Vec3<Length>`, `Mat3<Stress>` and `Mat<R, C>`, with a dimension per row and column as a Jacobian needs, are std types over the same algebra. A `Range` of quantities iterates only with an explicit step, `(0mm..=10mm).step(2mm)`. `sum`, `min` and `max` use a fixed pairwise tree over indices, and `fsum` returns the correctly rounded sum.
+`Vec3<Length>`, `Mat3<Stress>` and `Mat<R, C>`, with a dimension per row and column as a Jacobian needs, are std types over the same algebra. A dimension error in a `Mat<R, C>` names the entry `(i, j)` with expected and actual dimensions. An `ING3001` note prints the row and column dimension vectors once.
+
+A `Range` of quantities iterates only with an explicit step, `(0mm..=10mm).step(2mm)`.
+
+`sum` is PLT's `det_sum` (contract section 7.3), so a list sums to the same bits in Ingot and inside an operation. `min` and `max` are exact in any order, and `fsum` returns the correctly rounded sum by exact accumulation.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
-| Dimensions and kinds | Rational exponents over eight bases; kinds; erased at run time | `ING3001`, `ING3002` with fixes | ING-O-4 | 0 |
-| Strong angular system | Contract section 5 kinds and named units; rotation and phase apart | `ING3001` with a `radian` fix | ING-O-4 | 0 |
-| Inference, records, enums, traits | Bidirectional; required signatures; exhaustive `match`; orphan rule | `ING2xxx` | ING-O-5 | 0 (core), 1 (traits, `dyn`) |
+| Dimensions and kinds | Rational exponents over eight bases; kinds added by RFC; erased at run time | `ING3001`, `ING3002` with fixes | ING-O-4 | 0 |
+| Strong angular system | Contract section 5 kinds; rotation and phase apart | `ING3001` with a `radian` fix; `ING-L-HertzPhase` | ING-O-4 | 0 |
+| Inference, records, enums, traits | Bidirectional; exhaustive `match`; orphan rule | `ING2xxx` | ING-O-5 | 0 (core), 1 (traits, `dyn`) |
 | Scalar flavors | One trait, every call position, `Exact<D>` opt-out | `ING2001`; `ING6403` at boundaries | ING-O-5, ING-O-8 | 1 |
 | Affine quantities | Points and differences; compound units as differences | `ING3201` | ING-O-4 | 0 |
-| `Decimal` and `Money<C>` | Exact at 10⁻⁹; currencies never mix | `ING6101`, `ING2003` | ING-O-5 | 1 |
+| Reductions | `sum` is `det_sum`; `fsum` correctly rounded | Not expressible | ING-O-1 | 0 |
+| `Decimal` and `Money<C>` | Exact at 10⁻⁹; round half to even; currencies never mix | `ING6101`, `ING2003`; `ING-L-UnroundedAmount` | ING-O-5 | 1 |
 | Product and parameter domains | `Field<(D, …), V>`; kinds name parameter domains | `ING2001` | ING-O-5 | 1 |
 
 ## Tolerances, approximations and truth
-
-| Type | Meaning | Produced by | Consumed by |
-| --- | --- | --- | --- |
-| `Tol<T>` | Allowed variation of a manufactured characteristic | Designers, fit codes, catalog parts | Geometry (nominal), PMI, variation analysis, checks |
-| `Approx<T>` | A computed value and its `ErrorBudget` | Measurements, Field reductions, solves | Checks, reports, explicit decisions |
-| `Truth` | `True`, `False` or `Undecided { reason, needed }` | Comparisons of approximate values | `require`, `if`, `match`, query `where:` |
 
 ### `Tol<T>`
 
@@ -375,16 +389,18 @@ A `Field<D, V>` takes a product domain written as a tuple, `Field<(Body, Time), 
 | Symmetric | `4mm ± 0.1mm` | 3.9 mm to 4.1 mm |
 | Deviations | `10mm ±(-0.1mm, +0.2mm)` | 9.9 mm to 10.2 mm; signs mandatory |
 | Limits | `tol(9.9mm..=10.2mm)` | Nominal at the mid-limit |
-| Fit code | `fit(10mm, H7)` | ISO 286-1:2010 tables in `std::standards::iso286` (MEC) |
+| Fit code | `fit(10mm, H7)` | Computed from ISO 286-1's formulas, never a transcribed table (MEC) |
 | Basic | `basic(30mm)` | Theoretically exact, toleranced by a GD&T control |
 
-Inverted limits fail with `ING4001` and a deviation of the wrong dimension with `ING4002`; a dimensionless deviation is relative only as a `%` or `ppm` literal.
+Inverted limits fail with `ING4001`, and a deviation of the wrong dimension with `ING4002`. A dimensionless deviation is relative only as a `%` or `ppm` literal.
 
-**Decision D-ING-4:** A `Tol<T>` may be supplied wherever a parameter, record field or enum payload is declared as `T`. The slot holds the nominal and a reference to the tolerance's site: reading it yields the nominal, and passing it on unchanged forwards the reference. Every feature call records the tolerances it receives, for variation analysis, dialogs, PMI and `tolerances(x)`. *Why:* this keeps contract section 6's `thickness: Length = 4mm ± 0.1mm`, carries the tolerance to the call that realizes it as PMI, and keeps geometry at nominal. *Rejected:* a tolerance on every `Length` (temporaries would pay for tracking); `.nominal` at every use (noise, and PMI would lose the tolerance); dropping the tolerance at the first call boundary.
+An untoleranced length is exact in Ingot arithmetic. MEC's Part-level `general_tolerance(standard, class)` record supplies limits for untoleranced sizes in stacks, inspection and cost, so the language needs no implicit tolerance.
+
+**Decision D-ING-4:** A `Tol<T>` may fill any slot declared as `T`; the slot holds the nominal, and the realizing feature records the forwarded site as PMI on an anchored aspect query. *Why:* geometry stays nominal, and a split target fails a check instead of losing its tolerance behind a Note (R8-12). *Rejected:* a tolerance on every `Length` (cost on temporaries); `.nominal` at every use (PMI loses it); attributes copied through operations, the round 2 rule. (revised in round 3)
 
 ### Arithmetic on tolerances
 
-Each tolerance site (a `±` expression, `tol(…)` or `fit(…)`) owns a noise symbol εᵢ in [−1, 1], and a computed `Tol` is a center plus one coefficient per symbol. In this affine arithmetic (Comba and Stolfi 1993; de Figueiredo and Stolfi 2004), forms sharing a symbol are correlated, which removes interval arithmetic's dependency problem.
+Each tolerance site (a `±` expression, `tol(…)` or `fit(…)`) owns a noise symbol εᵢ in [−1, 1]. A computed `Tol` is a center plus one coefficient per symbol. In this affine arithmetic (Comba and Stolfi 1993; de Figueiredo and Stolfi 2004), forms sharing a symbol are correlated, which removes interval arithmetic's dependency problem.
 
 | Operation | Result |
 | --- | --- |
@@ -392,7 +408,11 @@ Each tolerance site (a `±` expression, `tol(…)` or `fit(…)`) owns a noise s
 | `a * b`, `sqrt(a)`, other smooth functions | First-order term per symbol, plus a remainder bounding the rest over the joint box |
 | `a < b` and other comparisons | `ING4101`; fixes offer `a.upper() < b.lower()`, `a.nominal < b.nominal` and `yield_of(…)` |
 
-Rounding enters the remainder, so `.limits()` is a guaranteed enclosure in binary64. Statistics are explicit calls that print their assumed distributions: `.rss(k:)` propagates to first order as in JCGM 100:2008, and `.monte_carlo(n:, rng:)` follows JCGM 101:2008. Sites declare distributions with `.statistical(Normal(cp: 1.33))` or an MFG process capability, else MEC's `std::mech::tol::default_distribution` applies (D-MEC-28: uniform within the limits, or normal from a process profile's Cp and Cpk), and `group:` correlates parts from one reel or fixture.
+Rounding enters the remainder, so `.limits()` is a guaranteed enclosure in binary64. Forms store coefficients sparsely. A form above 4,096 symbols keeps the 4,096 largest coefficients and folds the rest into the remainder, losing only their correlation, and reports `Note::SymbolsCondensed { count, width }`.
+
+Statistics are explicit calls that print their assumed distributions. `.rss(coverage: 99.73%)` returns the quantile interval of the first-order form (JCGM 100:2008), by exact convolution up to eight uniform or normal terms and numerically beyond. It intersects with `.limits()`, so it is never wider than the worst case; `k:` is accepted only when every contributor is normal.
+
+`.monte_carlo(n:, rng:)` follows JCGM 101:2008. Sites declare distributions with `.statistical(Normal(cp: 1.33))` or an MFG process capability, else MEC's `default_distribution` applies (D-MEC-28). `group:` correlates parts from one reel or fixture.
 
 A symbol stands for one manufactured characteristic:
 
@@ -401,35 +421,43 @@ A symbol stands for one manufactured characteristic:
 3. A tolerance read from geometry (`aspect.size_tol()`, PMI) is keyed by the aspect's `EntityId` and Instance path.
 4. `t.independent(key)` makes an independent copy, and `ING-L-SharedSymbol` flags one symbol entering an expression with both signs.
 
-**Decision D-ING-5:** `Tol` arithmetic uses affine forms over per-site noise symbols: worst case by default, exact for linear stacks, with an explicit remainder for nonlinear ones, and statistical only through explicit calls. A site forwarded into a Part takes the Part's path into its symbol. *Why:* linear stacks must be exact and repeated uses of one dimension correlated, while two spacers cut from one specification are two characteristics (R3-30). *Rejected:* interval arithmetic (overestimates repeated dimensions); implicit RSS (hides a process assumption); one symbol per site everywhere, the round 1 rule. (revised in round 2)
+These keys use names only to decide which symbols are one symbol. Every numeric use orders symbols by a name-free key (contract section 7.1):
 
-MEC's 3D variation analysis uses `tolerances(x)`, which lists the sites behind `x`, and `vary(f, sites)`. The latter replaces chosen sites with samples through literal overrides, so each sample is an ordinary cached evaluation.
+1. the absolute first-order sensitivity of the measured quantity, largest first, so Sobol's leading dimensions go to the largest contributors;
+2. for a realized symbol, its Part's `GeometryId`, the placement and the aspect's canonical entity number; for a code-level one, the canonical hash of its position in the expression DAG;
+3. the nominal, limits and distribution.
+
+`.rss` sums in this order through `det_sum`, Sobol dimensions follow it, and each `.monte_carlo` stream is seeded from the key and argument values. Symbols equal under the whole key are exchangeable, so any assignment gives identical bits.
+
+**Decision D-ING-5:** `Tol` arithmetic uses affine forms over per-site noise symbols, worst case by default; names decide which symbols are shared, and a name-free key orders every numeric use. *Why:* linear stacks must be exact, two spacers from one specification vary apart (R3-30), and statistics must survive renaming (R8-08, R9-17). *Rejected:* interval arithmetic (overestimates repeats); implicit RSS (hides a process assumption); name order (a rename moves Sobol dimensions). (revised in round 3)
+
+MEC's variation analysis has two paths (D-MEC-22), both reading `tolerances(x)`, the sites behind `x`. The zone path samples small-displacement torsors per toleranced aspect and re-solves only the mate system. The rebuild path, for size tolerances that change topology or contact, calls `vary(f, sites)`, which samples sites through literal overrides as ordinary evaluations.
 
 A pin in a bore shows a linear stack:
 
 ```
 pub feature pin_joint(bore_d: Length = 10mm, gap_min: Length = 4um) -> Assembly {
     let cp1 = Normal(cp: 1.0)                    // centred processes, limits at ±3σ
-    let bore = fit(bore_d, H7).statistical(cp1)  // 10.000 to 10.015 mm [unverified: ISO 286-2]
-    let pin = fit(bore_d, g6).statistical(cp1)   // 9.986 to 9.995 mm [unverified: ISO 286-2]
+    let bore = fit(bore_d, H7).statistical(cp1)  // 10.000 to 10.015 mm
+    let pin = fit(bore_d, g6).statistical(cp1)   // 9.986 to 9.995 mm
     let h = instance(block_with_bore(d: bore), fixed: true)
     let s = instance(pin_part(d: pin))
     let clearance = bore - pin                   // affine in two symbols
     assembly([h, s], mates: [cylindrical(s.csys("axis"), h.csys("bore"))])
-        .require(clearance.lower() >= gap_min, name: "min_clearance")       // 5 um: passes
-        .require(clearance.rss(k: 3).hi <= 26um, name: "max_clearance_stat") // 25.75 um: passes
+        .require(clearance.lower() >= gap_min, name: "min_clearance")                    // 5 um: passes
+        .require(clearance.rss(coverage: 99.73%).hi <= 26um, name: "max_clearance_stat") // 25.75 um: passes
 }
 ```
 
-`clearance.limits()` is exactly 5 µm to 29 µm. With Cp = 1.0, σ is 2.5 µm for the bore and 1.5 µm for the pin, so the upper 3σ limit is 17 µm + 3 × 2.92 µm = 25.75 µm; MEC's uniform default would give 32.1 µm, above the worst case. The bore and pin faces receive their fit codes as PMI by forwarding.
+`clearance.limits()` is exactly 5 µm to 29 µm, as ISO 286-2's tables give over 6 mm up to 10 mm. With Cp = 1.0, σ is 2.5 µm for the bore and 1.5 µm for the pin. The upper limit is then 17 µm + 3 × 2.92 µm = 25.75 µm. Under MEC's uniform default the call convolves two uniforms and gives 28.4 µm, still inside the worst case.
 
 ### GD&T controls as types
 
-MEC owns the GD&T records, including composite frames, combined zones and size modifiers, and their validators. Ingot owns attachment and the mistakes the type checker catches.
+MEC owns the GD&T records and validators; Ingot owns attachment and the mistakes the type checker catches.
 
 1. **Typed aspects.** `Query<Aspect<K>>` selects shape aspects whose kind is static when the producing feature declares it: `hole(…)` gives `Aspect<OfSize>`, extrude caps `Aspect<Planar>`, recognized imports `Aspect<Any>`.
-2. **Controls are values.** `position(…)`, `flatness(…)` and the others return `GeometricTolerance` records whose signatures carry the standards' rules as trait bounds; a material condition modifier needs `K: OfSize`.
-3. **Typed attachment.** `part.tolerance(target, control)` attaches the control as an attribute keyed by the target's `EntityId`s. GD&T and PMI attributes use Anvil's split policy `Fail`, so a later split forces re-specification instead of silently creating separate zones.
+2. **Controls are values.** `position(…)`, `flatness(…)` and the others return `GeometricTolerance` records whose signatures carry the standards' rules as trait bounds. A material condition modifier needs `K: OfSize`.
+3. **Typed attachment.** `part.tolerance(target, control)` records the control on an anchored aspect query, re-resolved on the final Part. Every PMI item, forwarded or explicit, has MEC's `Error`-severity check `pmi_target_resolved`. A split, merged or deleted target fails it, never degrading to a Note, and its fix inserts an explicit `part.tolerance(…)`.
 4. **Dialects are modules.** `std::mech::gdt::asme` implements ASME Y14.5-2018. `std::mech::gdt::iso` implements ISO 1101:2017, ISO 5459:2024, ISO 14405-1:2025, ISO 8015:2011, ISO 22081:2021, ISO 5458 and ISO 2692, whose editions MEC states. The manifest key `gdt-dialect` names the design's dialect, and importing the other fails with `ING4302`.
 5. **Tombstones.** Symbols ASME Y14.5-2018 deleted (concentricity, symmetry) are declared `#[removed(in:, instead:)]`, so a call fails with that explanation and fixes.
 
@@ -441,122 +469,134 @@ plate.tolerance(holes, position(dia(0.1mm), mmc, datums: [a, b, c.at(mmb)]))
 //   → error ING4201: maximum material condition needs a feature of size; start_cap is Aspect<Planar>
 ```
 
-Rules that need resolved geometry, such as datum degrees of freedom, run at build time and fail with MEC's `InvalidControl { rule, clause }`. ASME Y14.5.1-2019's page calls it consistent with Y14.5M-1994, so MEC states which governs where it and Y14.5-2018 differ [unverified: alignment with Y14.5-2018].
+Rules that need resolved geometry, such as datum degrees of freedom, run at build time and fail with MEC's `InvalidControl { rule, clause }`. ASME's page for Y14.5.1-2019 calls it consistent with Y14.5M-1994, so MEC defines the zone mathematics of each Y14.5-2018-only construct and marks it `CrucibleDefined` in reports.
 
-**Decision D-ING-6:** GD&T controls are ordinary records returned by dialect-specific functions; legality rules are trait bounds on typed aspects where the kind is static, and the rest run at build time. *Why:* the commonest GD&T errors (material modifiers on surfaces, deleted symbols, mixed dialects) become compile errors at their line. *Rejected:* a GD&T sublanguage (a second grammar for a few dozen records); validation only at build time (late, far from the cause); string-encoded feature control frames (untyped).
+**Decision D-ING-6:** GD&T controls are ordinary records from dialect modules; legality rules are trait bounds on typed aspects where the kind is static, and the rest run at build time. *Why:* the commonest GD&T errors (modifiers on surfaces, deleted symbols, mixed dialects) become compile errors at their line. *Rejected:* a GD&T sublanguage (a second grammar); build-time validation only (late); string-encoded control frames (untyped).
 
 ### `Approx<T>` and the decision rule
 
-`Approx<T>` is a value with an `ErrorBudget<T::Delta>` (contract section 5) whose parts use only `Pointwise` and `Goal` norms, plus flags such as `Singular`. Measurements (`body.volume()`, `distance(a, b)`), Field reductions (`stress.max(over: R)`) and Wasm component results with declared errors return it. A reduction is `Quantified` only when Flux estimated that functional; otherwise its discretization part is `NotQuantified`.
+`Approx<T>` is a value with an `ErrorBudget<T::Delta>` (contract section 5) in `Pointwise` and `Goal` norms, plus flags such as `Singular`. Measurements, Field reductions (`stress.max(over: R)`) and Wasm component results with declared errors return it. A reduction is `Quantified` only when Flux estimated that functional.
 
-Arithmetic propagates each source separately with outward rounding, keeping the product term (|xy − x̃ỹ| ≤ |x̃|·e_y + |ỹ|·e_x + e_x·e_y). Bounds in one norm add, different norms never combine, and a part's kind is the weakest of its inputs. Division by an enclosure containing zero fails with `ING6104`.
+A material property read such as `p.material.yield_strength(at: 20degC)` also returns an `Approx`. Its input part is a `Guaranteed` enclosure from the lower to the upper basis value: the specification limit, else B-basis (COV). A comparison therefore decides conservatively whichever check consumes it, and the report names the basis and the deciding side.
 
-One rule decides every comparison of approximate values, in `if`, `match` guards, query `where:` and `require` alike. For `x < y` with the declared evidence `e`, a bound kind (`Estimated` unless a check declares `Guaranteed`):
+Arithmetic propagates each source separately with outward rounding, keeping the product term (|xy − x̃ỹ| ≤ |x̃|·e_y + |ỹ|·e_x + e_x·e_y). A part's kind is the weakest of its inputs, and dividing by an enclosure containing zero fails with `ING6104`.
+
+One rule decides every comparison of approximate values, in `if`, `match` guards, query `where:` and `require` alike. For `x < y` under `decides_on`, a bound kind (`Estimated` unless a check declares `Guaranteed`):
 
 | Outcome | Condition |
 | --- | --- |
-| `True` or `False` | Every part is quantified and meets `e`, the enclosures are disjoint, and no blocking flag is set |
+| `True` or `False` | Every part is quantified and meets `decides_on`, the enclosures are disjoint, and no blocking flag is set |
 | `Undecided { WithinBound, needed }` | The enclosures overlap; `needed` is the bound that would decide |
-| `Undecided { Indicator }` | A part is only an `Indicator`, as every `Preview` result is |
+| `Undecided { Indicator }` | A part is only an `Indicator`: every `Preview` result, and any result outside its calibration envelope (FLX) |
 | `Undecided { Unquantified(sources) }` | A part is `NotQuantified` (for `require`, see "Checks" for the conditional `Pass`) |
+| `Undecided { CalibrationUnconfirmed }` | A `SignOff` decision rests on an `Estimated` discretization part, and the confirming refinement (contract section 7.1) disagrees |
 | `Undecided { SingularPoint }`, `Undecided { Flagged(flag) }` | A blocking flag from the producer |
 
 `==` on an `Approx` is `False` on disjoint enclosures and `Undecided` otherwise. `and`, `or` and `not` follow Kleene's strong three-valued logic, so `False and Undecided` is `False`.
 
-Each node records the fidelity of the bounds it observed. Below the Evaluation's fidelity ceiling, an `if`, `match` or `where:` on `Undecided` yields `ResultStatus::Pending` and waits for the next fidelity's node, which Kiln has already demanded. At the ceiling it fails with `ING6401 UndecidedBranch`, carrying the margin and the accuracy needed.
+A decided comparison carries its confidence, 1 − Σα over the parts that carry one, calibrated `Estimated` bounds included (contract section 5).
 
-**Decision D-ING-7:** Comparisons of approximate values return a three-valued `Truth` by one rule: disjoint enclosures decide, subject to the declared evidence, and `Indicator` or `NotQuantified` parts never decide. Control flow on `Undecided` waits as `Pending` below the fidelity ceiling and fails with `ING6401` at it. *Why:* four tabs had four rules (R3-07); comparing estimates passes designs within numerical error; waiting spares branches evaluated at `Interactive` (R3-14). *Rejected:* comparing estimates only; a consumer-side margin rule; treating `Undecided` as `False`; failing at every fidelity. (revised in round 2)
+Each node records the fidelity of the bounds it observed. An `if`, `match` or `where:` on `Undecided` yields the value `Undecided { needed, fidelity }` at the node's effective fidelity. It is cached like any value, `try` cannot catch it, and dependents receive `DependencyUndecided`.
 
-`body.volume().estimate()` discards a bound explicitly, and the language service marks it.
+The Evaluation's fidelity ceiling changes only reporting. While a higher-fidelity node of the same target is demanded, the consumer shows `ResultStatus::Pending`. At the ceiling, the Evaluation report raises `ING6401 UndecidedBranch` with the margin and the accuracy needed.
+
+**Decision D-ING-7:** Disjoint enclosures decide approximate comparisons under `decides_on`; control flow on `Undecided` yields a cached `Undecided` value, and the ceiling changes only reporting. *Why:* four tabs had four rules (R3-07), and a ceiling-dependent failure was cached and served to `SignOff` Evaluations (R9-02). *Rejected:* comparing estimates only; deciding on `Indicator` parts; `Undecided` as `False`; `Pending` and `ING6401` as node values, the round 2 rule. (revised in round 3)
+
+`x.estimate()` discards a bound explicitly, and the language service marks it.
 
 ### Approximate values as inputs
 
-Geometry is often driven by measured geometry, as in `rect(other.edge(role: side(r.top)).length(), 10mm)`. At a feature or operation boundary, an `Approx` argument passes only with a `Guaranteed` total: the call uses the value and records the bound in an `InputSensitivity` record, which variation analysis reads.
+Geometry is often driven by measured geometry, as in `rect(other.edge(role: end(r.top)).length(), 10mm)`. At a feature or operation boundary, an `Approx` argument passes only with a `Guaranteed` total. The call uses the value and records the bound in an `InputSensitivity` record for variation analysis.
 
 Weaker bounds fail with `ING6403 EstimateAsInput`, whose fixes declare the parameter `Approx<T>` or write `.estimate()`. Representation error stays in Anvil's per-face bounds, so `body.convert(into: Mesh, tolerance: 0.01mm)` returns a `Body`.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
-| `Tol<T>` forms and forwarding | Opaque affine form; nominal in slots; sites recorded per call | `ING4001`, `ING4002` | ING-O-7 | 1 |
-| Affine tolerance arithmetic | Exact linear stacks; guaranteed enclosures; symbols keyed by realizing Part | `ING4101`, `ING4102`; `ING-L-SharedSymbol` | ING-O-7 | 1 |
-| Statistical combination | Explicit `rss` and `monte_carlo`; declared distributions and groups | Assumptions printed | ING-O-7 | 1 |
-| GD&T attachment and dialects | Typed aspects, dialect modules, tombstones, split policy `Fail` | `ING42xx`, `ING4302`, MEC `InvalidControl` | MEC-O-TL-1, ING-O-5 | 1 |
-| `Approx<T>` | `ErrorBudget<T::Delta>` in `Pointwise` and `Goal` norms; outward rounding | `ING6104` | ING-O-8 | 1 |
-| Decision rule | Disjoint enclosures decide under declared evidence; Kleene logic | `Undecided { reason, needed }` | ING-O-8 | 1 |
-| Pending branches | `Pending` below the ceiling; `ING6401` at it | `ING6401 UndecidedBranch` | ING-O-35 | 1 |
+| `Tol<T>` forms and forwarding | Opaque affine form; nominal in slots; forwarded PMI on anchored aspect queries | `ING4001`, `ING4002`; `pmi_target_resolved` | ING-O-7, MEC-O-TL-1 | 1 |
+| Affine tolerance arithmetic | Exact linear stacks; guaranteed enclosures; Part-keyed symbols; condensation | `ING4101`, `ING4102`; `ING-L-SharedSymbol` | ING-O-7 | 1 |
+| Statistical combination | Explicit `rss(coverage:)` and `monte_carlo`; name-free symbol order | Assumptions printed | ING-O-7, ANV-O-LABEL-1 | 1 |
+| GD&T attachment and dialects | Typed aspects, dialect modules, tombstones | `ING42xx`, `ING4302`, `InvalidControl` | MEC-O-TL-1, ING-O-5 | 1 |
+| `Approx<T>` | Budgets in `Pointwise` and `Goal` norms; outward rounding; basis enclosures | `ING6104` | ING-O-8 | 1 |
+| Decision rule | Disjoint enclosures decide under `decides_on`; Kleene logic; confidence | `Undecided { reason, needed }` | ING-O-8 | 1 |
+| Undecided control flow | Cached `Undecided` value; ceiling changes reporting only | `DependencyUndecided`; `ING6401` in the report | ING-O-35 | 1 |
 | Approximate inputs | `Guaranteed` only; bound into `InputSensitivity` | `ING6403` with two fixes | ING-O-8 | 1 |
 
 ## Geometry in the language
 
 ### Kiln-held values
 
-`Body`, `Part`, `Assembly`, `Instance`, `Field` and `Material` values are immutable handles to values Kiln holds and the CAS stores. Code calls operations and std features that return new handles, and handle equality is content equality (`ObjectId`).
+`Body`, `Part`, `Assembly`, `Instance`, `InstanceSet`, `Field` and `Material` values are immutable handles to values Kiln holds and the CAS stores. Code calls operations and std features that return new handles. Handle equality is content equality (`ObjectId`), and `a.same_geometry(b)` compares name-free identities (`GeometryId`; MEC owns the Part and Assembly encodings).
 
 | Type | Created by | Key members (std) |
 | --- | --- | --- |
 | `Body` | Operations and features; `+`, `-`, `&` | `faces`, `edges`, `regions`, `aspects`, `volume`, `bbox`, `mass_properties`, `convert(into:)` |
-| `Part` | `part(body, name:, item:)` | `.body`, `.material`, `.material(m)`, `.tolerance(target, control)`, `.require(…)`, `.csys(name)`; a property of an unassigned material fails with `ING6701` |
+| `Part` | `part(body, name:, item:)` | `.body`, `.material(m)`, `.tolerance(target, control)`, `.require(…)`, `.csys(name)`; an unassigned material's property fails with `ING6701` |
 | `Assembly` | `assembly(instances, mates:)` | `.instances()`, `.find(path)`, `.bom()`, `.interference()` |
 | `Instance` | `instance(part_or_assembly, at:, fixed:)` | `.part`, `.placement`, `.csys(name)`, `.path` |
+| `InstanceSet` | `instances(of:, at:, min:)` ("Assemblies, variants and families") | `.members()` keyed by anchor, `.member(key)`, `.count()` |
 | `Field<D, V>` | Flux operations and std physics | Defined by FLX |
 
-A chain such as `a + b + c` lowers to one n-ary `anvil::boolean` by a fixed rule of the language behavior version, so one source always gives one operation graph. The prelude defines `origin`, the directions `x`, `y` and `z`, the axes and the planes `plane.xy`, `plane.yz` and `plane.xz`. Reference geometry (`plane.offset`, `plane.mid`, `axis.of`, `point.on`) is MEC's `std::mech::refgeom`, phase 1, returning `CoordSys`-anchored values re-resolved through their queries.
+A chain such as `a + b + c` lowers to one n-ary `anvil::boolean` by a fixed rule, so one source gives one operation graph. The prelude defines `origin`, the directions `x`, `y` and `z`, the axes and the planes `plane.xy`, `plane.yz` and `plane.xz`. Reference geometry (`plane.offset`, `axis.of`, `point.on`) is MEC's `std::mech::refgeom`, anchored by queries.
 
 ### Call sites and names
 
-An `Entity<K>` is a Body's `ObjectId` plus an `EntityId`, valid only with its Body; its accessors (`e.area()`, `e.normal(at: p)`) return `Approx` values. Anvil names entities by `OpSite` (D-ANV-14), which Ingot derives from source text alone (contract section 5). An `OpSite` is the path of call frames from the Evaluation's root, outermost first; each frame, a feature or `fn` call, has three parts.
+An `Entity<K>` is a Body's `ObjectId` plus an `EntityId`, valid only with its Body; its accessors return `Approx` values. Anvil names entities by `CallSite` (D-ANV-14), which Ingot derives from source text alone (contract section 5). A `CallSite` is the path of call frames from the Evaluation's root; each frame, a feature or `fn` call, has three parts.
 
 | Part | Rule | Stable under |
 | --- | --- | --- |
-| Statement | A `let` is (item path, arm path, binding name); an unnamed statement is (item path, arm path, nearest preceding binding name, ordinal after it). An arm path names `then`, `else`, a `match` arm by its pattern's canonical text, or `block` and `body` | Edits elsewhere, moves, reformatting, literal and argument edits, retyping the statement |
-| Call | The operation or feature name and its occurrence index among calls of that name in the statement | Appending, wrapping or inserting calls of other names; a same-name call renames only later ones of that name |
+| Statement | A `let` is (item path, arm path, binding name); an unnamed statement is (item path, arm path, preceding binding name, ordinal after it). Arm paths name `then`, `else` or a `match` pattern's canonical text | Edits elsewhere, moves, reformatting, literal edits, retyping |
+| Call | The callee's name and its occurrence index among same-name calls in the statement | Calls of other names; a same-name call renames only later ones |
 | Keys | One key per enclosing iteration ("Patterns, loops and keys") | Inserting or removing other elements |
 
-Renaming a binding is a refactor that writes `#[was(old_name)]`, keeping the identity until a person removes the attribute. Live-collaboration block ids map onto these identities and never enter them (KLN). Since identities come from text alone, a Git round trip or a publication leaves every `EntityId` unchanged.
+Renaming a binding is a refactor that writes `#[was(old_name)]`, keeping the identity until a person removes the attribute. Live-collaboration block ids map onto these identities and never enter them (KLN). A Git round trip or a publication leaves every `EntityId` unchanged.
 
-**Decision D-ING-21:** `OpSite`s derive from source text: a path of frames, each with a statement identity from binding names, a call identity from the callee's name and occurrence, and iteration keys. *Why:* block ids changed after a Git round trip, a retyped statement or publication (R3-06, R2-02), and slot paths renamed every pipeline stage when one was appended (R2-06). *Rejected:* live-document block ids, the round 1 rule; slot paths; source offsets or evaluation order; a CRDT identity per call (not derivable from text).
+A same-name call inserted before others in one statement renames the later ones. The deny-by-default lint `ING-L-RepeatedStage` flags a statement with several entity-naming calls of one name, and its fix splits the statement into bindings.
 
-Nothing in Ingot orders, numerically hashes or prints names. `Entity<K>` compares by equality and orders by Anvil's canonical geometric order, and `Seed::from(x)` hashes `x`'s encoding with names removed. Geometry and check values therefore depend only on text and inputs, as label invariance requires (contract section 7.1).
+**Decision D-ING-21:** `CallSite`s derive from source text: frames of statement identities from binding names, call identities from callee name and occurrence, and iteration keys. *Why:* block ids changed after a Git round trip or a retyped statement (R3-06, R2-02), and slot paths renamed every stage when one was appended (R2-06). *Rejected:* live-document block ids, the round 1 rule; slot paths; source offsets; a CRDT identity per call (not derivable from text).
 
-A transform (`move`, `rotate`, `mirror`, `transform`) whose source binding is used again, or written `copy(x)`, creates copies whose entities take role `copy` or `mirror`. The compiler knows reuse from the IIR's data flow, and a transform that replaces its source keeps names. `seed.face(role: top).copies()` follows copies on request, and role queries on reflections accept `mirrored: true` (D-ANV-30).
+Nothing in Ingot orders, numerically hashes or prints names. `Entity<K>` orders by Anvil's canonical geometric order, and `Seed::from(x)` hashes `x` with names removed, as label invariance requires (contract section 7.1).
+
+A transform (`move`, `rotate`, `mirror`, `transform`) always keeps names, whatever else reads its source. When one operation receives two operands carrying one `EntityId`, as a Boolean or a combine can, Anvil relabels the operand from the later transform in program order. Its entities take role `copy` or `mirror`, keyed by that transform's `CallSite`, and `copy(x)` relabels at once.
+
+`seed.face(role: top).copies()` follows copies on request, and role queries on reflections accept `mirrored: true` (D-ANV-30).
 
 ### The query language
 
-A `Query<K>` describes a selection on a subject Body and re-resolves wherever it is used. It is built by methods on a Body, Part, Instance or another query; `Query<Point>` also covers derived points such as `face.corners(inset:)`.
+A `Query<K>` describes a selection on a subject Body and re-resolves wherever it is used. Methods on a Body, Part, Instance or query build it; `Query<Point>` covers derived points such as `face.corners(inset:)`.
 
 | Element | Syntax | Meaning |
 | --- | --- | --- |
 | Subject and count | `b.face(…)`, `b.faces(…)`, also `edge`, `vertex`, `region`, `aspect` | Singular needs one match; plural at least one unless `count:` says otherwise |
 | Anchor | `part.face(base.face(role: end_cap))` | Descendants of the anchor through Anvil's lineage |
-| Role | `role: end_cap`, `role: side(outline.top)` | Entities created with that role; roles are constants a feature declares with `#[roles(…)]`, hashed by fully qualified path |
-| Creator, history | `created_by: holes`; `new`, `modified`, `all` | Entities from the call site that produced `holes`; created or modified by the operation that produced the subject value |
-| Geometric filters | `normal: +z`, `kind: Cylinder`, `area: 100mm2..`, `radius: 2.95mm..=3.05mm`, `radius: near(3mm, within: 0.05mm)`, `parallel_to:`, `within:` | Certified predicates; a `Tol` argument fails with `ING4103`, whose fix rewrites it as a range, so a selection never becomes a manufacturing tolerance |
+| Role | `role: end_cap`, `role: end(outline.top)`, `role: lateral(any)` | Entities created with that role, declared per entity kind with `#[roles(face: …, edge: …, vertex: …)]` (ANV owns std's vocabulary); a wrong-kind role fails with `ING5002` |
+| Creator, history | `created_by: holes`; `new`, `modified`, `all` | Entities from the call site that produced `holes`; created or modified by the subject's operation |
+| Geometric filters | `normal: +z`, `kind: Cylinder`, `area: 100mm2..`, `radius: 2.95mm..=3.05mm`, `parallel_to:`, `within:` | Certified predicates; a `Tol` argument fails with `ING4103`, so a selection never becomes a manufacturing tolerance |
 | Topology | `.edges()` of a face query, `adjacent_to:`, `bounded_by:` | Adjacency in the subject |
-| Rank selectors | `longest`, `largest`, `nearest: p`, `first(along: d)`, `last(along: d)` | Only after an anchor or role filter, else `ING-L-FragileSelector`; a winner whose lineage changes inside the declared ranges gets `Note::RankSwap { at }` |
+| Rank selectors | `longest`, `largest`, `nearest: p`, `first(along: d)`, `last(along: d)` | Only after an anchor or role, else `ING-L-FragileSelector`; a near-tie winner carries `Note::NearTie { runner_up, margin }`, and ANV's sampled analysis reports `RankSwap` across ranges |
 | Set algebra | `q1 + q2`, `q1 - q2`, `q1 & q2` | On one subject |
-| Custom filter | `where: \|f\| f.area() > 2 * hole_area` | An Ingot predicate; `Undecided` fails with `ResolveError::Ambiguous` |
-| Merges | `on_merge: Accept` | Where the operation declares an extent use, a merged anchor fails with `ResolveError::Merged` unless written |
+| Custom filter | `where: \|f\| f.area() > 2 * hole_area` | A predicate under the decision rule: `Undecided` shows `Pending` below the ceiling and `ResolveError::Ambiguous { entities, needed }` at it |
+| Extent use | `on_merge: Accept`, `on_partial: Accept`, `on_fragile: Accept` | For an extent use, a merge, partial deletion, `Ordinal` id or near tie fails with a `ResolveError` unless accepted (contract section 5) |
 
 ```
 let bores  = body.faces(kind: Cylinder, radius: 2.95mm..=3.05mm, created_by: holes)
 let rim    = top.edges() - top.edges(adjacent_to: bores)
-let lip    = body.edge(created_by: base, role: side(any), last(along: +z))   // rank after an anchor
+let lip    = body.edge(created_by: base, role: lateral(any), last(along: +x))   // rank after a role
 let blends = body.faces(new)
 ```
 
-A query resolves on the Body of the operation that consumes it, mapping its selection through lineage, so `fillet(solid, base.face(role: end_cap).edges())` works. A `Query` parameter resolves on the first `Body` or `Part` parameter unless `#[on(param)]` names another. Ingot lowers each query to a canonical `QueryPlan` that `anvil::resolve` evaluates as its own node, so selections cache separately and a `ResolveError` arrives at the query's span with ranked fixes.
+A query resolves on the Body of the operation that consumes it, mapping its selection through lineage, so `fillet(solid, base.face(role: end_cap).edges())` works. A `Query` parameter resolves on the first `Body` or `Part` parameter unless `#[on(param)]` names another. Each query lowers to a canonical `QueryPlan` that `anvil::resolve` evaluates as its own node, and a `ResolveError` arrives at the query's span with ranked fixes.
 
-There is no positional access (`ING5001`). `.resolve()` returns entities in canonical geometric order, `sorted_by` in a stated order, and `e.query()` anchors a query on one entity's `EntityId`.
+There is no positional access (`ING5001`). `.resolve()` returns entities in canonical geometric order, `sorted_by` in a stated order, and `e.query()` anchors a query on one entity's `EntityId`. Resolution never silently picks another entity at the evaluated configuration (contract section 5).
 
-**Decision D-ING-8:** Queries are values built from named arguments and resolved by a separate `anvil::resolve` node. Geometric filters are declarative ranges that Anvil certifies, rank selectors apply only after a provenance anchor or role filter, and arbitrary predicates are an explicit `where:` closure whose undecided outcomes fail. *Why:* declarative filters can be certified, cached and explained; anchored ranks cannot silently swap winners within declared ranges (R2-22). *Rejected:* string selectors such as CadQuery's `">Z"` (untyped); build123d-style sorting and slicing (positional); unanchored rank selectors, allowed in round 1. (revised in round 2)
+**Decision D-ING-8:** Queries are values resolved by a separate `anvil::resolve` node: certified declarative filters, rank selectors only after an anchor or role, and arbitrary predicates as `where:` closures under the decision rule. *Why:* declarative filters can be certified, cached and explained, and one rule for every `Undecided` keeps queries consistent with branches (R9-20). *Rejected:* string selectors such as CadQuery's `">Z"`; positional slicing; unanchored ranks; a `where:` that fails at once, the round 2 rule. (revised in round 3)
 
 ### Builder blocks and sketches
 
-A call may end with a block, as in `sketch(plane.xy) { outline }`, Swift's result-builder mechanism with a smaller rule. A function opts in with a final `Builder<I, Ctx>` parameter, and each expression statement whose type implements `Emit<I>` contributes its items in order (`ING2301` otherwise). A `let` also names its items as result fields, so a block with `let r = rect(…)` is a `Sketch<{ r: Rect }>`.
+A call may end with a block, as in `sketch(plane.xy) { outline }`, Swift's result-builder mechanism with a smaller rule. A function opts in with a final `Builder<I, Ctx>` parameter, and each statement whose type implements `Emit<I>` contributes its items (`ING2301` otherwise). A `let` names its items as result fields, so `let r = rect(…)` yields a `Sketch<{ r: Rect }>`.
 
-`if`, `match` and `for` contribute their branches' or iterations' items. Receiver members shadow prelude names, and a clash with an enclosing binding is `ING1104`. ELX's `network { … }` uses the same mechanism with set-like accumulation.
+`if`, `match` and `for` contribute their branches' or iterations' items, and a clash with an enclosing binding is `ING1104`. ELX's `network { … }` uses the same mechanism with set-like accumulation.
 
-Inside a sketch, entities are symbolic: `line(p0, p1)` creates unknown points seeded at `p0` and `p1`, accessors return `Expr<Length>`, and constraints are items. `e1 == e2` builds an `Equation`, as Flux's weak forms do. A helper's named sub-entity becomes the role argument of what is swept from it, so `side(outline.top)` names the face an extrude sweeps from that edge.
+Inside a sketch, entities are symbolic: `line(p0, p1)` creates unknown points seeded at `p0` and `p1`, accessors return `Expr<Length>`, and `e1 == e2` builds an `Equation` item. A helper's named sub-entity becomes the role argument of what is swept from it. `side(outline.top)` names the face an extrude sweeps from that edge, and `end(outline.top)` the edge it leaves on the end cap.
 
 | Helper | Named sub-entities |
 | --- | --- |
@@ -574,21 +614,35 @@ sketch(plane.xy) {
 pub fn chord_ratio(a: Arc, k: Real) -> Length { a.chord_length - k * 2 * a.radius }
 ```
 
-`chord_ratio`, an ordinary function over `Length`, accepts `Expr<Length>` (D-ING-20). Branching on a symbolic value fails with `ING2402`, and `select(cond, x, y)` builds conditional residuals. Seeds are literals that a sketch drag rewrites on release (UIX); a build never warm-starts from an earlier solve (MEC).
+`chord_ratio`, an ordinary function over `Length`, accepts `Expr<Length>` (D-ING-20). Branching on a symbolic value fails with `ING2402`, and `select(cond, x, y)` builds conditional residuals. Local Newton solves use `local_solve(residual, x0)`, differentiated by the implicit function theorem (contract section 6).
 
-Constitutive code never differentiates through loops: `local_solve(residual, x0)` writes a local Newton solve, differentiated by the implicit function theorem (contract section 6).
+**Decision D-ING-9:** Constraints, analytic Field expressions and weak forms are one mechanism: staged symbolic values built by ordinary functions and handed over as a hash-consed expression DAG. *Why:* one mechanism serves MEC's constraints, FLX's constitutive functions and analytic Fields, and equal expressions become equal keys. *Rejected:* a `constraint` keyword with its own subset; tracing code into the kernel IR (captures one branch). (revised in round 2)
 
-`anvil::solve_constraints` solves a sketch block's constraint system as one node. A solved point is an `Approx<Point3>`, `Guaranteed` when Anvil's Krawczyk test proves its block and `Estimated` otherwise. SketchGraphs offers "15 million sketches extracted from real-world CAD models", and ING-O-23 converts a fixed sample into sketch blocks.
+`anvil::solve_constraints` solves a sketch block as one node. A solved point is an `Approx<Point3>`, `Guaranteed` when Anvil's Krawczyk test proves its block and `Estimated` otherwise; under-determined blocks are proved through their minimum-displacement KKT system (ANV, MEC).
 
-**Decision D-ING-9:** Constraints, analytic Field expressions and weak forms are one mechanism: staged symbolic values (`Expr<T>`, `Equation`, Flux's form types) built by ordinary functions and handed over as a hash-consed expression DAG. Any function over quantities works on symbolic values, because quantity parameters accept every `Scalar` flavor. *Why:* one mechanism serves MEC's constraints, FLX's constitutive functions and analytic Fields, and equal expressions become equal keys. *Rejected:* a `constraint` keyword with its own subset; tracing arbitrary code into the kernel IR (branches on unknowns would be captured for one value). (revised in round 2)
+SketchGraphs offers "15 million sketches extracted from real-world CAD models", and ING-O-23 converts a fixed sample into sketch blocks.
+
+Seeds are literals, and a build never warm-starts from an earlier solve (MEC). A released sketch drag rounds seeds to a quantum q, by default the larger of 1 µm and 2¹⁰ times the sketch's resolution ρ, in decimal millimetres. It writes only entities that moved by more than q.
+
+Before writing, the edit re-solves from the rounded seeds and checks that branch qualifiers and solution agree within the certified bound; otherwise it writes more digits.
+
+**Decision D-ING-26:** Sketch seeds are inline literals rounded to a quantum, merged like any literal; concurrent edits to the seeds of one under-determined block conflict. *Why:* seeds decide under-determined sketches, so they are intent that travels with the text through review and Git export (R8-24). *Rejected:* a layout section merged by last writer (values outside the text; lost drags); full-precision seeds (textual conflicts).
 
 ### Assemblies, variants and families
 
-An Instance's path lists instance names from the root (`drive/wheel`). A query through an Instance carries its placement, so measurements between Instances are in assembly coordinates; mates take `CoordSys` values (MEC). A record marked `#[interface]` derives a `compatible(a, b)` check.
+An Instance's path lists instance names from the root (`drive/wheel`). A query through an Instance carries its placement, and mates take `CoordSys` values (MEC). A record marked `#[interface]` derives a `compatible(a, b)` check.
 
-Variants are enum or record parameters marked `#[configuration]` on assembly features (contract section 6). Conditional regions that depend only on configuration parameters and constants are variant regions, and Instances created inside carry the region's condition. Creating an Instance under any other condition, including a loop over a computed count, fails with `ING2601`, so Kiln computes the 150% BOM by abstract interpretation with SAT checks (KLN).
+Variants are enum or record parameters marked `#[configuration]` on assembly features (contract section 6). Conditional regions that depend only on configuration parameters and constants are variant regions, whose Instances carry the region's condition. An Instance or Instance set under any other condition fails with `ING2601`, so Kiln computes the 150% BOM by abstract interpretation (KLN).
 
-**Decision D-ING-22:** Variant parameters are ordinary parameters marked `#[configuration]`, and an Instance's existence may depend only on them and on constants, checked at compile time. *Why:* the 150% BOM needs a static account of which Instances exist under which options, and plain `if` let existence follow computed geometry (R3-18). *Rejected:* `options` and `when` keywords (contract section 6 forbids domain keywords); enumerating configurations (exponential).
+An Instance set separates existence from multiplicity. `instances(of: f, at: anchors)` places one member per anchor of a keyed list, typically a resolved query, as one BOM line whose existence follows the static rule. Members, count and per-member parameters are evaluated and keyed by anchor, so a new hole changes a quantity, not the BOM's structure.
+
+```
+let screws = instances(at: cover.aspects(created_by: bolt_holes), of: |h| iso4762(m6, length: grip(h)))
+```
+
+A set is empty only if it declares `min: 0`; otherwise an empty set fails with `ING6203 EmptyInstanceSet`. Mates and interference address members by key, and MEC's `fasten` returns a set.
+
+**Decision D-ING-22:** Existence of an Instance or Instance set depends only on `#[configuration]` parameters and constants, checked at compile time; a set's members and count may depend on any value. *Why:* the 150% BOM needs static existence (R3-18), and one fastener per resolved hole needs a computed count (R8-20, R9-16). *Rejected:* `options` and `when` keywords; enumerating configurations (exponential); a configuration count checked against the holes (two edits per hole). (revised in round 3)
 
 A shaft diameter drives a catalog bearing, the housing bore and a fit check:
 
@@ -612,9 +666,9 @@ pub feature drive_unit(p: DriveParams = DriveParams {}) -> Assembly {
 }
 ```
 
-A `CatalogSelection` is a pure function over pinned definition packages, plus pinned offers when it ranks by price or stock (ELX). It re-resolves whenever its arguments change, while `crucible update parts` refreshes only the data pins and lists substitutions. `?` turns `NoCatalogMatch` into a failure whose fixes are the nearest candidates, and editing `speed` re-evaluates only `bearing_speed`.
+A `CatalogSelection` is a pure function over pinned definitions, plus pinned offers when it ranks by price or stock (ELX); `crucible update parts` refreshes only the pins. `?` turns `NoCatalogMatch` into a failure whose fixes are the nearest candidates, and editing `speed` re-evaluates only `bearing_speed`.
 
-A feature's parameter list is a record type, `Params<f>`, whose defaulted fields may be omitted, and a call spreads a record into named arguments. A design table is a table of parameter records (D-MEC-10):
+A feature's parameter list is a record type, `Params<f>`, and a call spreads a record into named arguments. A design table is a table of parameter records (D-MEC-10):
 
 ```
 let b = bracket(..heavy, width: 90mm)                     // later arguments override the spread
@@ -624,18 +678,18 @@ pub let brackets = family(bracket, key: |r| r.item, rows: table {
 })
 ```
 
-A table row's type is `{ item: String, ..Params<bracket> }`. `table("brackets.csv")` reads a repository file as a source input whose header names units (`width [mm]`), and a mismatched cell fails with `ING3501 UnitMismatch { column, expected }` at its file position.
+A row's type is `{ item: String, ..Params<bracket> }`. `table("brackets.csv")` reads a repository file whose header names units (`width [mm]`), and a mismatched cell fails with `ING3501 UnitMismatch { column, expected }`.
 
 ### Patterns, loops and keys
 
-A pattern is a feature whose instances differ only in their keys, and a `for` loop yields a list, so per-instance variation is ordinary code. Iteration contributes keys, never positions (contract section 5):
+A pattern is a feature whose instances differ only in their keys, and a `for` loop yields a list. Iteration contributes keys, never positions (contract section 5):
 
 - iteration over entity lists or resolved queries keys by `EntityId`;
-- MEC's generators return keyed lists: `linear` by `(i, j)`, `circular` by angular index, `at_points` by anchor `EntityId`, `fill` by lattice coordinates, `by_density` by each seed's initial key;
+- MEC's generators return keyed lists (`linear` by `(i, j)`, `circular` by angular index, `at_points` by anchor, and so on);
 - integer ranges and literal lists keep integer keys, and `keyed(xs, by: f)` keys any list, failing with `ING6202 DuplicateKey` on a repeat;
 - `ING-L-PositionalKey` warns when a computed list whose length depends on geometry is iterated by position.
 
-Pattern `skip:` lists take keys, not indices (MEC). There is no mutable accumulator; `fold` and `scan` carry running state, and a loop over quantities needs an explicit step.
+Pattern `skip:` lists take keys (MEC). `fold` and `scan` carry running state, since there is no mutable accumulator.
 
 ```
 let vents  = pattern(vent_slot(length: 10mm), at: linear(dir: +x, count: 8, spacing: 6mm))
@@ -644,14 +698,15 @@ let graded = for i in 0..8 { vent_slot(length: 10mm + i * 2mm) |> move(x: i * 6m
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
-| Kiln-held values and Booleans | Handles compared by `ObjectId`; n-ary lowering by a fixed rule | `ING6701` | ING-O-1 | 0 |
-| Text-derived `OpSite` | Frame path of statement, call and keys; `#[was]` renames | `ING1102` for duplicate names | ING-O-25, ANV-O-SITE-1 | 0 |
+| Kiln-held values and Booleans | Handles compared by `ObjectId`, geometry by `GeometryId`; n-ary lowering by a fixed rule | `ING6701` | ING-O-1 | 0 |
+| Text-derived `CallSite` | Frames of statement, call and keys; `#[was]` renames | `ING1102`; `ING-L-RepeatedStage` | ING-O-25, ANV-O-SITE-1 | 0 |
 | Label invariance in the language | No order, numeric hash or printing of names; label-free seeds | Not expressible | ANV-O-LABEL-1 | 0 |
-| Copies and placements | Reuse or `copy` creates `copy` and `mirror` roles; `.copies()` | — | ANV-O-COPY-1 | 1 |
-| Queries | Canonical plans resolved by `anvil::resolve`; anchored ranks; ranges, not tolerances | `ResolveError` with fixes; `ING4103`, `ING5001`; `ING-L-FragileSelector` | ING-O-11, ANV-O-NAME-2 | 1 |
-| Builder blocks and sketches | `Builder<I, Ctx>`; symbolic entities; named sub-entities; certified solved points | `ING1104`, `ING2301`, `ING2402` | ING-O-5, ING-O-23, ANV-O-NAME-5 | 1 |
+| Copies and placements | Transforms keep names; colliding operands relabelled in program order | — | ANV-O-COPY-1 | 1 |
+| Queries | Canonical plans resolved by `anvil::resolve`; anchored ranks; extent-use acceptances; kinded roles | `ResolveError`; `ING4103`, `ING5001`, `ING5002` | ING-O-11, ANV-O-NAME-2 | 1 |
+| Builder blocks and sketches | `Builder<I, Ctx>`; symbolic entities; certified solved points; inline seeds | `ING1104`, `ING2301`, `ING2402` | ING-O-5, ING-O-10, ING-O-23, ANV-O-NAME-5 | 1 |
 | Variant regions | Instance existence from configuration parameters and constants only | `ING2601` | ING-O-30 | 1 |
-| Catalog selections | Pure over pinned data; re-resolve on argument change | `NoCatalogMatch` with candidates | ING-O-13 | 1 |
+| Instance sets | Static existence; evaluated members keyed by anchors; `min: 0` | `ING2601`; `ING6203` | ING-O-30 | 2 |
+| Catalog selections | Pure over pinned data; re-resolve on argument change | `NoCatalogMatch` with candidates | ING-O-13 | 2 |
 | Families and tables | Record spread, table literals, CSV with unit headers | `ING2105`, `ING3501` | MEC-O-PF-12 | 1 |
 | Keyed iteration | Keys from entities, generators, ranges and `keyed` | `ING6202`; `ING-L-PositionalKey` | ING-O-26 | 1 |
 
@@ -659,33 +714,35 @@ let graded = for i in 0..8 { vent_slot(length: 10mm + i * 2mm) |> move(x: i * 6m
 
 ### Calls and effects
 
-Every Ingot call is pure. Calls differ in cost and in whether Kiln memoizes them, and the kind of a call is visible in its declaration. A `feature` may return any type; it is the unit of history and caching, and a `fn` is not.
+Every Ingot call is pure; calls differ in cost and in whether Kiln memoizes them, as their declarations show. A `feature` may return any type and is the unit of history and caching; a `fn` is not.
 
 | Call kind | Declared with | Kiln node |
 | --- | --- | --- |
 | Function | `fn` | None; the executor calls it directly |
 | Memoized function | `#[memo] fn` | Keyed by code hash and arguments only; may not call operations or features (`ING2501`) |
-| Feature | `feature` | Feature node, keyed with its `OpSite` |
+| Feature | `feature` | Feature node, keyed with its `CallSite` |
 | Operation | `extern fn` with `#[op("anvil::blend")]` | Op node keyed by `OpKey` |
 | Wasm component export | `extern fn` with `#[component(…)]` | Op node whose implementation is the Wasm component |
 | External Op | `extern fn` with `#[external(…)]`, declared by its package (ECO) | Op node on untrusted-evaluation workers (contract section 7.8) |
 | Query resolution | Implicit where a `Query` reaches an operation | Resolve node |
 | Check | `require` | Check node |
 
-Operations, Wasm component exports and External Ops are the only engine effects: pure in meaning, expensive, asynchronous and cached. `ingot-bindgen` generates `std::ops::anvil` and `std::ops::flux` from Anvil's and Flux's operations catalogs, and any package may write its own `extern` declarations, each checked against the catalog (`ING8001`). Source never names a behavior version; `ingot.lock` pins one per operation.
+Operations, Wasm component exports and External Ops are the only engine effects: pure in meaning, expensive, asynchronous and cached. `ingot-bindgen` generates `std::ops::anvil` and `std::ops::flux` from the operations catalogs, and any package may write `extern` declarations checked against them (`ING8001`). Source never names a behavior version; `ingot.lock` pins one per operation.
 
-**Decision D-ING-10:** Ingot has no user-visible effect system. Operations are pure calls, and the side channels (checks, notes, tolerance sites, PMI) are write-only accumulators ordered canonically by call site, like Salsa's accumulators. *Why:* effect annotations would describe effects the language forbids, and canonical order makes accumulators independent of evaluation order. *Rejected:* an effect-row type system (no effects to track); FeatureScript-style `context` and `id` threading (boilerplate for an order the dataflow already fixes).
+std chooses each helper's kind by one rule, checked by the lint `ING-L-FeatureKind`. A helper that calls an entity-naming operation or returns `EntityId`s is a `feature`. A pure one estimated above 10⁶ steps is a `#[memo] fn`, and any other is a `fn`.
+
+**Decision D-ING-10:** Ingot has no user-visible effect system: operations are pure calls, and side channels (checks, notes, tolerance sites, PMI) are write-only accumulators in canonical call-site order, like Salsa's. *Why:* effect annotations would describe effects the language forbids, and canonical order makes accumulators independent of evaluation order. *Rejected:* effect rows (nothing to track); FeatureScript-style `context` and `id` threading (boilerplate).
 
 ### Determinism and randomness
 
-Contract section 7.3 owns the determinism rules, PLT the mechanisms (`detmath`, no implicit FMA, canonical reduction order) and KLN the policy. Ingot adds these language rules:
+Contract section 7.3 owns the determinism rules, PLT the mechanisms, and KLN the policy and random-stream keys (contract section 7.2). Ingot adds these language rules:
 
 - strict left-to-right evaluation, checked `Int` overflow, and no NaN or infinity values (`ING6102`);
 - ordered maps and sets, stable sorts, and no `Real` map keys (`q.key(resolution: 1um)` quantizes);
 - NFC strings without locale; nothing ordered or hashed by name; labels invisible to code, since Kiln joins them;
 - no time, environment, files or network: sources, tables, Assets and External inputs are Kiln input cells read by content.
 
-Randomness is a value. `Rng` keys Philox, Salmon and colleagues' counter-based generator, in its 4×32 form with 10 rounds [unverified: variant and round count]. The n-th number is a pure function of key and n, so streams split and run in parallel without changing any value.
+Randomness is a value. `Rng` keys Philox, Salmon and colleagues' counter-based generator, as Philox-4×32-10, which carries three rounds of safety margin. The n-th number is a pure function of key and n, so streams split and run in parallel without changing any value.
 
 ```
 let rng = Rng::new(seed).split("pins")                 // seed: an explicit parameter, never ambient
@@ -706,72 +763,77 @@ let rounded = match try body |> fillet(edges, r) {
 }
 ```
 
-`Failure` is an extensible union [unverified: OCaml manual not opened]: every enum implementing `Error` adds its variants, and a match over `Failure` needs a wildcard arm.
+`Failure` is an extensible union, like OCaml's extensible variants. Every enum implementing `Error` adds its variants, and a match over `Failure` needs a wildcard arm. An `Undecided` value from control flow is not a `Failure`, and `try` cannot catch it.
 
-An `Abort` is environmental: cancellation, resource exhaustion, device loss, budget exhaustion, worker loss, or Kiln's demand-depth and Evaluation fuel limits (contract section 2). It is not a `Failure`, and `try` cannot observe it. It propagates to every transitive dependent, and no node that observed one writes a memo entry, CAS object or attestation (contract section 7.2).
+An `Abort` is environmental: cancellation, resource or budget exhaustion, device or worker loss, or Kiln's evaluation-wide limits (contract section 2). `try` cannot observe it, and no node that observed one writes a memo entry, CAS object or attestation (contract section 7.2).
 
-**Decision D-ING-11:** Deterministic failures propagate to the nearest `try` or feature boundary and become cached values there, and `try` converts them into `Result` for recovery. Aborts are not values, and no Ingot construct observes them. *Why:* forcing `?` onto every geometry call adds noise without information, and a fallback taken because a worker ran out of memory would be cached as geometry (R3-03). *Rejected:* `Result` on every operation; untyped exceptions; catching every failure kind, the round 1 rule. (revised in round 2)
+**Decision D-ING-11:** Deterministic failures propagate to the nearest `try` or feature boundary and are cached there; Aborts are not values, and no Ingot construct observes them. *Why:* `?` on every geometry call is noise, and a fallback taken because a worker ran out of memory would be cached as geometry (R3-03). *Rejected:* `Result` on every operation; untyped exceptions; catching every failure kind, the round 1 rule. (revised in round 2)
 
 A feature's checks are evaluated against its result; when the feature fails, they report `Error(DependencyFailed)`. A failure inside one Instance never erases sibling work.
 
 ### Limits
 
-Every node ends in a value or a typed `Failure`, and every Evaluation ends or aborts. Per-call limits are counted in units the language defines; the cost table belongs to the language behavior version.
+Per-call limits are counted in units the language defines, with the cost table in the language behavior version. Outcome names follow KLN's catalog of limit outcomes.
 
 | Limit | Unit | Default per feature call | Failure |
 | --- | --- | --- | --- |
 | Fuel | Steps of the cost table | 10⁹; `#[fuel(…)]` raises it up to the manifest maximum | `ING6301 FuelExhausted` |
-| Call depth | Ingot frames | 2,048 | `ING6302 DepthExhausted` |
+| Call depth | Ingot frames | 2,048 | `ING6302 StackExhausted` |
 | Memory | Semantic bytes: 8 per scalar or handle, 16 per collection header | 1 GiB | `ING6303 MemoryLimit` |
-| Operation calls | Count | 10⁶ | `ING6304 TooManyOperations` |
-| Symbolic expression size | DAG nodes | 10⁷ | `ING6305 ExpressionTooLarge` |
+| Operation calls | Count | 10⁶ | `ING6304 WorkLimit { kind: OperationCalls }` |
+| Symbolic expression size | DAG nodes | 10⁷ | `ING6305 WorkLimit { kind: ExpressionSize }` |
 
-A call's steps include the plain functions it calls, while feature and `#[memo]` calls are nodes with their own limits. An outcome therefore never depends on the caller's remaining budget or on the cache, and an operation call charges 100 steps plus 1 per marshalled element. Effective limits are a function of source and manifest only, and they enter the node key.
+A call's steps include the plain functions it calls, while feature and `#[memo]` calls are nodes with their own limits. An outcome therefore never depends on the caller's remaining budget or the cache. An operation call charges 100 steps plus 1 per marshalled element. Effective limits come from source and manifest only and enter the node key.
 
-Kiln adds two evaluation-wide limits as Aborts: 10,000 nested node demands, so `f(n) = f(n + 1)` aborts with `DemandDepthExhausted`, and a fuel governor per Evaluation from its `Budget` (AGT). An organization ceiling below a requested limit refuses the Evaluation at admission with the Abort `FuelCeilingExceeded`, never a cached `FuelExhausted`. A host out of memory below the semantic limit raises the Abort `ResourceExhausted`.
+Kiln adds two evaluation-wide limits as Aborts. Nested demands stop at 10,000, so `f(n) = f(n + 1)` aborts with `DemandDepthExhausted`, and a per-Evaluation fuel governor ends in `BudgetExhausted`. An organization ceiling below a requested limit refuses the Evaluation at admission with `FuelCeilingExceeded`, and a host out of memory raises `ResourceExhausted`.
 
-**Decision D-ING-23:** Per-call limits come from source and manifest only and enter the node key; evaluation-wide limits and policy ceilings act only as Aborts. *Why:* a limit clamped by policy made two organizations cache different results for one key (R3-12), and per-call limits alone let a self-calling feature build an unbounded chain of nodes (R3-04). *Rejected:* organization ceilings inside the limit; per-call limits as the only bound; wall-clock limits (nondeterministic, so they exist only as cancellation).
+**Decision D-ING-23:** Per-call limits come from source and manifest only and enter the node key; evaluation-wide limits and policy ceilings act only as Aborts. *Why:* a policy-clamped limit made two organizations cache different results for one key (R3-12), and per-call limits alone allowed unbounded node chains (R3-04). *Rejected:* ceilings inside the limit; per-call limits as the only bound; wall-clock limits (nondeterministic).
 
-`#[suppressed]` on a `let` removes the call. A pipeline statement whose input and output types agree then binds its input, as CAD users expect, and other uses fail with `ING6601 Suppressed`. Rollback is the request `EvalRequest { target, until: statement }`, never a source edit.
+`#[suppressed]` on a `let` removes the call: a pipeline statement whose input and output types agree binds its input, and other uses fail with `ING6601 Suppressed`. Rollback is the request `EvalRequest { target, until: statement }`, never a source edit.
 
 ### The Ingot IR and Kiln
 
-Lowering produces the Ingot IR (IIR), a dataflow graph in the style of the regionalized value state dependence graph (RVSDG), whose "regions capture the hierarchical structure of programs". Ingot is pure, so the IIR has no state edges.
+Lowering produces the Ingot IR (IIR), a dataflow graph in the style of the RVSDG, whose "regions capture the hierarchical structure of programs". Ingot is pure, so the IIR has no state edges.
 
 | IIR construct | Meaning |
 | --- | --- |
-| Simple node; Kiln call node | Plain computation; an Op, resolve, feature or check call with its `OpSite` |
+| Simple node; Kiln call node | Plain computation; an Op, resolve, feature or check call with its `CallSite` |
 | γ, map and fold, λ and φ regions | Conditionals; loops carrying keys; functions and recursive groups |
 | Observation edge | Where the executor needs a Kiln-held value's content |
 
 Spans live in a side table, so an edit above a function leaves its IIR unchanged. Each module's code hash is a SHA-256 Merkle hash over its IIR and the code hashes of the modules it uses.
 
-1. **Front-end nodes.** Kiln keys each module's front end by module identity and compiler behavior version. Parse, items, signatures, bodies and IIR are memoized stages that backdate, so a comment edit stops at the IIR.
-2. **Feature nodes.** A feature call's key follows contract section 7.2: the code hashes of the modules it used, the language behavior version, argument identities, the effective fidelity and its `OpSite`, plus its effective limits. Its value splits into outputs with their own change markers: the result, one per accumulator kind, and metadata (fuel, cost). Dependents record which outputs they read, and metadata never enters backdating, so a fuel-only edit re-executes nothing downstream.
-3. **Asynchronous calls.** The executor issues each Kiln call, receives a pending handle at once and suspends only at observation edges, so independent calls run in parallel. Kiln prefetches the calls the IIR lists as known before any observation.
-4. **Program order.** Each call records its program-order index. When several calls fail, the outcome is the earliest in program order, and speculative work after it never changes a result.
-5. **Overrides.** A request may carry literal overrides keyed by `LiteralSite` (statement identity, call identity, argument slot). Kiln treats them as input cells, so a drag evaluates new values without editing source (UIX); a wrongly typed override fails with `ING6502`.
+1. **Front-end nodes.** A module's front end is keyed by its source hash, the language behavior version and its imports' interface hashes. Its outputs are the IIR, identified by the module code hash, and diagnostics, also keyed by the compiler release. Releases emit bit-identical IIR for one language behavior version (ING-O-1), so IIR is shared across releases. Its stages backdate, so a comment edit stops at the IIR.
+2. **Feature nodes.** A feature call's key follows contract section 7.2, adding its `CallSite` and effective limits. Its value splits into outputs with their own change markers: the result, one per accumulator kind, and metadata (fuel, cost). Metadata never enters backdating, so a fuel-only edit re-executes nothing downstream.
+3. **Asynchronous calls.** The executor issues each Kiln call, receives a pending handle at once and suspends only at observation edges. Independent calls therefore run in parallel, and Kiln prefetches calls known before any observation.
+4. **Program order.** Each call records its program-order index. When several calls fail, the outcome is the earliest in program order, and speculative work after it never changes a result. Anvil's copy relabelling reads the same index.
+5. **Overrides.** A request may carry literal overrides keyed by `LiteralSite` (statement identity, call identity, argument slot). Kiln treats them as input cells, and a node's key includes the overrides in its own code. Results computed under overrides never enter the shared cache (KLN), and a wrongly typed override fails with `ING6502`.
+
+Drags stream overrides through AGT's `edit.stream` and `evaluate.subscribe`, on PLT's `Interactive` pool lane. An override's `LiteralSite` follows `#[was]`, so a concurrent rename of the binding keeps the drag alive. Only deleting the literal ends the drag, with a notice (UIX).
 
 [[DIAGRAM diagrams/01-ingot-pipeline.jsx: Ingot pipeline · front end, executor and Kiln]]
 
+Read the diagram left to right: the front end turns source into IIR, the interpreter hands each call to Kiln as a pending handle, and values return at observation edges.
+
 ### Fidelity, drags, holes and derivatives
 
-Ingot code cannot observe fidelity, so every fidelity runs the same program; a check's `fidelity:` names the fidelity of its own check node. A release demands every node at `SignOff`, geometry included, so released checks never read geometry that only a lower fidelity built.
+Ingot code cannot observe fidelity, so every fidelity runs the same program; a check's `fidelity:` names the fidelity of its own node. A release demands every node at `SignOff`, geometry included. Anvil decides topology alike at every fidelity (contract section 7.1). A query, fix or seed written at `Interactive` thus resolves alike at `SignOff`, unless that fails with `Ambiguous`.
 
-When a drag starts on a literal, Ingot compiles a residual program over the literal's forward slice, with everything else a constant from the current evaluation; its outputs equal the full program's (ING-O-12). Unfinished code becomes typed holes that evaluate to `ING6001 Incomplete`, and evaluation proceeds around them as in Hazel's live semantics, keeping the viewport live.
+When a drag starts on a literal, Ingot compiles a residual program over the literal's forward slice, with everything else constant; its outputs equal the full program's (ING-O-12). Unfinished code becomes typed holes that evaluate to `ING6001 Incomplete`, and evaluation proceeds around them as in Hazel.
 
-Derivatives serve UIX's edit plans and Flux's `grad(J, wrt: [p1, p2])`, whose `wrt:` names parameters or literal bindings. Data dependence plus provenance gives the literals that can affect an entity, exactly and cheaply. Forward mode uses dual numbers and each Op's tangent rule, reverse mode Kiln's `Differentiable` operations and reverse traversal (KLN); an Op without a rule fails with `NotDifferentiable { op }`, and `fd_grad` is an explicit, labelled estimate.
+Derivatives serve UIX's edit plans and Flux's `grad(J, wrt: [p1, p2])`. Data dependence plus provenance gives the literals that can affect an entity, exactly and cheaply. Forward mode uses dual numbers and each Op's tangent rule, reverse mode Kiln's `Differentiable` operations (KLN); an Op without a rule fails with `NotDifferentiable { op }`.
 
-In phase 1, edit plans rank by provenance first: the literal of the call whose `OpSite` and role created the dragged entity, such as an end cap's extrude distance. IIR dependence distance comes next, and derivatives refine the ranking from phase 2, when `anvil::shape_velocity` lands.
+In phase 1, edit plans rank by provenance first: the literal of the call whose `CallSite` and role created the dragged entity. IIR dependence distance comes next, and derivatives refine the ranking from phase 2, when `anvil::shape_velocity` lands.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
-| Calls and accumulators | Eight call kinds; canonical accumulators as separate outputs | `ING2501`, `ING8001` | ING-O-13 | 0 |
+| Calls and accumulators | Eight call kinds; canonical accumulators as separate outputs | `ING2501`, `ING8001`; `ING-L-FeatureKind` | ING-O-13 | 0 |
 | Determinism and randomness | Bit-identical values, failures and fuel; keyed Philox streams | Aborts never cached | ING-O-1, ING-O-6 | 0 |
 | Failures and Aborts | `try` catches `Failure` only; Aborts write nothing | Typed `Failure`; `DependencyFailed` | ING-O-1, ING-O-24 | 0 |
 | Per-call limits in keys | Limits from source and manifest; ceilings at admission | `ING63xx`; Abort `FuelCeilingExceeded` | ING-O-28, ING-O-6 | 0 |
 | Evaluation-wide limits | Demand depth and fuel governor as Aborts (KLN) | Abort `DemandDepthExhausted` | ING-O-24 | 0 |
-| IIR and the Kiln contract | Module code hashes; split outputs; pending handles; program order; overrides | `DependencyFailed`; `ING6502` | ING-O-13, ING-O-27 | 0 |
+| IIR and the Kiln contract | Front-end keys; IIR shared across releases; split outputs; pending handles; program order | `DependencyFailed` | ING-O-1, ING-O-13, ING-O-27 | 0 |
+| Literal overrides | Keyed input cells; never in the shared cache; follow `#[was]` | `ING6502` | ING-O-12 | 1 |
 | Suppression and rollback | Binding takes the pipeline input; rollback as a request | `ING6601` | ING-O-10 | 1 |
 | Drag specialization | Residual program on the forward slice | Falls back to full evaluation | ING-O-12 | 1 |
 | Holes | Evaluation around holes | `ING6001` | ING-O-15 | 1 |
@@ -781,7 +843,7 @@ In phase 1, edit plans rank by provenance first: the literal of the call whose `
 
 ### Diagnostics
 
-Compile-time diagnostics and evaluation failures share one structure, so the UI, the CLI and agents handle them alike.
+Compile-time diagnostics and evaluation failures share one structure for the UI, the CLI and agents.
 
 ```rust
 pub struct Diagnostic {
@@ -797,20 +859,20 @@ pub struct Fix { pub title: String, pub edits: Vec<SourcePatch>, pub applicabili
 pub struct SourcePatch { pub path: SourcePath, pub range: TextRange, pub expected: Sha256, pub replacement: String }
 ```
 
-`Applicability` is `MachineApplicable`, `MaybeIncorrect` or `HasPlaceholders`, and `SourcePatch` is the record AGT's edit methods take. Query fixes carry Anvil's stability ranking over the full declared parameter ranges (ANV).
+`Applicability` is `MachineApplicable`, `MaybeIncorrect` or `HasPlaceholders`, and `SourcePatch` is the record AGT's edit methods take. Query fixes carry Anvil's sampled stability evidence (ANV).
 
 | Codes | Area | Examples |
 | --- | --- | --- |
 | ING0xxx | Lexing and parsing | `ING0002` non-NFC source; `ING0003` hidden characters |
-| ING1xxx | Names and modules | `ING1001` unknown name, with nearest names; `ING1104` builder name clash |
-| ING2xxx | Types and traits | `ING2001` mismatch; `ING2402` branch on a symbolic value; `ING2601` Instance under a computed condition |
+| ING1xxx | Names and modules | `ING1001` unknown name; `ING1103` duplicate check identity; `ING1104` builder name clash |
+| ING2xxx | Types and traits | `ING2001` mismatch; `ING2402` branch on a symbolic value; `ING2601` Instance or Instance set under a computed condition |
 | ING3xxx | Units and kinds | `ING3001` dimensions; `ING3002` kinds; `ING3201` affine misuse |
 | ING4xxx | Tolerances and GD&T | `ING4101` comparison of tolerances; `ING4201` material condition on a non-size aspect |
-| ING5xxx | Geometry references | `ING5001` positional entity access |
-| ING6xxx | Evaluation failures | `ING6001` incomplete code; `ING6301` fuel; `ING6401` undecided branch |
-| ING7xxx | Packages and lockfile | `ING7001` unresolvable dependency with PubGrub's explanation |
+| ING5xxx | Geometry references | `ING5001` positional entity access; `ING5002` role on the wrong entity kind |
+| ING6xxx | Evaluation failures | `ING6001` incomplete code; `ING6203` empty Instance set; `ING6401` undecided branch |
+| ING7xxx | Packages and lockfile | `ING7001` unresolvable dependency |
 | ING8xxx | Bindings | `ING8001` extern signature differs from the catalog |
-| `ING-L-<Name>` | Lints | `ING-L-FragileSelector`, `ING-L-PositionalKey`, `ING-L-SharedSymbol` |
+| `ING-L-<Name>` | Lints | `ING-L-FragileSelector`, `ING-L-RepeatedStage`, `ING-L-HertzPhase`, `ING-L-SharedSymbol` |
 
 Every code has a generated catalog page with a triggering example and each fix, compiled in CI. A `MachineApplicable` fix must compile and remove its diagnostic (ING-O-9). The canonical example's unit error reads:
 
@@ -824,182 +886,182 @@ error[ING3001]: cannot add Length and Force
    = fix (has placeholders): compare instead: `width < ?`
 ```
 
-An evaluation `Failure` adds the feature call chain, the entities involved and an optional cause. Anvil's `ResolveError` fixes and MEC's `FeatureError` fixes arrive as `Fix` values, so a person clicks them and an agent applies them without translation. The interpreter checks non-finite values, fuel and depth after every step, so it reports the exact expression.
+An evaluation `Failure` adds the feature call chain, the entities involved and an optional cause. Anvil's and MEC's fixes arrive as `Fix` values naming the design's own bindings (contract section 7.2), and the interpreter reports the exact failing expression.
 
 ### Checks
 
-`require` declares a check: a predicate with a severity, a fidelity, the bound kind it accepts as evidence and a source. It never changes the value it attaches to, and its predicate runs as a separate check node after the geometry it reads.
+`require` declares a check: a predicate with a severity, a fidelity, the weakest bound kind that may decide it, and a source. It never changes the value it attaches to, and it runs as a separate node after the geometry it reads.
 
 ```
-require stress < 0.6 * sy, severity: Error, fidelity: SignOff, evidence: Estimated,
+require stress < 0.6 * sy, severity: Error, fidelity: SignOff, decides_on: Estimated,
         name: "static_margin", because: "allowable of 0.6 Sy for this bracket class"
 part.require(part.mass() < 120g, severity: Warning)       // attaches to the Part and returns it
 ```
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `severity` | `Error` | `Error` blocks protected merges and releases; `Warning` and `Info` report |
-| `fidelity` | `SignOff` | The fidelity a release or protected merge evaluates; lower outcomes are provisional |
-| `evidence` | `Estimated` | The weakest bound kind that may decide: `Estimated` or `Guaranteed`; never a model's Evidence level (COV) |
-| `name` | From the predicate's source | Identity across edits; Kiln's diff and merge match checks by it |
+| `severity` | `Error` | Only an `Error` check can fail the gate predicate; `Warning` and `Info` report |
+| `fidelity` | `SignOff` | The fidelity a gate evaluates; lower outcomes are provisional |
+| `decides_on` | `Estimated` | The weakest bound kind that may decide: `Estimated` or `Guaranteed` |
+| `name` | none | Joins the `CheckId` when written |
 | `because` | none | Rationale for reports and agents |
 
-A `require` statement attaches to its feature call, a module-level one to the design, and `x.require(…)` to `x`, carrying it into assemblies with the Instance path in its identity. A comparison chain records value, limit and margin, and a conjunction one sub-outcome per conjunct. "Provisional" means fidelity below the declared one, never a verdict.
+A check's identity is its `CheckId` (contract section 5): the attachment's `CallSite` or Instance path, the `require` statement's identity, and the `name` if written. It never derives from predicate text, so editing a limit keeps the verdict history and Evidence records. A check declared twice on one attachment fails with `ING1103`, whose fix adds `name:`.
 
-The outcome is contract section 5's `CheckOutcome`, decided by the rule in "`Approx<T>` and the decision rule". When some parts are `NotQuantified` but every compared value's discretization part is quantified, the rule decides on the quantified parts: a `Pass` lists the unquantified sources in `conditional_on`, and a `Fail` stays `Fail`. A conditional `Pass` meets a release gate only when repository policy names a cited covering allowance for each source; the check then re-evaluates with it as a declared `Estimated` part, and without one the verdict is `Undecided { Unquantified(sources) }`.
+A `require` statement attaches to its feature call, a module-level one to the design, and `x.require(…)` to `x`, under the Instance path in assemblies. A comparison chain records value, limit and margin, and a conjunction one sub-outcome per conjunct.
+
+The outcome is contract section 5's `CheckOutcome`, with its confidence and `evidence_records`. When only non-discretization parts are `NotQuantified`, a `Pass` lists them in `conditional_on`, and a `Fail` stays `Fail`. A policy allowance (KLN) covering each listed source re-evaluates the check with it as a declared `Estimated` part; without one the verdict is `Undecided { Unquantified(sources) }`.
+
+ING owns the gate predicate, which KLN and AGT apply at protected merges, Proposals and releases. A check meets a gate when its severity is below `Error`, or a Waiver covers it. Otherwise it needs a non-provisional `Pass` in a platform class the gate accepts, with every `conditional_on` source covered by an allowance.
+
+A `require` under the protected `oracles/` directory has the source `Protected(path)`, which agents cannot edit; every other check has `Declared(span)`. `#[waive(reason:, until:)]` on a `require` statement, or with `check:` naming a full `CheckId`, only requests a Waiver. It counts nowhere until an authorized human signs a matching Waiver record (contract section 2). Agents may write the attribute, never the record, and `Protected` checks accept none.
 
 When no study estimates a check's functional, the language service offers a visible fix adding it to the study's `goals:` (D-FLX-5).
-
-A `require` in a file under the protected `oracles/` directory has the source `Protected(path)`, which agents cannot edit; every other check has `Declared(span)`. A waiver is an attribute, `#[waive(check: "static_margin", reason: "…", until: "C")]`, shown in reviews and never applicable to `Protected` checks.
 
 ```
 use std::sim::quick::static_stress
 
 pub feature bracket_check(b: Part, clamp: Query<Face>, pad: Query<Face>, load: Force = 1.2kN) -> Part {
     let study = static_stress(b, fixed: clamp, force: load, on: pad)
-    let peak = study.von_mises.max(over: b.away_from(clamp, 8mm))     // Approx<Stress>
+    let peak = study.von_mises.max(over: b.away_from([clamp, pad], 8mm))   // Approx<Stress>
     b.require(peak < 0.6 * b.material.yield_strength(at: 20degC), name: "static_margin")
 }
 ```
 
-| Situation, with an illustrative limit of 0.6 × 276 MPa = 165.6 MPa | Outcome of `static_margin` |
+`away_from(sets, d)` excludes each set by `d`; without `d`, each flagged set's default distance applies (FLX).
+
+| Situation, with an illustrative yield enclosure of 240 MPa to 276 MPa, so a limit of 144 MPa to 165.6 MPa | Outcome of `static_margin` |
 | --- | --- |
 | `Preview` result | `Undecided { Indicator }` |
-| `Interactive`: 112 MPa ± 20 MPa, `Estimated { calibration }`; model form `NotQuantified` | Enclosures disjoint: a provisional `Pass { conditional_on: [model form] }` |
-| `SignOff`: 118 MPa ± 1.5 MPa `Estimated`; model form `NotQuantified` | `Pass { conditional_on: [model form] }` |
-| Same, with a policy allowance citing a design-code partial factor | `Pass` |
-| The region comes within the exclusion distance of a flagged singular edge | `Undecided { SingularPoint }`, with fixes to widen the exclusion or add a fillet |
+| `Interactive`: 112 MPa ± 20 MPa `Estimated`; model form `NotQuantified` | Below 144 MPa: a provisional `Pass { conditional_on: [model form] }` |
+| `SignOff`: 118 MPa ± 1.5 MPa, confirmed by one refinement | `Pass { conditional_on: [model form] }` at confidence 0.99 |
+| Same, with a policy allowance citing a design-code partial factor | `Pass`, meeting the gate |
+| The refinement's value falls outside the first bound | `Undecided { CalibrationUnconfirmed }` |
+| The result lies outside its calibration class's envelope | `Undecided { Indicator }` |
+| A flagged singular set inside the region, not excluded by its distance | `Undecided { SingularPoint }`, with fixes to exclude it or add a fillet |
 | The solve does not converge | `Error(failure)`, with the solver's diagnostics |
 
-**Decision D-ING-12:** Checks are declarations evaluated as separate nodes, never inline assertions: a failing or undecided check does not stop geometry, and a feature cannot branch on a check's outcome. *Why:* designers need to see the geometry that fails; expensive predicates run after geometry at lower priority; and adding a check never changes a design or a solve, since study goals are explicit inputs (D-FLX-5). *Rejected:* assertions that abort evaluation (hide the failing geometry); checks as Booleans in the dataflow (a check could alter geometry and invalidate caches).
+**Decision D-ING-12:** Checks are declarations evaluated as separate nodes: a failing or undecided check never stops geometry, and no feature branches on a check's outcome. *Why:* designers need to see failing geometry, expensive predicates run later at lower priority, and adding a check never changes a design or a solve (D-FLX-5). *Rejected:* aborting assertions (hide the geometry); checks as Booleans in the dataflow (could alter geometry).
 
 ### Free text
 
-The lossless tree classifies every span as free text or structure. Comments, doc comments, string literals and description templates are free text, as is any identifier that neither the compiler produced nor a human typed. `repo` records which context wrote each span (KLN), and AGT's `read.source`, `read.outline`, `read.docs` and `inspect.describe` return a free-text span as an `ExternalText` handle when its author is outside the reader's delegation chain or untrusted.
+The lossless tree classifies every span as free text or structure. Comments, string literals, description templates and identifiers neither compiled nor typed by a human are free text. `repo` records the integrity of the context that wrote each span (KLN).
 
-A human merge endorses structure and typed values, never free text (contract section 7.6). Per-span endorsement shows the text verbatim, and `ING0003` already keeps hidden characters out of source.
+Every value evaluated from a free-text span, such as a part name, a drawing note or embossed text, carries that span's integrity into its node's label. `api` returns such strings, like untrusted spans themselves, as `ExternalText` handles (contract section 7.6). A merge endorses structure and typed values, never free text; per-span endorsement shows the text verbatim.
 
-**Decision D-ING-24:** The syntax tree classifies every span as free text or structure, and only structure is endorsed by merging. *Why:* an agent could address a later reader through a merged comment, identifier or description template (R5-02). *Rejected:* wrapping only imported strings in `external(…)`, the round 1 rule; banning comments from agents (they document real intent).
+**Decision D-ING-24:** Every span is free text or structure; merging endorses only structure, and values evaluated from free text keep its integrity. *Why:* an agent could address a later reader through a merged comment (R5-02) or a literal evaluated into a part name (R11-02). *Rejected:* wrapping only imported strings, the round 1 rule; banning agent comments (they document intent); integrity on spans only, the round 2 rule. (revised in round 3)
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
-| Diagnostics and fixes | One structure; ranked fixes as `SourcePatch` lists; catalog pages | A failing machine-applicable fix is a compiler defect | ING-O-9 | 0 |
-| `require` and outcomes | `CheckOutcome` per contract section 5; conditional `Pass`; protected sources; waivers | `Error(Failure)`; `Undecided { reason, needed }` | ING-O-8, ING-O-27 | 1 |
+| Diagnostics and fixes | One structure; ranked `SourcePatch` fixes; catalog pages | A failing machine-applicable fix is a defect | ING-O-9 | 0 |
+| `require` and outcomes | `CheckOutcome`; `CheckId`; conditional `Pass`; protected sources | `Error(Failure)`; `Undecided`; `ING1103` | ING-O-8, ING-O-27 | 1 |
+| Gate predicate | Severity, a covered non-provisional `Pass`, or a Waiver record | Gate refused with the failing checks | ING-O-38 | 1 |
 | Check independence | Adding or removing a check changes no other node's key | — | ING-O-27 | 1 |
-| Free-text spans | Classified spans; handles for untrusted authors | `ING0003` | ING-O-32 | 1 |
+| Free-text spans | Classified spans; handles for untrusted authors; integrity carried into evaluated strings | `ING0003` | ING-O-32 | 1 |
 
 ## Execution
 
-Until the code generator ships, the reference interpreter is the only Ingot executor on every target (contract section 7.4). Written in Rust, it interprets the IIR in the canonical class with `detmath` and no implicit FMA, checking non-finite values, fuel and depth after every step. Heap frames let a call suspend at an observation edge without stack switching, and one interpreter per worker holds every suspended call with its own allocator region, reserving memory as it is used.
+Until the code generator ships, the reference interpreter is the only Ingot executor on every target (contract section 7.4). Written in Rust, it interprets the IIR in the canonical class with `detmath`, checking non-finite values, fuel and depth after every step. Heap frames let a call suspend without stack switching. One interpreter per worker holds every suspended call in its own allocator region.
 
 | Measure | Target | Benchmark |
 | --- | --- | --- |
 | Interpreter time per GP1 feature body, operations cached | ≤ 200 µs on the reference laptop; ≤ 600 µs in browsers | `ingot-bench` on GP1 |
-| Ingot share of a golden-product rebuild | ≤ 2%; above it, the code generator enters | GP1 and GP2 rebuilds with cached operations |
-| Suspended feature calls | 500 concurrent calls within 256 MiB of the browser engine worker | Golden-product evaluations |
+| Ingot share of a golden-product rebuild | ≤ 2%, else the code generator enters | GP1 and GP2 rebuilds |
+| Suspended feature calls | 500 within 256 MiB of the browser engine worker | Golden-product evaluations |
 | Front-end re-check of an edited 2,000-line module | Under 30 ms | Edit-replay corpus |
 | Drag residual program per frame, operations excluded | Under 1 ms | UIX drag scripts |
 | Numeric Ingot against idiomatic Rust, once compiled | ≤ 2.5× natively; ≤ 4× in browsers | `ingot-bench` numeric programs |
 
-All figures are targets. Heavy numeric loops go to operations or `#[ingot::feature]` Wasm components until the code generator exists.
+All figures are targets. Until the code generator exists, heavy numeric loops go to operations or Wasm components.
 
-**Decision D-ING-13:** The canonical-class reference interpreter is the only Ingot executor on every target until `ingot-bench` shows Ingot above 2% of a golden-product rebuild. Then a code generator to WebAssembly core modules enters, phase 2 at the earliest, running on Wasmtime with Cranelift natively and on each browser's engine; the interpreter stays for cold start, debugging, replay and differential testing. *Why:* phase 1's golden products need only orchestration speed, which an interpreter reaches, and a second executor would sit on the critical path with no gate need (R6-25). *Rejected:* the code generator in phase 1, the round 1 plan; native code from Cranelift (no browser path); compiling Ingot to Rust (a toolchain at run time); LLVM (slow to compile, no browser target). (revised in round 2)
+**Decision D-ING-13:** The canonical-class interpreter is the only Ingot executor until `ingot-bench` shows Ingot above 2% of a golden-product rebuild; then a code generator to WebAssembly core modules enters, phase 2 at the earliest. *Why:* phase 1 needs only orchestration speed, and a second executor would sit on the critical path with no gate need (R6-25). *Rejected:* the code generator in phase 1; Cranelift native code (no browser path); Ingot to Rust (a run-time toolchain); LLVM (slow, no browser target). (revised in round 2)
 
-When it enters, the code generator emits one module per compilation unit with a source map, cached in the CAS. Its modules pass the determinizer's verification (contract section 7.4), and ING-O-1 checks their fuel accuracy. Its optimizer never reassociates or contracts floating point, keeps every operation that can fail in program order, charges fuel computed on the canonical IIR, and never merges, duplicates or reorders Kiln calls.
+The interpreter stays for cold start, debugging, replay and differential testing. The code generator emits one module per compilation unit with a source map, run by Wasmtime with Cranelift natively and by each browser's engine. Its modules pass the determinizer's verification (contract section 7.4), and ING-O-1 checks their fuel accuracy.
 
-Suspension lowers to resumable state machines, since Wasmtime's tier documentation lists stack switching as unsupported by Cranelift on aarch64. Each worker keeps one instance with per-call allocator regions, isolated by the compiler (no mutable globals) and the allocator. User modules replace the interpreter at the next feature call boundary, unobservably.
+Its optimizer never reassociates or contracts floating point, and it keeps every operation that can fail in program order. It charges fuel computed on the canonical IIR and never merges, duplicates or reorders Kiln calls. Suspension lowers to resumable state machines, since Wasmtime's tier documentation lists stack switching as unsupported by Cranelift on aarch64.
 
-**Decision D-ING-14:** Plain values use reference counting with in-place update of uniquely referenced lists and records: Rust reference counts in the interpreter, Perceus in the code generator. *Why:* immutable, strict values form acyclic graphs, so reference counting needs no cycle collector; Perceus is "garbage free" with "guaranteed in-place updates"; prompt freeing keeps loops within the semantic memory limit, which allocator behavior never affects. *Rejected:* a tracing collector (pauses inside a drag frame); one arena per feature call (keeps garbage until the call ends); ownership types for users (ceremony). (revised in round 2)
+Each worker keeps one instance with per-call allocator regions, and user modules replace the interpreter at the next feature call boundary, unobservably.
+
+**Decision D-ING-14:** Plain values use reference counting with in-place update of uniquely referenced lists and records, Perceus-style in the code generator. *Why:* immutable, strict values are acyclic, Perceus is "garbage free" with "guaranteed in-place updates", and prompt freeing keeps loops within the memory limit. *Rejected:* a tracing collector (pauses in a drag frame); an arena per feature call (late freeing); ownership types for users (ceremony). (revised in round 2)
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
-| Reference interpreter | Canonical class; checks after every step; heap frames; memory reserved as used | Abort `ResourceExhausted` from the host | ING-O-1, ING-O-33, ING-O-34 | 0 |
-| Code generator | Deterministic Wasm subset; verified by the determinizer; state machines; Perceus | Verification rejection is a compiler defect | ING-O-1, ING-O-14 | 2 at the earliest |
+| Reference interpreter | Canonical class; checks after every step; heap frames | Abort `ResourceExhausted` | ING-O-1, ING-O-33, ING-O-34 | 0 |
+| Code generator | Verified deterministic Wasm subset; state machines; Perceus | Rejection is a compiler defect | ING-O-1, ING-O-14 | 2 at the earliest |
 
 ## Rust features and Wasm components
 
-Contract section 4 lets features be written in Rust as Wasm components, and ECO's tier rule (D-ECO-6) decides when. `#[ingot::feature]` writes the WIT world, the `wit-bindgen` glue and a typed Ingot wrapper, and a build fails if a checked-in artifact differs from its regeneration.
+Features may be written in Rust as Wasm components when ECO's tier rule (D-ECO-6) says so. `#[ingot::feature]` writes the WIT world, the glue and a typed Ingot wrapper, and a build fails if a checked-in artifact differs from its regeneration.
 
 ```rust
+use ingot_sdk::{Cx, Body, Length, Angle, Plane};
+
 /// Involute spur gear tooth profile, closed, centered on the origin.
 #[ingot::feature(package = "acme::gears", category = "Power transmission", icon = "gear")]
-pub fn involute_profile(
+pub async fn involute_profile(
     #[ingot(range = "0.1mm..=50mm")] module: Length,
     #[ingot(range = "6..=400")] teeth: u32,
     #[ingot(default = "20deg", range = "14.5deg..=30deg")] pressure_angle: Angle,
-    ctx: &mut OpCx,                                                   // supplied by the host
+    cx: &mut Cx,                                                     // the guest context
 ) -> Result<Body, GearError> {
-    let mut s = ctx.planar_builder(Plane::XY, ctx.site("profile")); // explicit, stable call key
+    let mut s = cx.planar_builder(Plane::XY, cx.site("profile"));  // explicit, stable call key
     for i in 0..teeth {
-        s.add_spline(ctx.site_keyed("flank", i), &flank_points(module, pressure_angle, i)?)?;
+        s.add_spline(cx.site_keyed("flank", i), &flank_points(module, pressure_angle, i)?)?;
     }
-    s.finish_region().map_err(GearError::from)
+    s.finish_region().await.map_err(GearError::from)              // one crucible:ops call
 }
 ```
 
-The SDK's quantity types come from the prelude's kind table, so dimensions survive in Rust and the macro checks each parameter against its WIT alias. `ingot-bindgen` emits `GearError` as an Ingot enum implementing `Error`, with the codes and fix templates declared in Rust.
+`ingot-bindgen` generates the guest SDK, `ingot_sdk`, from the `crucible:ops` and `crucible:host` imports. Its `Cx` is the only context a `#[ingot::feature]` function receives. `OpCx` stays native-only, because it wraps runtime handles that an out-of-process component cannot hold (KLN, PLT).
+
+| `Cx` method | WIT import | Failure |
+| --- | --- | --- |
+| `site(name)`, `site_keyed(name, key)` | None; appends a call key to the call's `CallSite` | `ING8201` on a duplicate key |
+| Builders and operation calls (`planar_builder`, `anvil()`, `flux()`) | `crucible:ops/anvil`, `crucible:ops/flux`, asynchronous (contract section 7.4) | The operation's typed `Failure` |
+| `seed()` | None; the call's `seed: u64` argument | — |
+| `diagnostic(…)` | `crucible:host/diagnostics` | — |
+
+The SDK's quantity types come from the prelude's kind table, so dimensions survive in Rust. `ingot-bindgen` emits `GearError` as an Ingot enum implementing `Error`, with the codes and fixes declared in Rust.
 
 | Rule | Mechanism |
 | --- | --- |
-| A Wasm component call is an Op keyed by the determinized binary's SHA-256, the export and the arguments (contract section 7.2) | Pinned in `ingot.lock` (ECO) |
+| A Wasm component call is an Op keyed by the determinized binary's hash, export and arguments | Pinned in `ingot.lock` (ECO) |
 | Evaluation worlds import no WASI; randomness arrives only as a `seed: u64` argument from an `Rng` | Contract section 7.4 |
-| Operation calls go through `crucible:ops/anvil` and `crucible:ops/flux`, served by Kiln as recorded Op dependencies | No second path to the engine |
-| Every operation call and created entity takes a call key appended to the call's `OpSite`; duplicates fail with `ING8201` | Stable `EntityId`s |
-| Fuel is metered by the determinizer and limited by the wrapper's `fuel:` within the manifest maximum | Deterministic limits |
-| Traps and fuel or stack exhaustion are cached `Failure`s; host resource loss is an Abort | Contract section 7.2 |
-| Results with error estimates map to `Approx` values or `ErrorBudget` parts; `outside-envelope` maps to the validity flag | Wrapper convention |
-| Diagnostics written through `crucible:host/diagnostics` attach to the call's span in emission order; Wasm component strings become `ExternalText` | Write-only accumulator |
-| The wrapper is the public interface, and the raw `extern fn` is `pub(package)` | One typed signature for dialogs and semantic versions |
+| Operation calls go through `crucible:ops` as recorded Op dependencies; engine data arrive only through handles from the inputs | Contract section 4 |
+| Every operation call and created entity takes a call key appended to the call's `CallSite`; duplicates fail with `ING8201` | Stable `EntityId`s |
+| Fuel is metered by the determinizer and limited by the wrapper's `fuel:` | Deterministic limits |
+| Traps, `FuelExhausted`, `StackExhausted` and `MemoryLimit` are cached `Failure`s; host-caused growth failures and resource loss are Aborts | Contract sections 7.2 and 7.4 |
+| Error estimates map to `Approx` values or `ErrorBudget` parts; `outside-envelope` to the validity flag | Wrapper convention |
+| Diagnostics attach to the call's span in emission order; Wasm component strings become `ExternalText` | Write-only accumulator |
+| The wrapper is the public interface; the raw `extern fn` is `pub(package)` | One typed signature |
 
 | WIT | Ingot |
 | --- | --- |
 | `bool`, `s8` to `s64`, `u8` to `u32`; `u64` | `Bool`, `Int`; `u64` fails with `ING6101` above 2⁶³ − 1 |
-| A `u64` named `seed`; a `fidelity` enum (KLN's `Fidelity`) | `Seed`; omitted, filled by the host, because code cannot observe fidelity |
+| A `u64` named `seed`; a `fidelity` enum | `Seed`; omitted and filled by the host |
 | `f32`, `f64`; `crucible:units` aliases | `Real`; `Length`, `Force`, `Temperature` (kelvin, converted in the wrapper) |
 | `string`, `list`, `option`, `result`, `tuple` | `ExternalText` for Wasm component strings; `[T]`, `Option`, `Result`, tuples |
 | `record`, `variant`, `enum`, `flags` | `record`, `enum`, `enum`, `Set<Enum>` |
 | Body and Field resources; other resources | `Body`, `Field<D, V>` handles; opaque handles owned by the wrapper |
 
-A bare `f64` parameter becomes `Real` with `ING8101`, asking for a unit alias in `ingot-bindgen.toml`. A Rust feature is an opaque debugger frame with its inputs, outputs and nested operations, and has a forward derivative only when `#[ingot::feature(tangent = …)]` names an exported tangent.
+A bare `f64` parameter becomes `Real` with `ING8101`, asking for a unit alias in `ingot-bindgen.toml`. A Rust feature is an opaque debugger frame, and it has a forward derivative only when `#[ingot::feature(tangent = …)]` names an exported tangent.
 
-**Decision D-ING-15:** The fallback is an attribute macro, `#[ingot::feature]`, generating the WIT world, the `wit-bindgen` glue and a typed Ingot wrapper from one Rust signature. The wrapper is the feature's only public face, and operation calls go through the WIT package `crucible:ops`. *Why:* one signature carries units and ranges to the type checker and dialogs, so a Rust feature looks like an Ingot one. *Rejected:* hand-written WIT and wrappers (three signatures that drift); native Rust plugins (unsafe, impossible in browsers); `crucible:geom/ops`, the round 1 interface. (revised in round 2)
+**Decision D-ING-15:** `#[ingot::feature]` generates the WIT world, glue and typed Ingot wrapper from one Rust signature, whose function receives the generated guest context `ingot_sdk::Cx`. *Why:* one signature carries units and ranges to the type checker and dialogs, and an out-of-process component needs a context made of imports (R9-19). *Rejected:* hand-written WIT and wrappers (drift); native Rust plugins (unsafe, no browsers); passing `OpCx`, the round 2 example. (revised in round 3)
 
-A package feature calling a Wasm component through its generated binding:
-
-```
-//! Gray-body radiation exchange inside a closed, diffuse enclosure.
-use package::generated::solver::{solve_raw, SolveRequest}      // from crucible:physics/solver@1
-
-#[feature(category: "Thermal", icon: "radiation")]
-pub feature radiation_exchange(
-    enclosure: Body, hot: Query<Face>, cold: Query<Face>,
-    emissivity: Real in 0.01..=1.0 = 0.85,
-    t_hot: Temperature = 80degC, t_cold: Temperature = 20degC,
-    seed: Seed = Seed::from(enclosure),                         // hashes the GeometryId, not names
-) -> Field<Body, HeatFlux> {
-    let temps = Field::per_entity(enclosure, [hot => t_hot, cold => t_cold])
-    let out = solve_raw([enclosure], [temps], SolveRequest {
-        parameters: [("emissivity", emissivity)], tolerance: 0.005,
-        seed: Rng::new(seed).split("radiation").seed(),
-    })?
-    let flux: Field<Body, HeatFlux> = out.field("net_flux")?    // checks the recorded dimension (ING8102)
-    flux.require(out.scalar("reciprocity_error")? < 1e-3, name: "reciprocity", severity: Warning)
-}
-```
-
-The Wasm component's error estimate becomes the statistical part of the Field's `ErrorBudget`, `Guaranteed` only if it declares one. The package test compares two concentric spheres with the closed form Q = A₁σ(T₁⁴ − T₂⁴) / (1/ε₁ + (A₁/A₂)(1/ε₂ − 1)).
+A package calls a Wasm component through the same generated binding, and the component's declared error estimate becomes a statistical `ErrorBudget` part, `Guaranteed` only if declared so.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
 | `#[ingot::feature]` | One Rust signature generates WIT, glue and wrapper | Artifact drift fails the build; `ING8xxx` | ING-O-17 | 1 |
-| Wasm component calls | Ops keyed per contract section 7.2; `crucible:ops`; call keys; determinizer fuel | `ING8201`; typed `Failure`s; Aborts | ING-O-1, ING-O-17 | 1 |
+| Guest SDK | `ingot_sdk::Cx` generated from the WIT imports; asynchronous operation calls | `ING8201`; typed `Failure`s | ING-O-17 | 1 |
+| Wasm component calls | Ops keyed per contract section 7.2; call keys; metered fuel | Typed `Failure`s; Aborts | ING-O-1, ING-O-17 | 1 |
 | Binding generation | WIT to Ingot with units | `ING8101`, `ING8102` | ING-O-17 | 1 |
 
 ## Packages and versions
 
-A package is a directory with `ingot.toml` and modules under `src/`, rooted at `src/lib.ingot`; a design repository's root is `src/main.ingot`, whose `pub` items are its outputs. A module's items are private to it, visible package-wide with `pub(package)`, or public with `pub` and part of the semantic-version interface. A `use` path starts with a dependency, `package`, `self` or `super`.
+A package is a directory with `ingot.toml` and modules under `src/`, rooted at `src/lib.ingot`. A design repository's root is `src/main.ingot`, whose `pub` items are its outputs. Items are private, package-wide with `pub(package)`, or public with `pub` and part of the semantic-version interface.
 
-Imports are acyclic (`ING1301`), as in KCL, and two globs supplying one name make it ambiguous (`ING1201`).
+A `use` path starts with a dependency, `package`, `self` or `super`. Imports are acyclic (`ING1301`), as in KCL, and two globs supplying one name are ambiguous (`ING1201`).
 
 ```toml
 [package]
@@ -1016,42 +1078,44 @@ display = { Length = "mm", Stress = "MPa" }
 fuel = { default = 1e9, max = 1e11 }   # per feature call; enters node keys
 ```
 
-At publish the registry diffs the public interface and refuses a minor or patch release that breaks it (ECO). Ingot defines "breaks":
+The registry refuses a minor or patch release that breaks the public interface (ECO); Ingot defines "breaks":
 
 | Change | Release |
 | --- | --- |
-| Remove or rename a public item, parameter, field, role or coordinate system; change a parameter's dimension, kind or type; add a parameter without a default; narrow a range; add a variant to an exhaustive enum | Major |
+| Remove or rename a public item, parameter, field, role or coordinate system; change a parameter's dimension, kind or type; add an undefaulted parameter; narrow a range; extend an exhaustive enum | Major |
 | Change a default value, or the entity names a public feature produces on the package's test designs | Minor, labelled output-changing (D-ECO-14) |
 | Add a defaulted parameter, an item, a role or a variant to a `#[non_exhaustive]` enum; widen a range | Minor |
-| Change private code so that test-design outputs change but entity names do not | Patch, labelled output-changing (D-ECO-14) |
-| Change only documentation, metadata or private code that leaves test-design outputs and names unchanged | Patch |
+| Change test-design outputs through private code, keeping entity names | Patch, labelled output-changing (D-ECO-14) |
+| Change only documentation, metadata or private code, leaving outputs and names unchanged | Patch |
 
-`ingot.lock` is sorted TOML written only by tools. ING owns `[language]`, the language behavior version fixing evaluation semantics, the cost table, the n-ary lowering rule and std numerics. `[operations]` pins operation versions (KLN and the owners), and `[[package]]`, `[[asset]]` and `[[external]]` pin the rest by SHA-256 (ECO); compiler releases may change diagnostics and speed, never values, failures or fuel.
+`ingot.lock` is sorted TOML written only by tools. ING owns `[language]`, the language behavior version fixing evaluation semantics, the IIR lowering, the cost table, the n-ary lowering rule and std numerics. `[operations]` pins operation versions (KLN and the owners), and `[[package]]`, `[[asset]]` and `[[external]]` pin the rest by SHA-256 (ECO). Compiler releases may change diagnostics and speed, never IIR, values, failures or fuel.
 
 **Decision D-ING-16:** The lockfile pins a language behavior version beside the operation versions, and a toolchain implements every language behavior version in its support window. *Why:* an old design must rebuild identically, and fuel costs and std numerics are part of its result. *Rejected:* pinning the toolchain release (old toolchains kept runnable forever); letting editions carry behavior (ECO's D-ECO-23 forbids it).
 
 Resolution uses PubGrub, which can "explain errors more clearly than the alternatives": `ING7001` carries its derivation and relaxations as fixes. Two major versions of a package may coexist; passing a value between them fails with `ING7201`.
 
-Editions follow Rust's model and D-ECO-23: they change surface syntax, the prelude and lint defaults, never behavior, and all lower to one IIR. `crucible migrate` applies machine-applicable fixes on the lossless tree and rejects any item whose IIR changes beyond spans; test designs must then build to identical output hashes. Rust's guide notes that "Cargo's automatic migrations aren't perfect", and the IIR check makes Ingot's exact.
+A module is the unit of a source label, and front ends read only their imports' signatures, so an uncleared principal compiles against a declassified signature (contract section 7.1).
+
+Editions follow Rust's model and D-ECO-23: they change surface syntax, the prelude and lint defaults, never behavior. `crucible migrate` applies machine-applicable fixes and rejects any item whose IIR changes beyond spans. Rust's guide notes that "Cargo's automatic migrations aren't perfect", and the IIR check makes Ingot's exact.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
 | Modules and visibility | Three levels; acyclic imports | `ING12xx`, `ING1301` | ING-O-5 | 1 |
 | Semantic-version rules | The table above, including entity-name changes | Publish refused (ECO) | ING-O-18 | 1 |
-| Lockfile and behavior versions | `[language]` pinned; compiler releases never change values | A changed value is a defect | ING-O-1, ING-O-18 | 1 |
+| Lockfile and behavior versions | `[language]` pinned; releases never change IIR or values | A changed value is a defect | ING-O-1, ING-O-18 | 1 |
 | Resolution | PubGrub with explanations; two majors coexist | `ING7001`, `ING7201` | ING-O-18 | 1 |
 | Editions and migrations | IIR-preserving rewrites only | Non-preserving rewrites listed, not applied | ING-O-19 | 2 |
 
 ## Feature metadata and dialogs
 
-A feature's signature generates its dialog, its documentation page and its agent tool schema; attributes refine them.
+A feature's signature generates its dialog, documentation page and agent tool schema; attributes refine them.
 
 | Source element | Generated UI |
 | --- | --- |
 | Quantity parameter | Numeric field with unit, accepting expressions (UIX) |
-| `Tol<T>` parameter, or a `T` with a toleranced default | Value field with a tolerance sub-field: symmetric, deviations, limits or fit code |
+| `Tol<T>` parameter, or a toleranced default | Value field with a tolerance sub-field |
 | `Bool`; `enum` | Toggle; segmented control up to five variants, else a dropdown |
-| `Query<K>` | Selection field with the readable query and a filter from `K` |
+| `Query<K>` | Selection field showing the query, filtered by `K` |
 | `Material`, catalog part types | Pickers bound to the material library and the catalog |
 | `Option<T>`, record, `[T]` | Enable toggle; group; list editor |
 | `in` range; doc comment | Field and slider bounds checked at evaluation (`ING6501`); help text |
@@ -1059,15 +1123,15 @@ A feature's signature generates its dialog, its documentation page and its agent
 | Attribute | Meaning |
 | --- | --- |
 | `#[feature(category:, icon:, handles:)]` | Toolbox placement, icon, manipulator handles (UIX handle kinds) |
-| `#[ui(group:, advanced, visible_if:, step:, filter:, label:)]` | Grouping, progressive disclosure, conditional visibility, slider step, selection filter, label |
-| `#[roles(…)]`, `#[fuel(…)]`, `#[example]` | Created roles; a raised fuel limit; a compiled, evaluated doc example |
+| `#[ui(group:, advanced, visible_if:, step:, filter:, label:)]` | Grouping, disclosure, visibility, slider step, selection filter, label |
+| `#[roles(…)]`, `#[fuel(…)]`, `#[example]` | Created roles per entity kind; a raised fuel limit; a compiled, evaluated doc example |
 | `#[deprecated(since:, instead:)]`, `#[removed(in:, instead:)]` | Lifecycle with fixes |
 
-`visible_if` takes a pure closure over the parameter record, checked on default values and evaluated by the interpreter as values change. FeatureScript expresses the same with `if` statements in a `precondition` block, where each parameter may appear only once.
+`visible_if` takes a pure closure over the parameter record, evaluated by the interpreter as values change. FeatureScript expresses the same with `if` statements in a `precondition` block.
 
-**Decision D-ING-17:** Dialogs are generated from feature signatures, types, doc comments and a small attribute vocabulary, with conditional visibility as pure closures; there is no dialog language. *Why:* one declaration serves the dialog, docs, semantic-version checks and agent tool schemas, so they cannot drift; Onshape's preconditions show generated dialogs work at scale. *Rejected:* FeatureScript-style precondition blocks (a second statement language for UI); hand-built dialog descriptions (drift).
+**Decision D-ING-17:** Dialogs are generated from signatures, types, doc comments and a small attribute vocabulary; there is no dialog language. *Why:* one declaration serves dialog, docs, semantic-version checks and tool schemas without drift, and Onshape shows generated dialogs work at scale. *Rejected:* FeatureScript-style precondition blocks (a second statement language); hand-built dialogs (drift).
 
-`crucible doc` generates reference pages; every `///` code block compiles, and `#[example]` blocks evaluate in CI with their checks. A public item without a doc comment fails the registry's coverage gate (ECO), and AGT's tool schemas read the same data.
+`crucible doc` generates reference pages; every `///` code block compiles, and `#[example]` blocks evaluate in CI with their checks. A public item without a doc comment fails the registry's coverage gate (ECO).
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -1078,7 +1142,7 @@ A feature's signature generates its dialog, its documentation page and its agent
 
 ### Lossless tree and blocks
 
-`ingot-syntax` parses into a lossless green-red tree in rust-analyzer's design, keeping whitespace and comments, with the `rowan` crate (MIT or Apache-2.0). Every byte belongs to exactly one block, as Kiln's live document requires.
+`ingot-syntax` parses into a lossless green-red tree in rust-analyzer's design, with the `rowan` crate (MIT or Apache-2.0). Every byte belongs to exactly one block, as Kiln's live document requires.
 
 | Block | Head | Children |
 | --- | --- | --- |
@@ -1086,45 +1150,54 @@ A feature's signature generates its dialog, its documentation page and its agent
 | Parameter, field, variant; table row | The whole text | None |
 | Statement; arm | Text up to the first nested block; the arm's opener | Arms; statements, with the closer as tail |
 
-Comments belong to the block that follows them, and order-insensitive lists (`use` lists, named arguments, record fields) merge as sets. Parsing is block-local: each block parses as head, arm holes and tail under its own production, and an error stays inside its block as `ERROR` nodes. A block that stops parsing after a concurrent edit therefore keeps its kind and position, and "the last good result for that block" is well defined.
+Comments belong to the block that follows them, and order-insensitive lists (`use` lists, named arguments, record fields) merge as sets. Parsing is block-local: each block parses under its own production, and an error stays inside it as `ERROR` nodes. A block broken by a concurrent edit keeps its kind and position, so "the last good result for that block" is well defined.
 
-**Decision D-ING-18:** The grammar is designed for structural editing: newline-terminated statements, one statement per block, comments owned by the following block, named arguments that merge as sets, atomic literals, and block-local parsing. *Why:* the live document needs a block for every unit of concurrent work and an owner for every byte, and file-level recovery re-associated blocks after a malformed one (R3-32). *Rejected:* a projectional editor (review, diff tools and agents work on text); free layout with semicolons (two layouts, two diffs); file-level error recovery. (revised in round 2)
+Statement order matters only for definition before use and for the ordinals of unnamed statements. Kiln's reconcile step checks both after a merge, turning a change into `Conflict::Text` on the block (KLN).
+
+**Decision D-ING-18:** The grammar serves structural editing: newline-terminated statements, one statement per block, comments owned by the next block, named arguments merged as sets, atomic literals, block-local parsing. *Why:* the live document needs a block per unit of concurrent work and an owner per byte, and file-level recovery re-associated blocks (R3-32). *Rejected:* a projectional editor (reviews and agents use text); semicolons with free layout (two diffs); file-level recovery. (revised in round 2)
+
+Data modules, such as ELX's `Schematic` and `Layout`, are `table { … }` literals whose rows are atomic blocks. A row-specialized lexer skips the general tree and builds lossless nodes lazily when a row is edited. The target is 10⁶ rows parsed and hashed in under 1 s natively (ING-O-37), measured in phase 2 before ELX needs it. If missed, the module splits by board region.
+
+**Decision D-ING-27:** Data modules stay Ingot text, with no binary sidecar. *Why:* merge, live documents, span provenance, `CallSite`s and Git export all work on text, and a second format needs a second path for each (R9-34). *Rejected:* a binary sidecar keyed by statement identity, the round 2 fallback; a data format per subsystem.
 
 ### Formatting and structural edits
 
-`crucible fmt` produces one idempotent layout per block: 100 columns, 4-space indents, one argument per line when a call breaks, one pipeline stage per line, alignment only in tables. Every GUI action and agent edit becomes the smallest `SourcePatch` list the formatter leaves unchanged:
+`crucible fmt` produces one idempotent layout per block: 100 columns, 4-space indents, one argument or pipeline stage per line when broken, alignment only in tables. Every GUI action and agent edit becomes the smallest `SourcePatch` list the formatter leaves unchanged:
 
 | Action | Minimal source edit |
 | --- | --- |
 | Change a dialog value; drag a dimension | Replace one literal token, keeping its unit; drags replace the literal UIX's edit plan chose |
+| Drag a sketch entity | Rewrite the seeds that moved by more than the quantum (D-ING-26); a drag that moves nothing writes nothing |
+| Edit a driving dimension on a drawing | Replace the literal it traces to by provenance, else offer ranked edit plans; driven dimensions are read-only (MEC) |
 | Add a feature | Insert one statement after the anchor, binding a fresh name derived from the feature (`fillet_2`) |
-| Delete or reorder a feature | Remove or move one statement block with its comments, refused with the reason if a binding would precede its definition |
+| Delete or reorder a feature | Remove or move one statement block with its comments, refused if a binding would precede its definition |
 | Suppress; set a tolerance | Toggle `#[suppressed]`; rewrite `4mm` to `4mm ± 0.1mm` |
 | Rename a binding | Rename every use and add `#[was(old_name)]`, keeping entity names |
 | Add a check | Insert a `require` statement, or attach `.require(…)` to a single-expression body |
 
 ### Language service and tools
 
-The language service implements LSP 3.17 semantics in `ingot-service`. The UI and agents reach it through `api`, and it also runs as an LSP server over stdio with first-party VS Code and Zed extensions. A custom request, `crucible/reveal`, drives Crucible's viewport from those editors for cross-probing; the in-app code panel covers editing, diagnostics, hover, completion and scrubbing (UIX).
+The language service implements LSP 3.17 semantics in `ingot-service`. The UI and agents reach it through `api`, and it also runs over stdio with first-party VS Code and Zed extensions. A custom request, `crucible/reveal`, drives Crucible's viewport from those editors; the in-app code panel is UIX's.
 
-It offers pull diagnostics with evaluation failures, semantic tokens for units and roles, hover with values, bounds and tolerance limits, and inlay hints for dimensions and scalar flavors. Completion knows units, roles and parameters; every fix is a code action; and a source map links each `EntityId` to its creating `OpSite` and span. Targets: completion and hover within 50 ms, diagnostics for an edited 2,000-line module within 100 ms.
+It offers pull diagnostics with evaluation failures, semantic tokens for units and roles, hover with values and bounds, and inlay hints for dimensions and flavors. Every fix is a code action, and a source map links each `EntityId` to its creating `CallSite` and span. Targets: completion and hover within 50 ms, diagnostics for an edited 2,000-line module within 100 ms.
 
-**Decision D-ING-25:** In phase 1 the language service ships inside Crucible and as an LSP server over stdio with first-party VS Code and Zed extensions, plus a request that drives Crucible's viewport. *Why:* code-CAD users already work in those editors, and an in-app editor alone would have to compete with them as a product (R6-23). *Rejected:* the in-app code panel as the only editor; external editors without viewport cross-probing.
+**Decision D-ING-25:** In phase 1 the language service ships in Crucible and over stdio with VS Code and Zed extensions, plus a viewport request. *Why:* code-CAD users already work in those editors, and an in-app editor alone would compete with them (R6-23). *Rejected:* the in-app panel as the only editor; external editors without cross-probing.
 
 | Tool | Behavior | Phase |
 | --- | --- | --- |
-| Debugger | Runs a feature call in the interpreter reading every operation result from the cache, so stepping never recomputes geometry; Debug Adapter Protocol with `stepBack` and `reverseContinue`, exact because evaluation is pure; intermediate Bodies colored by creating `OpSite`; queries evaluated against the current frame | 2 |
-| REPL and notebooks | Cells compile as modules importing earlier cells' names; saved as `.ingot` files with `//% cell` markers; outputs are Kiln values, never saved in the file | 2 |
-| Tests | `#[test]`, `#[test(golden)]` comparing `ObjectId`s, `#[test(property, cases:)]` drawing seeded parameters; `assert_close` passes only on enclosures, `assert_checks_pass` fails on `Undecided`; failures shrink to a reproducible call | 1 |
+| Debugger | Replays a feature call in the interpreter from cached operation results, so stepping never recomputes geometry; Debug Adapter Protocol with `stepBack` and `reverseContinue`; Bodies colored by creating `CallSite` | 2 |
+| REPL and notebooks | Cells compile as modules importing earlier cells; `.ingot` files with `//% cell` markers; outputs never saved | 2 |
+| Tests | `#[test]`, `#[test(golden)]` comparing `ObjectId`s, `#[test(property, cases:)]` with seeded parameters; `assert_close` passes only on enclosures; failures shrink to a reproducible call | 1 |
 | Benchmarks | `#[bench]` reports deterministic fuel and wall time; CI tracks fuel exactly and time statistically; `ops: cached` or `ops: cold` | 1 |
 
-Tests are deterministic, so a flaky test is an engine defect; tests under `oracles/` are protected.
+Tests are deterministic, so a flaky test is an engine defect.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
-| Lossless tree and block-local parsing | Every byte in one block; errors stay inside their block | `ERROR` nodes; never a crash | ING-O-2, ING-O-29 | 0 |
-| Formatter and structural edits | Canonical, minimal, comment- and name-preserving | Refused edits explain why | ING-O-10 | 1 |
-| Language service | LSP 3.17 in-app and over stdio; VS Code and Zed extensions; viewport request | Degrades to plain text editing (UIX) | ING-O-21 | 1 |
+| Lossless tree and block-local parsing | Every byte in one block; errors stay inside it | `ERROR` nodes; never a crash | ING-O-2, ING-O-29 | 0 |
+| Data modules | `table` rows as atomic blocks; row lexer; 10⁶ rows under 1 s (target) | A miss splits the module | ING-O-37 | 2 |
+| Formatter and structural edits | Canonical, minimal, comment- and name-preserving; seed and drawing edits | Refused edits explain why | ING-O-10 | 1 |
+| Language service | LSP 3.17 in-app and over stdio; viewport request | Degrades to plain text editing | ING-O-21 | 1 |
 | Debugger | Replay from cache; reverse stepping | — | ING-O-22 | 2 |
 | REPL and notebooks | Cells as modules; outputs from Kiln | — | ING-O-5 | 2 |
 | Tests and benchmarks | Geometric assertions; golden and property tests; fuel tracking | Deterministic failures | ING-O-1, ING-O-33 | 1 |
@@ -1134,56 +1207,52 @@ Tests are deterministic, so a flaky test is an engine defect; tests under `oracl
 
 | Aspect | Zoo KCL | Onshape FeatureScript | CadQuery, build123d | OpenSCAD | Ingot |
 | --- | --- | --- | --- | --- | --- |
-| Host | Own language; Rust, MIT | Own language inside Onshape | Python libraries on OpenCascade | Own language; CGAL a build prerequisite | Own language; Rust |
-| Typing | Numeric types with units; bare numbers take the file default | Dynamic, with `ValueWithUnits` | Dynamic Python, type hints in build123d | Dynamic; `undef` | Static; inferred bodies, required signatures |
-| Units | Lengths, angles, counts; "KCL doesn't support area, volume, or other higher-dimension units" | Dimensional analysis; mixing units throws | None | None | Rational dimension algebra, kinds, affine temperatures, at compile time |
+| Typing | Numbers take the file's default unit | Dynamic, with `ValueWithUnits` | Dynamic Python | Dynamic; `undef` | Static; inferred bodies, required signatures |
+| Units | "KCL doesn't support area, volume, or other higher-dimension units" | Dimensional analysis at run time | None | None | Rational dimensions, kinds, affine temperatures, at compile time |
 | Tolerances | None | None in the language | None | None | `Tol<T>` with affine worst case, explicit statistics, typed GD&T |
-| Entity selection | Tags on sketch segments [unverified: tag syntax] | `qCreatedBy(id + …)` over feature ids | String selectors (`">Z"`); build123d sorting, `Select.NEW` | None [unverified] | Provenance and role queries, anchored ranks, no positional access |
-| Composition | Pipelines with `\|>` | `context`, `id` and definition maps | Fluent chains; builder contexts | CSG modules | Pipelines, methods, builder blocks |
+| Entity selection | Tags (`tag = $name`); edges by adjacent faces (`sideFaces`), with an `index` fallback | `qCreatedBy(id + …)` over feature ids | String selectors (`">Z"`); build123d sorting, `Select.NEW` | No face or edge queries | Provenance and role queries, anchored ranks |
 | Purity | Mostly functional | No external input, time or randomness | Python: anything | Functional; last assignment wins | Pure, fuel-bounded, explicit keyed randomness |
-| UI generation | Sketches in function bodies not editable by point-and-click | Precondition annotations | None | Customizer comments [unverified] | Signatures and attributes |
-| Versioning | `kclVersion` per program | std imported by pinned version string | Python packaging | Releases | Editions; lockfile pins of language and operation behavior |
-| Execution | Commands to Zoo's hosted engine, view streamed back as video | Onshape's cloud [unverified] | Local Python | Local | Local on every Tier 1 target and in the browser |
+| UI generation | Sketches in function bodies not editable by point-and-click | Precondition annotations | None | Customizer comments beside variables | Signatures and attributes |
+| Execution | Zoo's hosted engine, view streamed as video | Part Studio regeneration in Onshape | Local Python | Local | Local on every Tier 1 target and in browsers |
 
 KCL's documentation gives `10in * 25.4` as `254in`, and FeatureScript threads `context` and `id` through every call; Ingot's types and dataflow remove both.
 
-**Decision D-ING-19:** Crucible builds Ingot's implementation from scratch and does not fork KCL's MIT-licensed implementation; it studies KCL's tests and documentation as references, with attribution. *Why:* most of what matters here is new, from rational dimensions and `Tol` to text-derived sites. `kcl-lib` also couples execution to an engine connection, which cloning its `ExecutorContext` shares, per its API documentation. *Rejected:* forking `kcl-lib` (we would replace most of it and inherit default units); KCL source compatibility (its unit semantics conflict with principle 5). A KCL importer mapping default units explicitly is phase 3 work in `io/`.
+**Decision D-ING-19:** Crucible builds Ingot from scratch and does not fork KCL's MIT-licensed implementation, studying its tests and documentation with attribution. *Why:* most of Ingot is new, and `kcl-lib` couples execution to an engine connection that cloning its `ExecutorContext` shares. *Rejected:* forking `kcl-lib` (replaced anyway, with default units); KCL source compatibility (conflicts with principle 5). A KCL importer is phase 3 work in `io/`.
 
 Figures are targets on contract section 13.3's reference laptop.
 
 | Component | Best published method | Leading implementation to beat | Crucible's choice | How we measure |
 | --- | --- | --- | --- | --- |
-| Units and dimensions | Units-of-measure inference (F#); kinds and affine points (mp-units, after ISO 80000) | F# units of measure; mp-units; Pint at run time | Rational dimensions, kinds, strong angular system, affine temperatures, erased at run time | ING-O-4; check time under 5% of front-end time |
-| Tolerance arithmetic | Affine arithmetic (Comba and Stolfi; de Figueiredo and Stolfi); GUM and Supplement 1 | Spreadsheet and 1D stack tools [unverified] | Affine forms per site and realizing Part; explicit RSS and Monte Carlo | ING-O-7 |
+| Units and dimensions | Units-of-measure inference (F#); kinds and affine points (mp-units, after ISO 80000) | F# units of measure; mp-units; Pint | Rational dimensions, kinds, strong angular system, erased at run time | ING-O-4; check time under 5% of front-end time |
+| Tolerance arithmetic | Affine arithmetic (Comba and Stolfi; de Figueiredo and Stolfi); GUM and Supplement 1 | Sigmetrix CETOL 6σ (3D tolerance analysis in CAD) | Affine forms per site and realizing Part; exact coverage; name-free order | ING-O-7 |
 | Approximate comparisons | Interval enclosures with three-valued logic | FLX's budgets | One decision rule over `ErrorBudget`s with conditional passes | ING-O-8 |
-| Entity naming | Provenance with history (build123d's `Select.NEW`; FeatureScript's `qCreatedBy`) | Onshape FeatureScript | Text-derived `OpSite`s, keyed iteration, anchored queries over Anvil lineage | ING-O-25, ING-O-26, ANV-O-NAME-2 |
+| Entity naming | Provenance with history (`Select.NEW`; `qCreatedBy`) | Onshape FeatureScript | Text-derived `CallSite`s, keyed iteration, anchored queries | ING-O-25, ING-O-26, ANV-O-NAME-2 |
 | Incremental compilation | Red-green memoization with early cutoff (Salsa) | rust-analyzer | Salsa-style stages inside Kiln; split node outputs | ING-O-13; re-check under 30 ms |
-| Execution | Compiled code "an order of magnitude faster than interpretation" (Xu and Kjolstad); Cranelift within about 14% of LLVM; browsers 45% to 55% slower than native on SPEC (Jangda and colleagues) | V8, Wasmtime; wasmi for interpreted Wasm with fuel | Interpreter now; Wasm code generator when justified | ING-O-33; ≤ 2.5× Rust natively, ≤ 4× in browsers once compiled |
+| Execution | Compiled code "an order of magnitude faster than interpretation" (Xu and Kjolstad); Cranelift within about 14% of LLVM; browsers 45% to 55% slower than native on SPEC (Jangda and colleagues) | V8, Wasmtime; wasmi with fuel | Interpreter now; Wasm code generator when justified | ING-O-33 |
 | Memory in pure languages | Perceus reference counting with reuse (PLDI 2021) | Koka | Reference counting with in-place update; Perceus in the code generator | ING-O-34 |
-| Deterministic execution | Wasm with fuel and canonical semantics (Wasmtime guide; Wasm 3.0 deterministic profile) | Wasmtime with NaN canonicalization | One canonical interpreter; verified generated modules | ING-O-1 |
+| Deterministic execution | Wasm with fuel and canonical semantics (Wasmtime; Wasm 3.0 deterministic profile) | Wasmtime with NaN canonicalization | One canonical interpreter; verified modules | ING-O-1 |
 | Live programming | Typed holes with evaluation around them (Hazel) | Hazel | Holes from the error-resilient parser | ING-O-15 |
 | Bidirectional editing | Program repair from output edits (Sketch-n-Sketch) | Sketch-n-Sketch; Onshape dimension editing | Provenance ranking, then derivatives | UIX's intent-match rate |
-| Lossless syntax trees | Red-green trees (Swift libsyntax, rust-analyzer) | rust-analyzer with `rowan` | `rowan`, block grammar, block-local parsing for Loro's movable tree | ING-O-2, ING-O-29; reparse of 2,000 lines under 5 ms |
+| Lossless syntax trees | Red-green trees (Swift libsyntax, rust-analyzer) | rust-analyzer with `rowan` | `rowan`, block grammar, block-local parsing for Loro's movable tree | ING-O-2, ING-O-29, ING-O-37; 2,000 lines reparsed under 5 ms |
 | Version resolution | PubGrub | uv | PubGrub through ECO's resolver | ING-O-18 |
 | Language evolution | Editions with automated migration (Rust) | Cargo | Editions plus an IIR-equality check | ING-O-19 |
 | Dialogs from code | FeatureScript preconditions | Onshape | Typed signatures plus attributes | ING-O-20 |
-| Sketch language | Constraint graphs catalogued by SketchGraphs | Onshape's sketcher [unverified: SketchGraphs source system] | Builder blocks of symbolic entities and `Equation` items | ING-O-23 |
-| Debugging | DAP with `stepBack` and `reverseContinue` | Record-and-replay debuggers [unverified] | Replay from Kiln's cache, exact because evaluation is pure | ING-O-22 |
+| Sketch language | Constraint graphs catalogued by SketchGraphs | Onshape's sketcher, SketchGraphs' source | Builder blocks of symbolic entities and `Equation` items | ING-O-23 |
+| Debugging | DAP with `stepBack` and `reverseContinue` | rr (record, replay, reverse execution) | Replay from Kiln's cache, exact because evaluation is pure | ING-O-22 |
 
 ## Platform notes
 
 | Platform | Note |
 | --- | --- |
-| Every target | The interpreter is one Rust implementation in the canonical class, so a divergence is a platform defect that ING-O-1 finds |
-| Browsers | The interpreter, compiled to wasm32, runs in the engine worker and yields at Kiln calls in single-threaded builds; evaluations above 512 MiB move to the heavy worker or go remote (PLT's browser memory table) |
-| iPadOS (Tier 2) | Ingot needs no JIT: the interpreter runs natively or in the web build inside WebKit, whichever contract section 7.4's path uses; Wasm components follow that section |
+| Every target | One canonical-class interpreter, so a divergence is a platform defect that ING-O-1 finds |
+| Browsers | The wasm32 interpreter runs in the engine worker and yields at Kiln calls in single-threaded builds; large evaluations follow PLT's browser memory table |
+| iPadOS (Tier 2) | No JIT needed: the interpreter runs in the web build inside WebKit (contract section 7.4) |
 | Tier 1 preview targets | Same build; ING-O-1 and the golden products run headless |
-| Code generator (phase 2 at the earliest) | Core Wasm with fixed-width 128-bit SIMD only; browser pages allow `'wasm-unsafe-eval'`, without which "WebAssembly is blocked" (MDN); the macOS JIT entitlement is PLT's |
-| Floating point | Correctly rounded basic operations and `detmath` only; no FMA, flush-to-zero or excess precision |
-| Text | Repository-relative `/` paths, NFC and LF, normalized on load (PLT) |
+| Code generator | Core Wasm with 128-bit SIMD only; pages allow `'wasm-unsafe-eval'`, without which "WebAssembly is blocked" (MDN) |
+| Floating point | Correctly rounded operations and `detmath`; no FMA, flush-to-zero or excess precision |
 | Air-gapped installs | Compiler and interpreter ship in every build; no network is needed |
-| Accessibility | Diagnostics are plain text with spans; the code panel is UIX's |
-| Tier 3 | Interpreter results stay out of shared caches until the determinism suite passes |
+| Accessibility | Diagnostics are plain text with spans |
+| Tier 3 | Results stay out of shared caches until the determinism suite passes |
 
 ## Interfaces with other subsystems
 
@@ -1191,31 +1260,31 @@ Figures are targets on contract section 13.3's reference laptop.
 
 | To | Provides | Types |
 | --- | --- | --- |
-| KLN | Front-end stages; module code hashes; split node outputs; call protocol with dependency recording and program order; literal overrides; limits in keys; text-derived sites; block grammar with block-local parsing; free-text span classes; variant regions for the 150% BOM; `ING6401` only at the fidelity ceiling | `OpSite`, `Feature`, `Check` |
-| ANV | `OpSite`s; `QueryPlan`s with anchored ranks; named sub-entities of sketch helpers; data-flow copy marks; `InputSensitivity`; the `Truth` rule for filters; GD&T attributes | `Query`, `Tol<T>` |
-| FLX | Product- and parameter-domain `Field` types and syntax; `Complex<Q>`, `im`, `.absolute()`, `select`; `Expr<T, Out>` and record results; `Approx`, `Truth` and the decision rule; `goals:` and `wrt:` as ordinary arguments | `Field<D, V>`, `Expr<T>`, `Approx<T>` |
-| MEC | Features, builder blocks, symbolic constraints, families, roles, `Tol<T>` with fits and symbols, typed aspects, keyed iteration and `skip:` keys, `#[interface]`, `#[configuration]` | `Feature`, `Tol<T>`, `Query` |
-| ELX | `network { … }` with set-like accumulation; port power expressions checked by the type checker; `Tol` correlation groups; `CatalogSelection` re-resolution; `#[configuration]`; `#[interface]` records; `#[waive]`; data modules with one item per line | `Tol<T>`, `Network` |
-| COV | Records, `Range` as interval, kinds for typed regime functions, `require`, `CheckOutcome` with `conditional_on`, the `Truth` decision rule | `Quantity<D>`, `Check` |
-| MFG | Records, enums, `Map`, kinds for quantity-type Field domains, `Decimal` and `Money<C>`, `require` | `Quantity<D>`, `Check` |
-| UIX | Language service in-app and over stdio; `EntityId`-to-`OpSite`-and-span map; dialog metadata and handles; literal overrides; phase 1 edit-plan ranking, dependence and forward-mode derivatives; minimal `SourcePatch`es; `#[was]` renames; `crucible/reveal` | `SourceSpan`, `Feature` |
-| AGT | Diagnostics with fixes as `SourcePatch`es; the formatter; metadata, doc comments and description templates for tool schemas; `ExternalText`; free-text span classes; `CheckOutcome` values and the decision rule; `#[was]`; `ING-L-FragileSelector` | `Check`, `Feature` |
-| ECO | Manifest language keys; lockfile `[language]`; modules and editions; semantic-version rules, including the entity-name row; binding and wrapper conventions | `Feature` |
-| PLT | The interpreter on every target; generated modules for verification from phase 2 at the earliest; the feature-call memory model | `PlatformClass` |
+| KLN | Front-end stages with separate IIR and diagnostics; code hashes; split outputs; program order; overrides as input cells; limits in keys; `CheckId`s and the gate predicate; block grammar and statement order; span integrity; variant regions and Instance sets; cached `Undecided` values | `CallSite`, `CheckId`, `Check` |
+| ANV | `CallSite`s; `QueryPlan`s with anchored ranks and extent-use acceptances; kinded role filters; sketch helpers' sub-entities; program order for copy relabelling; `InputSensitivity`; the `Truth` rule for filters | `Query`, `Tol<T>` |
+| FLX | Product- and parameter-domain `Field` syntax; `Complex<Q>`, `.absolute()`, `select`; `Expr<T, Out>`; `Approx`, `Truth` and the decision rule; `goals:`, `wrt:` and `away_from` sets | `Field<D, V>`, `Expr<T>`, `Approx<T>` |
+| MEC | Features, builder blocks, symbolic constraints, inline seeds, families, `Tol<T>` with fits, forwarding and name-free order, typed aspects, keyed iteration, Instance sets, `#[configuration]` | `Feature`, `Tol<T>`, `InstanceSet` |
+| ELX | `network { … }` with set-like accumulation; port power checks; `Tol` correlation groups; `CatalogSelection`; `#[configuration]`; `#[interface]`; data modules as `table` rows | `Tol<T>`, `Network` |
+| COV | Records, `Range` as interval, kinds for regime functions, `require`, conditional `Pass`, the decision rule over basis enclosures | `Quantity<D>`, `Check` |
+| MFG | Records, enums, `Map`, kinds for Field domains, `Decimal` and `Money<C>` with `round_minor`, `require` | `Quantity<D>`, `Check` |
+| UIX | Language service; `EntityId`-to-span map; dialog metadata; overrides that follow `#[was]`; edit-plan ranking; minimal `SourcePatch`es, drawing dimensions included | `SourceSpan`, `Feature` |
+| AGT | Diagnostics with `SourcePatch` fixes; the formatter; metadata and doc comments for tool schemas; `ExternalText`; span integrity; `CheckOutcome`s, the decision rule and the gate predicate | `Check`, `Feature` |
+| ECO | Manifest language keys; lockfile `[language]`; editions; semantic-version rules; binding, wrapper and guest SDK conventions | `Feature` |
+| PLT | The interpreter on every target; generated modules for verification from phase 2 at the earliest | `PlatformClass` |
 
 ### Ingot requires
 
 | From | Requirement |
 | --- | --- |
-| KLN | Suspending scheduler; keys with `OpSite`, code hashes and limits; split outputs with their own change markers; Aborts; demand-depth and fuel limits; `Pending` on `Undecided` below the fidelity ceiling; `Differentiable` and reverse traversal; span integrity in `repo`; block ids mapped onto text identities |
-| ANV | The operations catalog with versions and tangent rules; `anvil::resolve` with notes, `RankSwap` and compiling fixes; role vocabularies with per-parameter surface or extent use; copy and mirror roles; split policy `Fail` for GD&T; certified sketch solves; canonical geometric order; `shape_velocity` from phase 2 |
-| FLX | The operations catalog; spaces, measures, `solve` and form checks; regularized reductions with `ErrorBudget`s; calibrated `Estimated` bounds; singular sets; tangent and adjoint rules; `away_from` regions |
-| COV | `std::physics` and `std::materials`; envelope record syntax needs |
-| ELX | Builder semantics for `network { … }`; data modules for `Schematic` and `Layout`; `CatalogSelection` over pinned definitions and offers |
-| PLT | `detmath` for native and wasm32; Wasm executors, the determinizer, `wasm-host` and verification of generated modules; text normalization; the browser memory table |
-| ECO | Registry, signing, publish-time interface diff, Wasm component bundles, `crucible:` WIT packages and worlds, the RFC process |
-| MEC | GD&T records and validators per dialect; std features with roles and keyed generators; `std::mech::refgeom`; `std::standards::iso286`; `std::mech::tol::default_distribution` (D-MEC-28) |
-| AGT | `SourcePatch` application; `read.*` and `inspect.describe` returning free-text handles |
+| KLN | Suspending scheduler; keys with `CallSite`, code hashes, limits and overrides; overridden results kept local; split outputs; Aborts and limit outcomes; `Pending` reporting; `Differentiable`; span integrity in labels; policy allowances and Waiver records; statement-order reconcile |
+| ANV | Operations catalog with tangent rules; `anvil::resolve` with `NearTie`, `Partial`, `Merged` and `FragileAnchor` notes and compiling fixes; sampled stability analysis (`RankSwap`); face, edge and vertex roles with surface or extent use; copy relabelling; equal decisions at every fidelity; certified sketch solves; canonical geometric order; `shape_velocity` from phase 2 |
+| FLX | Operations catalog; forms and `solve`; regularized reductions with `ErrorBudget`s; calibrated bounds with class envelopes and refinement confirmation; singular sets with default distances; tangent and adjoint rules; `away_from` over several sets; basis enclosures as input parts |
+| COV | `std::physics` and `std::materials`; property reads as basis enclosures (D-COV-13) |
+| ELX | `network { … }` semantics; `Schematic` and `Layout` data modules and a layout fixture for ING-O-37; `CatalogSelection` over pinned definitions and offers |
+| PLT | `detmath` and `det_sum`; Wasm executors, the determinizer and module verification; the `Interactive` pool lane; text normalization; the browser memory table |
+| ECO | Registry, signing, interface diff, Wasm component bundles, `crucible:` WIT packages, `parts::` packages, RFCs for std kinds |
+| MEC | GD&T records and validators per dialect, with zone mathematics for Y14.5-2018-only constructs; `pmi_target_resolved`; `general_tolerance`; roles and keyed generators in std features; `std::mech::refgeom`; `std::standards::iso286` from ISO 286-1's formulas; `default_distribution`; the zone and rebuild variation paths; `fasten` returning an Instance set; Part and Assembly name-free encodings |
+| AGT | `SourcePatch` application; `ExternalText` handles for untrusted spans and evaluated strings; `evaluate.subscribe` and `edit.stream` |
 
 ## Oracles
 
@@ -1223,50 +1292,52 @@ All oracles live under `oracles/ingot/` (protected). The corpus is std, the gold
 
 | Id | Verifies | Pass criterion |
 | --- | --- | --- |
-| ING-O-1 | Conformance: the interpreter on every Tier 1 target and browser engine, and compiled code once it exists, on values, failures, fuel and Kiln call sequences | Bit-identical on the corpus |
+| ING-O-1 | Conformance of the interpreter on every Tier 1 target and browser engine, and of compiled code, on values, failures, fuel and Kiln call sequences; IIR across compiler releases; `sum` against `det_sum` | Bit-identical on the corpus |
 | ING-O-2 | Parse then print, for valid and invalid inputs | Every byte reproduced |
 | ING-O-3 | Parser fuzzing on arbitrary bytes | No crash, hang or unbounded memory in 10⁹ executions per release |
-| ING-O-4 | Units: a seeded-error corpus of dimension, kind, affine, degree-radian and rpm-hertz mistakes; at least 50 textbook rotational, electrical and thermal formulas | Every seeded error rejected with its code; every formula type-checks without casts |
-| ING-O-5 | Typing judgments on a curated corpus; random well-typed programs | Expected judgments; zero internal type failures |
+| ING-O-4 | Units: seeded dimension, kind, affine, degree-radian, rpm-hertz and hertz-phase errors, plus each RFC kind's error; at least 50 textbook rotational, electrical and thermal formulas | Every error rejected with its code or lint; every formula type-checks without casts |
+| ING-O-5 | Typing judgments on a curated corpus; random well-typed programs; `Decimal` rounding | Expected judgments; zero internal type failures; round half to even on every product and quotient |
 | ING-O-6 | Deepest legal recursion on every target, and one deeper | Runs everywhere; fails with `ING6302` everywhere |
-| ING-O-7 | Tolerances against exact rational stacks and 10⁶ samples per nonlinear case; Part-keyed symbols | Exact for linear stacks; containment for nonlinear; spacers from one specification vary independently |
-| ING-O-8 | Comparisons with injected bounds and kinds | Never `True` or `False` against the exact relation; `Indicator` and unquantified parts never decide; `conditional_on` lists exactly the unquantified sources |
+| ING-O-7 | Tolerances against exact rational stacks and 10⁶ samples per nonlinear case; Part-keyed symbols; coverage against exact convolution; a 10⁵-site stack; statistics under re-randomized names | Exact linear stacks; containment otherwise; spacers vary independently; `.rss` within `.limits()`; identical bits after renaming |
+| ING-O-8 | Comparisons with injected bounds, kinds, envelopes, refinements and confidences; one property read feeding two checks of opposite sign | Never `True` or `False` against the exact relation; `Indicator` and unquantified parts never decide; `conditional_on` exact; both checks conservative |
 | ING-O-9 | Machine-applicable fixes in the corpus | 100% compile and remove their diagnostic |
-| ING-O-10 | Recorded GUI sessions | Minimal patches; every comment kept; every `OpSite` outside the touched statements kept |
-| ING-O-11 | Query lowering | Equal queries hash equal; unanchored rank selectors raise `ING-L-FragileSelector`; `Tol` filter arguments fail |
-| ING-O-12 | Drag specialization on golden-product drag scripts | Residual and full programs bit-identical |
-| ING-O-13 | Minimal re-evaluation over 500 scripted edits, fuel-only edits included (shared with KLN-O-MIN-1) | Re-executed nodes equal the reference set; none after fuel-only edits |
+| ING-O-10 | Recorded GUI sessions, sketch drags included | Minimal patches; comments and untouched `CallSite`s kept; a drag that moves nothing writes nothing; rounded seeds rebuild bit-identically |
+| ING-O-11 | Query lowering and roles | Equal queries hash equal; unanchored ranks raise `ING-L-FragileSelector`; `Tol` filters fail; every role of every std sweeping feature resolves; a wrong-kind role fails with `ING5002` |
+| ING-O-12 | Drag specialization and overrides on golden-product drag scripts | Residual and full programs bit-identical; an overridden result never answers a request without the override |
+| ING-O-13 | Minimal re-evaluation over 500 scripted edits (shared with KLN-O-MIN-1) | Re-executed nodes equal the reference set; none after fuel-only edits |
 | ING-O-14 | Differential fuzzing of the code generator: interpreter against compiled code, optimized against unoptimized | No divergence per release |
 | ING-O-15 | Programs with random holes | Hole-independent bindings equal the complete program's |
 | ING-O-16 | Derivatives on smooth programs; dependence sets; phase 1 ranking on drag scripts | Taylor order 2 ± 0.1; dependence exact; provenance literal ranked first |
-| ING-O-17 | `#[ingot::feature]` and bindings | Checked-in WIT and wrappers match regenerated ones; units match WIT aliases |
+| ING-O-17 | `#[ingot::feature]`, bindings and the guest SDK | Checked-in WIT and wrappers match regenerated ones; `ingot_sdk` matches the WIT imports; units match WIT aliases |
 | ING-O-18 | Unsatisfiable dependency fixtures; two-major coexistence | Every failure explained; no silent choice |
 | ING-O-19 | Edition migrations on the corpus | IIR and output hashes preserved |
-| ING-O-20 | Metadata and examples | Every std feature has a dialog, docs and an evaluated example; this tab's examples compile and evaluate |
+| ING-O-20 | Metadata and examples | Every std feature has a dialog, docs and an evaluated example; this tab's examples evaluate |
 | ING-O-21 | Service latency on an edit-replay corpus, in-app and over stdio | Within the stated targets at p95 |
-| ING-O-22 | Debugger replay | Forward then backward steps give identical frames; replay reports the original failure span |
+| ING-O-22 | Debugger replay | Forward then backward steps give identical frames |
 | ING-O-23 | A fixed SketchGraphs sample converted to sketch blocks | Every constraint type expressible; at least 99% re-solve within tolerance (target) |
 | ING-O-24 | `f(n) = f(n + 1)` on every Tier 1 target | Aborts with `DemandDepthExhausted`; no memo entry |
-| ING-O-25 | Golden products exported to Git, re-imported and rebuilt; appended, wrapped and inserted calls of other names; renames with `#[was]` | Every `OpSite` and `EntityId` of untouched calls unchanged |
+| ING-O-25 | Golden products through Git export and re-import; appended, wrapped and inserted calls of other names; a prepended same-name call; renames with `#[was]` | Untouched `CallSite`s and `EntityId`s unchanged; the prepend raises `ING-L-RepeatedStage`, whose fix keeps later names |
 | ING-O-26 | One element inserted into or removed from geometry-driven patterns and query loops | Only that element's entities renamed |
-| ING-O-27 | Adding or removing any `require` | Every non-check node key unchanged |
-| ING-O-28 | Evaluations under varied organization ceilings | Same limit outcome for the same source and manifest; a lower ceiling aborts at admission and writes nothing |
-| ING-O-29 | Block-local parsing | Parsing the concatenated blocks reproduces the tree when every block parses; a failing block keeps its kind and position |
-| ING-O-30 | Variant regions | Instances under computed conditions rejected with `ING2601`; the 150% BOM equals enumeration on small fixtures |
-| ING-O-31 | Contract section 6's example | Compiles; evaluates with the stated outcome kinds; `width + load` gives `ING3001` |
-| ING-O-32 | Free-text spans on a labelled corpus; hidden characters | Classification matches; every hidden character rejected with `ING0003` |
-| ING-O-33 | Interpreter speed | Within the stated per-feature targets; Ingot share of golden-product rebuilds reported |
+| ING-O-27 | Adding or removing any `require`; editing a check's limit | Every non-check node key unchanged; the edited check keeps its `CheckId` and Evidence records |
+| ING-O-28 | Evaluations under varied organization ceilings | One limit outcome per source and manifest; a lower ceiling aborts at admission |
+| ING-O-29 | Block-local parsing | Concatenated blocks reproduce the tree; a failing block keeps its kind and position |
+| ING-O-30 | Variant regions and Instance sets | Computed conditions rejected with `ING2601`; the 150% BOM equals enumeration on small fixtures; a new hole changes a quantity, not the BOM structure |
+| ING-O-31 | Contract section 6's example | Compiles; its check decides at `SignOff`, never `Undecided { SingularPoint }`; `width + load` gives `ING3001` |
+| ING-O-32 | Free-text spans on a labelled corpus; hidden characters; strings evaluated from untrusted spans | Classification matches; hidden characters fail with `ING0003`; evaluated strings keep their span's integrity |
+| ING-O-33 | Interpreter speed | Within the stated targets; Ingot's rebuild share reported |
 | ING-O-34 | 500 concurrently suspended golden-product feature calls in a browser engine worker | Within the stated memory target |
-| ING-O-35 | Branches on `Undecided` across fidelities | `Pending` below the ceiling, decided at the next fidelity; `ING6401` at the ceiling; releases evaluate every node at `SignOff` |
-| ING-O-36 | KCL sample programs through the importer | Each builds the reference geometry within tolerance or lists its unmapped constructs |
+| ING-O-35 | Branches and `where:` filters on `Undecided`, under an `Interactive` ceiling, then a `SignOff` ceiling with warm caches | The second shows `Pending`, then the decided value; `ING6401` and `ResolveError::Ambiguous` appear only in reports at the ceiling |
+| ING-O-36 | KCL sample programs through the importer | Each builds the reference geometry or lists unmapped constructs |
+| ING-O-37 | Data-module parsing on an ELX layout fixture of 10⁶ rows | Parsed and hashed in under 1 s natively (target); lossless round trip of edited rows |
+| ING-O-38 | The gate predicate over generated outcomes, allowances and Waiver records | Matches contract section 5; `Warning` failures never block; an uncovered conditional `Pass` blocks; `#[waive]` alone counts nowhere |
 
 ## Phasing
 
 | Phase | Ingot contribution to the gate |
 | --- | --- |
-| 0 | "Unit errors fail to compile" is ING-O-4; the interpreter, fuel and Kiln protocol join the determinism suite (ING-O-1, ING-O-6); parser, types and interpreter by month 6 and text-derived `OpSite`s for Anvil's `EntityId` (ING-O-25), per contract section 13.2 |
-| 1 | GP1 and GP2 build from std Ingot on the interpreter: tolerances forwarded to PMI, `Approx`, the decision rule and checks, queries, sketches, GD&T, families, variant regions, packages and lockfile, dialogs, the language service in-app and over stdio, tests; interpreter targets met (ING-O-33). Deferred per contract section 13.2: the code generator, Perceus and the state-machine transform |
-| 2 | GP3 and GP4: assemblies with variants at scale; the code generator if `ingot-bench` shows Ingot above 2% (ING-O-14); debugger and notebooks; reverse-mode derivatives and derivative-ranked edit plans; the first edition migration |
+| 0 | "Unit errors fail to compile" is ING-O-4; the interpreter and Kiln protocol join the determinism suite (ING-O-1, ING-O-6); parser, types, interpreter and `CallSite`s (ING-O-25) in milestone 1 of contract section 13.2 |
+| 1 | GP1 and GP2 build from std Ingot on the interpreter: forwarded tolerances, `Approx`, the decision rule, checks and the gate predicate, queries, sketches, GD&T, families, variant regions, packages, dialogs, the language service, tests; interpreter targets met (ING-O-33). The code generator and Perceus are deferred (contract section 13.2) |
+| 2 | GP3 and GP4: Instance sets for fasteners, catalog selections, variants at scale; the data-module target measured (ING-O-37); the code generator if Ingot exceeds 2% (ING-O-14); debugger and notebooks; reverse-mode derivatives; the first edition migration |
 | 3 | GP5: ELX data modules and `network { … }` at scale; KCL importer (ING-O-36) |
 | 4 | GP6: large symbolic forms and parameter-domain forms in use (FLX) |
 | 5 and later | Proposed: a mechanized soundness proof of the dimension and tolerance calculus, and a second interpreter for aerospace and medical certification |
@@ -1275,30 +1346,41 @@ Ingot's types for shared physics capabilities arrive early, but each capability 
 
 ## Open questions
 
-1. **Kind granularity.** std starts with the kind pairs in "Dimensions" and adds kinds only on evidence from user errors.
-2. **Frequency into phase.** Trigonometric functions accept a dimensionless phase, so `sin(f * t)` with `f` in hertz compiles without the 2π. A lint on a `Frequency` factor reaching a phase is proposed.
-3. **Instances at geometry-driven positions.** Static Instance existence (D-ING-22) forbids a fastener per hole of a resolved query. Proposal: the count comes from a configuration parameter and a check compares it with the resolved holes; MEC confirms.
-4. **Affine arithmetic at scale.** Stacks over 10⁵ sites may need symbol condensation; phase 2 measures the threshold and how to report it.
-5. **ELX data modules.** Layouts of 10⁶ items may parse too slowly as Ingot; the fallback is a binary sidecar keyed by statement identity.
-6. **`Decimal` resolution.** Is 10⁻⁹ enough for every currency and pricing rule MFG needs?
-7. **Feature granularity.** Which std helpers are `fn` and which `feature`; MEC, FLX and ELX review the split before phase 1 freezes std.
-8. **Jacobian types.** `Mat<R, C>` error messages need design with FLX.
-9. **Literal sites under live edits.** A concurrent rename of a binding during a drag loses the override's site and ends the drag with a notice; UIX confirms.
-10. **Findings declined in part.**
-    - R2-06: calls get no CRDT identity, because contract section 5 derives call identity from name and occurrence; inserting a same-name call renames later same-name calls in its statement.
-    - R3-33: one instance per worker with state machines applies to the code generator; the interpreter reaches the same isolation with heap frames.
-    - R6-33: ING sets only its own ratios; Wasm component and user-form ratios belong to PLT, ECO and FLX.
-    - R3-47: Ingot runs on the interpreter on iPadOS, so the Pulley fallback concerns Wasm components only (contract section 7.4).
-    - R2-18: ING adds the dialect modules and the split policy; the extended GD&T record is MEC's.
+This revision decides all nine round 2 questions:
+
+| Question | Decided by |
+| --- | --- |
+| Kind granularity; frequency into phase | The RFC rule; `ING-L-HertzPhase` |
+| Geometry-driven Instances | Instance sets (D-ING-22) |
+| Affine arithmetic at scale | Condensation above 4,096 symbols |
+| ELX data modules | No sidecar (D-ING-27) |
+| `Decimal` resolution | 10⁻⁹, round half to even, `round_minor` |
+| Feature granularity | `ING-L-FeatureKind` |
+| Jacobian types | Entry-level `Mat` diagnostics |
+| Literal sites under live edits | Overrides follow `#[was]` |
+
+Findings declined or applied in part:
+
+- R2-06: calls get no CRDT identity, because contract section 5 derives call identity from name and occurrence; R9-36's lint closes the gap.
+- R3-33: one instance per worker with state machines applies to the code generator; the interpreter isolates calls with heap frames.
+- R6-33: ING sets only its own ratios; Wasm component and user-form ratios belong to PLT, ECO and FLX.
+- R3-47: Ingot runs on the interpreter on iPadOS, so the Pulley fallback concerns Wasm components only.
+- R2-18: ING adds the dialect modules; the extended GD&T record is MEC's.
+- R7-02: contract section 17 declines the near-maximal-set rule, because estimates are least reliable next to a singular set.
+- R8-08 and R9-17: merged into one name-free key, led by R8-08's sensitivity order so Sobol's first dimensions go to the largest contributors.
+- R8-20 and R9-16: merged into `instances(of:, at:, min:)`.
+- R8-51 and R9-49: their condensation rules conflict; ING keeps R8-51's mechanism with R9-49's 4,096-symbol threshold, bounding memory.
+- R9-18: applied in another form. Releases emit bit-identical IIR, so no second key is needed and code hashes never depend on which release ran first.
 
 ## Contract change requests
 
-- CCR-ING-11, pending branches: accepted in contract v5; contract section 5 (`Truth`).
+None in round 3. Earlier requests:
+
+- CCR-ING-11, pending branches: accepted in contract v5 and refined in v6 (R9-02); contract section 5 (`Truth`).
 - CCR-ING-12, rotation and phase: accepted in contract v5; contract section 5 (`Quantity<D>`).
-- CCR-ING-13, `OpSite` as a frame path: accepted in contract v5; contract section 5 (`OpSite`).
+- CCR-ING-13, the call-site frame path: accepted in contract v5, renamed `CallSite` in v6; contract section 5 (`CallSite`).
 
 ## Sources
-
 
 1. Zoo, "KCL Language Reference" (index): https://zoo.dev/docs/kcl-lang
 2. Zoo, "Numeric types and units": https://zoo.dev/docs/kcl-lang/numeric
@@ -1324,7 +1406,7 @@ Ingot's types for shared physics capabilities arrive early, but each capability 
 22. BIPM, JCGM publications (GUM, Supplements 1 and 2): https://www.bipm.org/en/committees/jc/jcgm/publications
 23. Wikipedia, "Affine arithmetic" (for Comba and Stolfi 1993; de Figueiredo and Stolfi 2004): https://en.wikipedia.org/wiki/Affine_arithmetic
 24. ASME, Y14.5 Dimensioning and Tolerancing: https://www.asme.org/codes-standards/find-codes-standards/y14-5-dimensioning-tolerancing
-25. ASME, Y14.5.1-2019: https://www.asme.org/codes-standards/find-codes-standards/y14-5-1m-mathematical-definition-dimensioning-tolerancing-principles/2019
+25. ASME, Y14.5.1-2019: https://www.asme.org/codes-standards/find-codes-standards/y14-5-1m-mathematical-definition-dimensioning-tolerancing-principles/2019 ; https://www.asme.org/codes-standards/find-codes-standards/y14-5-1-mathematical-definition-dimensioning-tolerancing-principles
 26. ISO 1101:2017: https://www.iso.org/standard/66777.html
 27. ISO 5459:2024: https://www.iso.org/standard/87855.html
 28. ISO 14405-1:2016 (withdrawn): https://www.iso.org/standard/65202.html ; ISO 14405-1:2025: https://www.iso.org/standard/80703.html
@@ -1359,3 +1441,14 @@ Ingot's types for shared physics capabilities arrive early, but each capability 
 57. Debug Adapter Protocol overview and specification: https://microsoft.github.io/debug-adapter-protocol/overview ; https://microsoft.github.io/debug-adapter-protocol/specification
 58. Swift Evolution SE-0289, result builders: https://github.com/swiftlang/swift-evolution/blob/main/proposals/0289-result-builders.md
 59. MDN, `script-src` and `'wasm-unsafe-eval'`: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/script-src
+60. Unicode Standard Annex #31, "Unicode Identifiers and Syntax": https://www.unicode.org/reports/tr31/
+61. Ryū, shortest round-tripping floating-point output: https://github.com/ulfjack/ryu
+62. OCaml manual, extensible variant types: https://ocaml.org/manual/5.2/extensiblevariants.html
+63. Zoo, "Edge references": https://zoo.dev/docs/kcl-lang/edge-references
+64. OpenSCAD User Manual, Customizer: https://en.wikibooks.org/wiki/OpenSCAD_User_Manual/Customizer
+65. OpenSCAD cheat sheet: https://openscad.org/cheatsheet/
+66. SketchGraphs repository: https://github.com/PrincetonLIPS/SketchGraphs
+67. rr, record and replay debugger: https://rr-project.org/
+68. Sigmetrix, CETOL 6σ: https://www.sigmetrix.com/software/cetol
+69. CADforum, shaft and hole tolerances by ISO 286-2: https://www.cadforum.cz/en/tolerance.asp
+70. SIX, ISO 4217 currency code list one: https://www.six-group.com/dam/download/financial-information/data-center/iso-currrency/lists/list-one.xml
