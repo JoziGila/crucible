@@ -37,3 +37,21 @@ These were reported by the revision agents; the orchestrator has decided them.
 ## 4. Check and report
 
 Run `python3 docs/tools/check.py docs/spec/<file>.md --base round-1`; it must report zero errors, and no decision, oracle or source may be cut. Reply in at most 200 words: what you changed, which interface rows you aligned and to whom, anything you left for the orchestrator because ownership was unclear, and the check result.
+
+## 5. Follow-up rulings
+
+The first pass surfaced these mismatches. The owner wins; each line says what the named tab changes. Apply only your tab's lines, keep every decision, oracle and source (revise a decision in place and end it with "(revised in round 2)"), stay within the word limit, and run the check.
+
+| Tab | Change |
+| --- | --- |
+| ANV | The AGT interface row includes measures, sections and `RankSwap`, which AGT requires. |
+| FLX | Mode-shape display lands in phase 1 with modal analysis (13.4); split FLX-O-POST-1's row if needed. FLX defines manufacturing-constraint forms itself and requires MFG's process profiles (overhang angle, build and draw direction, minimum feature size). Any requirement for "`param` marks" from ING becomes ING's feature parameters. |
+| COV | COV states which zones are extrapolated; their display is UIX's hatching. Drop the amber overlay and point to UIX. |
+| KLN | Revise D-KLN-40: AGT owns the `release_data` Act family (D-AGT-30); KLN runs that stage at commit and records it. Revise D-KLN-44 to point to PLT's one engine per browser origin (D-PLT-29). Events deliver from phase 1, with ECO's webhooks. The FIPS-mode crypto provider is required from PLT. The `api` table matches AGT on agent Proposals. |
+| MEC | MEMS masks come through ANV's `anvil-planar` and ECO's GDSII and OASIS writers, not ELX. The FLX interface row includes redundancy reports (D-MEC-12) and default distributions (D-MEC-28). |
+| MFG | Heat-treatment distortion uses COV's phase-transformation models, so it lands in phase 6. PBF thermo-mechanics follows COV: phase 4. MTConnect reads follow ECO: phase 3. Passport publication is phase 3, matching AGT. Solidification and current distribution come from COV physics packages built on Flux forms; receptance coupling for stability lobes is MFG's own model from measured FRFs. G-code comes from MFG's post engine through the `crucible:mfg` post world. Partner quotes follow ECO's phase 2. Record the machine gateway under Open questions as a round 3 contract request: the crate map has no gateway app. |
+| ELX | ELX owns lumped drivetrain Network elements (gear ratio, mesh stiffness, couplings, bearing friction), parameterized from MEC's gear records; add them to the networks capability table if missing and stop crediting MEC. "Timeline viewer" becomes UIX's chart viewers and recorded sessions. STEP body import comes from ECO's readers, not ANV. The COV row includes battery swelling and abuse mechanics (13.4). Record firmware flashing outside `unattended_safe` rigs under Open questions as a round 3 contract request: contract 7.6 names no Act for it. |
+| AGT | D-AGT-30 owns `release_data`; state that KLN runs it at commit (D-KLN-40). The stdio sandbox for external MCP servers is required from PLT. Registry method names match ECO's current text. |
+| UIX | Phase 1 `DisplayPackage`s carry level-0 clusters from ANV's tessellation; cluster-DAG pages arrive in phase 2 (contract 13.2), and no row expects them in phase 0. Device loss follows PLT's threshold of 3 in 10 minutes. |
+| ECO | The event sequence attribute is `sequence`, as the CloudEvents sequence extension names it. Add writer rows for PDF, SVG and PDF/A (phase 1, GP1 drawings), DXF (phase 2) and DWG (phase 3), and a KBL row. Wasm component seeds: Ingot passes an explicit `seed` from an `Rng` (ING owns randomness), so ECO points to ING. Third-party panels run out of process (7.4), not "in the app". G-code comes from MFG's post engine; list the `crucible:mfg` worlds MFG defines and drop any separate G-code writer. Events deliver from phase 1. |
+| PLT | PLT provides the FIPS-mode crypto provider KLN needs and the stdio sandbox AGT needs; add both to the provided rows if missing. Add an MFG interface row. Record the machine gateway under Open questions as a round 3 contract request. |
