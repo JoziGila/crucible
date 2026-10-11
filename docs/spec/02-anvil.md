@@ -6,7 +6,7 @@ Anvil is one geometry kernel over four representations (exact B-rep, implicit, m
 
 Anvil owns geometry types; the `Body` with its topology, tolerances, attributes, encoding and identities; naming, lineage and `anvil::resolve`; and every geometric operation, including conversions, meshing, constraint solving, `anvil-planar` and `DisplayPackage` production. Ingot owns `OpSite`s and queries, Kiln caching and Aborts, Flux physics and refinement decisions, MEC constraint semantics, `io/` formats and UIX rendering.
 
-The capability tables closing each design section form the operations catalog and operation-to-phase table that contract 7.1 makes canonical; MEC, MFG and ELX copy their rows.
+The capability tables closing each design section form the operations catalog and operation-to-phase table that contract 7.1 makes canonical; MEC, MFG and ELX use their names and phases.
 
 ### Crates
 
@@ -291,7 +291,7 @@ Parameter curves share their edge curve's parameter within τ_edge, so tessellat
 
 ### Attributes and certificates
 
-Design attributes (`HoleSpec`, `ThreadSpec`, `Weld`, finish, the `FeatureRole` role aliases of contract 5) live in a side table keyed by `EntityId`. Each attribute class declares its split policy (`Copy`, `Drop`, `Divide`), merge policy (`KeepIfEqual`, `Union`, `Drop`, `Fail`) and transform policy; Anvil applies them in every operation, and a `Fail` merge returns `AttributeConflict { entities, class }`.
+Design attributes (`HoleSpec`, `ThreadSpec`, `Weld`, finish, the `FeatureRole` role aliases of contract 5) live in a side table keyed by `EntityId`. Each attribute class declares its split policy (`Copy`, `Drop`, `Divide`, `Fail`), merge policy (`KeepIfEqual`, `Union`, `Drop`, `Fail`) and transform policy, and Anvil applies them in every operation. A `Fail` merge returns `AttributeConflict { entities, class }`, and a `Fail` split, which GD&T and PMI attributes use (D-MEC-27), leaves the pieces without the attribute and reports `Note::AttributeSplit { class, pieces }`.
 
 Edges carry construction certificates, `Continuity { order: G1 | G2, certified_by: (operation, OpSite) }`, on blend contact edges, offsets of smooth edges and sweep seams. Intersection and imprint read them (see Intersections).
 
@@ -304,7 +304,7 @@ Edges carry construction certificates, `Continuity { order: G1 | G2, certified_b
 | `anvil::approximate` | Curves or faces → NURBS within a tolerance | `ToleranceNotMet { achieved }` | ANV-O-GEOM-3 | 1 |
 | Procedural nesting budget | Depth three per face; deeper inputs use certified caches | `Note::ProceduralFlattened` | ANV-O-PROC-1 | 1 |
 | `anvil::exchange_form` | Body, receiver profile → seams, poles, B-spline approximations, id map | `NotRepresentable { faces }` | ANV-O-NF-1 | 1 |
-| Attributes and certificates | Policies applied in every operation; `Continuity` certificates on constructed edges | `AttributeConflict { entities, class }` | ANV-O-NAME-1, ANV-O-CONTACT-1 | 0 (attributes), 1 (certificates) |
+| Attributes and certificates | Policies applied in every operation; `Continuity` certificates on constructed edges | `AttributeConflict { entities, class }`; `Note::AttributeSplit` | ANV-O-NAME-1, ANV-O-CONTACT-1 | 0 (attributes), 1 (certificates) |
 | `anvil::sew` | Sheets and faces, tolerance up to τ_heal → shells or solids with tolerant edges | `Note::FreeEdges { edges, gaps }`; `ToleranceGrowth` above the limit | ANV-O-HEAL-1 | 1 |
 | `anvil::heal` | Imported Body → valid Body: parameter curves rebuilt, gaps closed, slivers removed, orientation fixed, analytic surfaces recognized; every fix listed with its tolerance change | `Unhealable { entities, reason }`, never an invalid Body | ANV-O-HEAL-2 | 1 (CAx-IF corpus), 2 (beyond) |
 
@@ -350,7 +350,7 @@ Ancestor sets (through identity, `Split` and `Merged`) are persistent and shared
 2. **Lineage.** Each anchor maps to D(a, B), or to the `Deleted` record that removed it.
 3. **Filter and select.** Certified geometric filters (normal, type, area, adjacency, `bounded_by`), then cardinality (`one`, `all`, `at_least(n)`). Rank selectors (`longest`, `largest`, `first(along:)`) are allowed only after an anchor or role filter; a winner whose lineage changes inside the declared parameter ranges is reported as `Note::RankSwap { at }`.
 
-Filters near a threshold use Ingot's `Truth` rule on a certified enclosure, and `Undecided` fails with `ResolveError::Ambiguous`. Every operation declares per `Query` parameter whether it uses a surface (sketch planes, up-to faces, mate axes) or an extent (edges of a face, areas, GD&T and PMI targets, drawing items).
+Filters near a threshold use Ingot's `Truth` rule on a certified enclosure: `Undecided` is `Pending` below the fidelity ceiling and fails with `ResolveError::Ambiguous` at it (contract 5). Every operation declares per `Query` parameter whether it uses a surface (sketch planes, up-to faces, mate axes) or an extent (edges of a face, areas, GD&T and PMI targets, drawing items).
 
 | Outcome | Result |
 | --- | --- |
@@ -398,7 +398,7 @@ Shortened to 40 mm, the rib no longer reaches T's edges: T keeps its id with a n
 
 An imported entity's id is EID(kind, import site, `imported`, [], discriminator), where the discriminator is the source's persistent id (AP242 persistent ids, IFC GlobalId, a translator's native ids), else the surface type with a hash of the exact defining parameters as written and an adjacency signature, never an ordinal. `anvil::match_bodies` aligns two imports rigidly (`anvil::align`), matches attributed face-adjacency graphs, and writes the confirmed mapping as a reviewed source artifact, `import_map(old, new, pairs)`, which later rebuilds reuse.
 
-**Decision D-ANV-31:** Imported entities are named from source persistent ids, else from exact geometric and adjacency signatures, never ordinals, and revisions are matched into a reviewed `import_map`. *Why:* one rule for Anvil and ECO; ordinals change when a supplier re-exports, and quantized signatures flip at quantization boundaries. *Rejected:* ordinals; quantized signatures; unreviewed Hausdorff matching (fails exactly on the faces a supplier moved).
+**Decision D-ANV-31:** Imported entities are named from source persistent ids, else from exact geometric and adjacency signatures, never ordinals, and successive imports are matched into a reviewed `import_map`. *Why:* one rule for Anvil and ECO; ordinals change when a supplier re-exports, and quantized signatures flip at quantization boundaries. *Rejected:* ordinals; quantized signatures; unreviewed Hausdorff matching (fails exactly on the faces a supplier moved).
 
 Tessellations keep each face's id on its face group; `subd_edit` records cage history and limit faces take cage-face ids; converted implicits label faces by the leaf active at the surface, and kept B-rep faces keep their ids.
 
@@ -730,7 +730,7 @@ The same crate backs the Anvil operations and compiles into ELX's design-rule, f
 
 ## Conversions and error propagation
 
-`anvil::convert(body, into, accuracy)` is the only conversion operation and returns a `Body`. Every approximating conversion and fit records on each face it produces a `FaceBound { position, normal }`: a two-sided Hausdorff bound on position and an angle bound on normals, each `Quantified` or `NotQuantified { reason }` (contract 5's `Unknown`; CCR-ANV-8). Fits certify both bounds by certified sampling of distance and normal deviation.
+`anvil::convert(body, into, accuracy)` is the only conversion operation and returns a `Body`. Every approximating conversion and fit records on each face it produces a `FaceBound { position, normal }`: a two-sided Hausdorff bound on position and an angle bound on normals, each `Quantified` or `NotQuantified { reason }` (contract 5). Fits certify both bounds by certified sampling of distance and normal deviation.
 
 Bounds propagate through later operations by these rules, where θ_min is a certified lower bound of the angle between two surfaces along an edge:
 
@@ -827,7 +827,7 @@ PLT owns contract 13.3's rows, measured on the reference laptop (Intel Core Ultr
 | Workload | Target |
 | --- | --- |
 | Rebuild after an early edit, GP1-class prismatic benchmark (2 s row) | Anvil share ≤ 1.2 s at `SignOff`, since analytic pairs certify in closed form |
-| ABC-derived 200-feature corpus (p90 10 s row) | Anvil share ≤ 7 s p90 at `Interactive`; `SignOff` recertification p90 ≤ 30 s (CCR-ANV-7) |
+| ABC-derived 200-feature corpus (p90 10 s row) | Anvil share ≤ 7 s p90 at `Interactive`; `SignOff` recertification p90 ≤ 30 s (contract 13.3) |
 | Drag preview | Contract 13.3's 80 ms row: Anvil supplies cost estimates and `Preview` paths; later dependents show `Proxy` or `Stale` |
 | Boolean of two 500-face analytic and NURBS bodies | ≤ 200 ms at `Interactive` |
 | 50-edge constant-radius fillet chain | ≤ 500 ms at `Interactive` |
@@ -899,33 +899,30 @@ Figures in the last column are targets unless quoted.
 
 | To | What | Types |
 | --- | --- | --- |
-| Ingot and std | Operations with versions, role vocabularies and per-parameter `Query` use; `anvil::resolve` with ranked, compiling fixes; tangent rules and `shape_velocity`; `check_body` | `Body`, `EntityId`, `HistoryRecord`, `ResolveError`, `OpError` |
-| Kiln | `OpImpl`s with grades, effective-fidelity maps, cost estimates and two-stage keys; `GeometryId` and `ObjectId`; `Failure` values only, never Aborts | `OpKey` inputs, `GeometryId`, `ObjectId` |
-| `repo` | Interference and regional deviation for the merge rule; `GeometryId`s for revision identity | `Body`, `EntityId` |
-| Flux | `GeometryQuery` with positive-weight quadrature; `mid_surface`, `member_axes`, lattice strut graphs; meshing and adaptation operations; `shape_velocity`; `implicit_from_field`; `common_refinement`; display tessellation with back-references | `Body`, `Field`, `FaceBound` |
-| MEC | The operations catalog and phases in the capability tables, copied verbatim; blend targets of D-ANV-29; the constraint solver; per-entity tolerances | `Body`, `EntityId`, `Field` |
-| MFG | Sections, offsets, tool contact, per-move envelopes, distance, interference, deform, visibility, voxels, grid correlation, toolpath wire Bodies | `Body`, `Field` |
-| ELX | `anvil-planar` operations, `fold` for flex circuits, convex decomposition | `Body` |
-| UIX | `DisplayPackage`; the WGSL tape interpreter for implicits during edits; control-vertex previews; exact measures, sections, silhouettes, ray casts | `DisplayPackage`, `Body` |
-| AGT and `api` | Entity inspection with provenance; fixes; geometry diffs (volumes added and removed, Hausdorff deviation) | `EntityId`, `ResolveError` |
-| ECO and `io/` | Builders, healing within the CAx-IF corpus in phase 1, the imported-id rule (D-ANV-31) and `import_map`, the topology normal form and `exchange_form`, tessellation for 3MF, including beam lattices [3MF beam lattice repository; 3MF beam lattice spec] | `Body`, `ErrorBound` |
+| Ingot and std | Operations with versions, role vocabularies, per-parameter `Query` use and copy and mirror roles; `anvil::resolve` with notes, `RankSwap` and ranked, compiling fixes; split policy `Fail`; certified constraint solves; canonical geometric order; tangent rules; `shape_velocity` from phase 2; `check_body` | `Body`, `EntityId`, `HistoryRecord`, `ResolveError`, `OpError` |
+| Kiln | `OpImpl`s with grades, effective-fidelity maps, cost estimates and two-stage keys; `GeometryId` and `ObjectId`; canonical outputs; `Failure` values only, never Aborts | `OpKey` inputs, `GeometryId`, `ObjectId` |
+| `repo` | Interference, history records and regional deviation for the merge rule; `GeometryId`s for revision identity; defeaturing and envelopes for redacted shares | `Body`, `EntityId` |
+| Flux | `GeometryQuery` with positive-weight quadrature; `mid_surface`, `member_axes`, lattice strut graphs; meshing and adaptation operations; `shape_velocity` with `TopologyChange`; `implicit_from_field`; `common_refinement`; display tessellation with back-references; the rebuild and classification stage budgets | `Body`, `Field`, `FaceBound` |
+| COV | Implicit and lattice Bodies; mid-surfaces and member axes; per-entity tolerances | `Body` |
+| MEC | The operations catalog with roles, `Query` use and phases; blend stages and the targets of D-ANV-29; certified constraint solving; leaf-preserving joins; `member_axes`, `mid_surface`; control-vertex previews; attribute split policies; per-entity tolerances | `Body`, `EntityId`, `Field` |
+| MFG | `section`, `offset_curve`, `medial_axis`, `tool_contact`, `swept_volume`, `distance`, `interference`, `deform`, `split`, `extend`, `visibility`, `draft_map`, `thickness`, `voxelize`, `correlate_grids`, `align`, `fit`, `boolean`; toolpath wire Bodies and `Implicit` Bodies | `Body`, `Field` |
+| ELX | `anvil::planar::boolean`, `offset`, `distance` and `medial_axis` with conservative snapping; `fold` for flex circuits; `convex_decompose` | `Body` |
+| UIX | `DisplayPackage` keyed by `GeometryId`; exact measures, sections, silhouettes and ray casts; `solve_constraints`; `offset_faces` and `move_faces` with blend regrowth; the WGSL tape interpreter; control-vertex previews; `shape_velocity` | `DisplayPackage`, `Body` |
+| AGT and `api` | Entity inspection with provenance; `Query` resolution with ranked fixes and `RankSwap`; bounded measurements; sections; geometry diffs (volumes added and removed, Hausdorff deviation) | `EntityId`, `ResolveError` |
+| ECO and `io/` | Builders, healing within the CAx-IF corpus in phase 1, certified mass properties, the imported-id rule (D-ANV-31) and `import_map`, the topology normal form and `exchange_form`, tessellation for 3MF, including beam lattices [3MF beam lattice repository; 3MF beam lattice spec] | `Body`, `ErrorBound` |
 | PLT | Per operation: grade, GPU paths with their roles, cross-class agreement and determinism-suite corpora | `DeterminismGrade` |
-
-Canonical names for names used in round 1 (contract 7.1 makes this catalog canonical):
-
-- MEC: `section_body` → `section`; `extend_face` → `extend`; `implicit_from_brep`, `brep_from_implicit`, `subd_to_brep` → `convert`; `fit_nurbs`, `fit_primitive` → `fit`; `icp` → `align`; `thickness_ray` → `thickness` with `method: Ray`; `sample_surface` → `sample`; `evaluate_curve` → `evaluate`; `approximate_curve`, `approximate_surface` → `approximate`; `offset_body` → `offset`; `draft_faces` → `draft`; `delete_face`, `replace_face` → `delete_faces`, `replace_faces`; `helix` → `curve` with `Helix`.
-- MFG: `slice` → `section`; `offset_curves_2d` → `offset_curve`; `medial_axis_2d` → `medial_axis`; `extend_surface` → `extend`; `tool_drop`, `tool_push` → `tool_contact`; `collide` → `interference`.
-- ELX: `planar_boolean`, `planar_offset` → `planar::boolean`, `planar::offset`; the proposed flex bend operation → `fold`.
 
 ### Anvil requires
 
 | From | What |
 | --- | --- |
 | PLT | `detmath`, canonical `simd` lanes, `det_sum` and `exact_sum`, `gpu` with registered CPU paths and known-answer tests, `linalg`, toolchain archiving for frozen versions |
-| Kiln | Two-stage keys, effective fidelity in keys, Aborts never cached, `Preview` results outside the shared cache, `rng` streams keyed without names |
-| Flux | The `field` crate below Anvil; `Sampler`s with per-sample error and gradient bounds; the filtered, projected density for extraction; the shell and beam criterion that marks regions |
-| Ingot | Text-derived `OpSite`s; `QueryPlan`s; named sub-entities of sketch helpers (`rect` gives `left`, `right`, `bottom`, `top`); `InputSensitivity` records; the `Truth` rule |
+| Kiln | The operation contract; two-stage keys, effective fidelity in keys, Aborts never cached, `Preview` results outside the shared cache, `rng` streams keyed without names |
+| Flux | The `field` and `kernels` crates below Anvil; `Sampler`s with per-sample error and gradient bounds; `geometry_density` for extraction; the shell and beam criterion that marks regions; sizing and metric Fields |
+| Ingot | Text-derived `OpSite`s; `QueryPlan`s; named sub-entities of sketch helpers (`rect` gives `left`, `right`, `bottom`, `top`); data-flow copy marks; GD&T attributes; `InputSensitivity` records; the `Truth` rule |
 | MEC | Feature role vocabularies and `FeatureRole` attributes; constraint semantics; glyph outlines from `text` |
+| ELX | Planar workloads for `anvil-planar`; bend lines for `fold` |
+| ECO | `crucible:ops/anvil`, generated from this catalog |
 
 ## Oracles
 
@@ -1001,12 +998,12 @@ Oracles live in the protected `oracles/anvil/` directory. Held-out ABC and Thing
 
 ## Phasing
 
-Gate contributions follow contract 13; the operation-to-phase detail is in the capability tables.
+Gate contributions follow contract 13, and the shared capabilities Anvil serves take their phases from contract 13.4: conforming curved tetrahedra in phase 2, kinematic draping for composite laminates in phase 4. The capability tables hold the operation-to-phase detail.
 
 | Phase | Anvil's contribution to the gate |
 | --- | --- |
 | 0 | Predicates, analytic geometry, topology, `EntityId` and the encoding by month 6 (contract 13.2); Anvil's corpus green in the determinism suite (ANV-O-DET-1, ANV-O-SCALE-1, ANV-O-PRED-1, ANV-O-VER-1, ANV-O-ENC-1, ANV-O-LABEL-1, ANV-O-SITE-1); freedom-to-operate review commissioned; re-fillet benchmark built; mesh Boolean bake-off and certified SSI and Boolean cost spike run before targets freeze |
-| 1 | Chain A for GP1: analytic and NURBS–analytic SSI and Booleans, tessellation and `DisplayPackage` (months 6 to 12), then stage 1 blends, chamfers, shells, holes, patterns, hidden lines and `exchange_form` for STEP AP242 (months 12 to 24). Chain B for GP2: implicit tapes on kernel IR v0, lattices from Flux Fields, leaf-preserving conversion, mesh and beam-lattice output for 3MF. Blend benchmark at 95% on stage 1. SSI stays a release risk until counsel's opinion arrives |
+| 1 | Chain A for GP1: analytic and NURBS–analytic SSI and Booleans, tessellation and `DisplayPackage` (months 6 to 12), then stage 1 blends, chamfers, shells, holes, patterns, hidden lines and `exchange_form` for STEP AP242 (months 12 to 24). Chain B for GP2: implicit tapes on kernel IR v0, lattices from Flux Fields, leaf-preserving conversion, mesh and beam-lattice data for ECO's 3MF writer. Blend benchmark at 95% on stage 1. SSI stays a release risk until counsel's opinion arrives |
 | 2 | GP3 and GP4: general NURBS SSI, free-form offsets, stage 2 blends, direct edits, recognition, mid-surfaces and member axes for frames and guards, sheet-metal unfolding, conforming tetrahedra with curved elements for contact, tool contact and per-move envelopes for machining, SubD, import matching; blend benchmark at 97% |
 | 3 | GP5: corners of valence four and above, envelope meshing and guarding, adaptation and polyhedral meshes, `anvil-planar` for the board, draft maps, G3 surfaces, general wrap |
 | 4 | GP6: G3 blend sections, hex-dominant meshes and boundary layers for airflow, scan fitting, common refinement, kinematic draping |
@@ -1028,8 +1025,8 @@ Gate contributions follow contract 13; the operation-to-phase detail is in the c
 
 ## Contract change requests
 
-- **CCR-ANV-7. Fidelity of the rebuild rows.** In contract 13.3, rename "Exact rebuild after an early edit" to "Rebuild after an early edit", state the GP1-class 2 s row at `SignOff` and the corpus p90 10 s row at `Interactive`, and add a `SignOff` recertification row (p90 ≤ 30 s, target). *Reason:* "exact" is not a fidelity name, and certified decisions on general NURBS cost more than an interactive rebuild can spend (R2-09).
-- **CCR-ANV-8. `Unknown` bounds.** In contract 5 (`Body`), replace "become `Unknown`" with "become `NotQuantified`". *Reason:* one name per concept; `Component` already defines `NotQuantified { reason }`.
+- CCR-ANV-7, fidelity of the rebuild rows: accepted in contract v4.1; contract 13.3 holds the rule.
+- CCR-ANV-8, `NotQuantified` bounds: accepted in contract v4.1; contract 5 (`Body`) holds the rule.
 
 ## Sources
 
