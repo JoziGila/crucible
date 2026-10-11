@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="docs/README.md"><img alt="Status: open specification" src="https://img.shields.io/badge/status-open%20specification-4c8dff?style=flat-square"></a>
-  <a href="docs/contract.md"><img alt="Contract v5" src="https://img.shields.io/badge/contract-v5-1f2843?style=flat-square"></a>
+  <a href="docs/contract.md"><img alt="Contract v6" src="https://img.shields.io/badge/contract-v6-1f2843?style=flat-square"></a>
   <a href="docs/spec/"><img alt="12 subsystem specs" src="https://img.shields.io/badge/spec-12%20subsystems-1f2843?style=flat-square"></a>
   <a href="docs/review/"><img alt="Adversarial review: 295 findings" src="https://img.shields.io/badge/adversarial%20review-295%20findings-1f2843?style=flat-square"></a>
   <a href="LICENSE"><img alt="Code: Apache-2.0 WITH LLVM-exception" src="https://img.shields.io/badge/code-Apache--2.0%20WITH%20LLVM--exception-1f2843?style=flat-square"></a>
@@ -61,29 +61,30 @@ pub feature bracket(
 ) -> Part {
     let outline = rect(width, 40mm)
     let base = sketch(plane.xy) { outline } |> extrude(thickness)
-    let web = base.face(role: end_cap).edge(role: side(outline.top)) |> rib(height: 20mm, t: thickness)
+    let web = base.edge(role: end(outline.top)) |> rib(height: 20mm, t: thickness)
     let body = base + web
     let solid = body |> fillet(body.edges(new), 2mm)
     let p = part(solid, name: "Bracket").material(alu_6061_t6)
     let clamp = base.face(role: start_cap)
     let study = static_stress(p, fixed: clamp, force: load, on: web.face(role: end_cap))
-    let stress = study.von_mises.max(over: p.away_from(clamp, 2 * thickness))
+    let stress = study.von_mises.max(over: p.away_from([clamp, web.face(role: end_cap)], 2 * thickness))
     p.require(stress < 0.6 * p.material.yield_strength(at: 20degC))
 }
+// width + load  →  error ING3001: cannot add Length and Force
 ```
 
 <p align="center">
   <img src=".github/assets/bracket-steps.svg" alt="The bracket built in seven steps: sketch, extrude, rib, fillet, part, study, check" width="100%">
 </p>
 
-The `#[ui(...)]` annotation and the `20mm..=400mm` range give the visual editor its slider, so dragging it rewrites the source. Edges are picked by the role their profile generated, never by index. Mix up units and the program never runs:
+The `#[ui(...)]` annotation and the `20mm..=400mm` range give the visual editor its slider, so dragging it rewrites the source. Edges are picked by the role they play, such as the end of the outline's top edge, never by index. Mix up units and the program never runs:
 
 ```text
 width + load
 error ING3001: cannot add Length and Force
 ```
 
-The stress check reads a regularized maximum away from the clamp, where stress is singular. It returns **Pass**, **Fail** or **Undecided**, with its error bound, and never a silent guess.
+The stress check reads a regularized maximum away from the clamp and the loaded face, where stress can be singular. It returns **Pass**, **Fail** or **Undecided**, with its error bound, and never a silent guess.
 
 ## How it fits together
 

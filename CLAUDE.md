@@ -17,7 +17,8 @@ The spec has finished round 2: every subsystem tab was revised against the bindi
 
 ## Where things stand (2026-10-11)
 
-- Round 2 is closed (tag `round-2`). Contract v5 is binding: rulings on round 1 (section 14), the review (15) and every round 2 change request (16), and one shared phase table (13.4).
+- Round 2 is closed (tag `round-2`); round 3 is under way. Contract v6 is binding: rulings on round 1 (section 14), the first review (15), round 2's change requests (16) and the second review (17), and one shared phase table (13.4).
+- Crucible is built by agents with one founder (contract 13.2): no staffing, hires, engineer-years or calendar months anywhere in the spec.
 - All twelve subsystem tabs are v2, consistent with each other, and pass the check. The Overview is v2, and the Adversarial review and Decisions log tabs are written. Every tab is published in the Claude Doc.
 - The repository is public at github.com/JoziGila/crucible (`origin`). Commit with the personal identity already configured.
 
