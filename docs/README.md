@@ -45,7 +45,7 @@ Round 2 is in progress: each tab is revised against the contract and the review 
 | ECO | v2 | 17,900 | 48 (1) | No |
 | PLT | v2 | 17,900 | 61 (2) | No |
 | Adversarial review | v1 | 7,800 | n/a | No |
-| Decisions log | not compiled | | | No |
+| Decisions log | v1 | 380 decisions | n/a | No |
 
 A finding can target several tabs, so the column sums to more than the 295 findings.
 
