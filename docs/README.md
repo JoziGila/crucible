@@ -6,7 +6,7 @@ The published view is the Claude Doc [Crucible — Platform Spec](https://claude
 
 ## Reading order
 
-1. [`spec/00-overview.md`](spec/00-overview.md): the platform on one page. Written before the review; round 2 updates it.
+1. [`spec/00-overview.md`](spec/00-overview.md): the platform on one page, summarizing the contract and every tab.
 2. [`contract.md`](contract.md): names, principles, core types, decided architecture, roadmap, program plan and performance targets. Binding on every tab.
 3. [`spec/`](spec/): one file per subsystem.
 
@@ -31,7 +31,7 @@ Round 2 is in progress: each tab is revised against the contract and the review 
 
 | Tab | Version | Words excluding Sources | Review findings (Critical) | In the doc |
 | --- | --- | --- | --- | --- |
-| Overview | pre-review | 5,600 | n/a | Pre-review version |
+| Overview | v2 | 6,600 | n/a | Pre-review version |
 | ING | v2 | 19,600 | 47 (6) | No |
 | ANV | v2 | 19,900 | 61 (8) | v2 |
 | FLX | v2 | 17,900 | 66 (7) | No |
