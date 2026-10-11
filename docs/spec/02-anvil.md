@@ -908,7 +908,7 @@ Figures in the last column are targets unless quoted.
 | MFG | `section`, `offset_curve`, `medial_axis`, `tool_contact`, `swept_volume`, `distance`, `interference`, `deform`, `split`, `extend`, `visibility`, `draft_map`, `thickness`, `voxelize`, `correlate_grids`, `align`, `fit`, `boolean`; toolpath wire Bodies and `Implicit` Bodies | `Body`, `Field` |
 | ELX | `anvil::planar::boolean`, `offset`, `distance` and `medial_axis` with conservative snapping; `fold` for flex circuits; `convex_decompose` | `Body` |
 | UIX | `DisplayPackage` keyed by `GeometryId`; exact measures, sections, silhouettes and ray casts; `solve_constraints`; `offset_faces` and `move_faces` with blend regrowth; the WGSL tape interpreter; control-vertex previews; `shape_velocity` | `DisplayPackage`, `Body` |
-| AGT and `api` | Entity inspection with provenance; `Query` resolution with ranked fixes and `RankSwap`; bounded measurements; sections; geometry diffs (volumes added and removed, Hausdorff deviation) | `EntityId`, `ResolveError` |
+| AGT and `api` | Entity inspection with provenance; `Query` resolution with ranked fixes and `RankSwap`; exact measures and sections; geometry diffs (volumes added and removed, Hausdorff deviation) | `EntityId`, `ResolveError` |
 | ECO and `io/` | Builders, healing within the CAx-IF corpus in phase 1, certified mass properties, the imported-id rule (D-ANV-31) and `import_map`, the topology normal form and `exchange_form`, tessellation for 3MF, including beam lattices [3MF beam lattice repository; 3MF beam lattice spec] | `Body`, `ErrorBound` |
 | PLT | Per operation: grade, GPU paths with their roles, cross-class agreement and determinism-suite corpora | `DeterminismGrade` |
 

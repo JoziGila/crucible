@@ -43,7 +43,7 @@ PLT owns the mechanisms below the product: OS services and shells, the compute r
 
 ### OS services
 
-Core crates receive services as trait objects, so tests substitute in-memory fakes. Every PLT error implements `Guidance` (`why`, `fix`), which maps into the `api` error shape.
+Every PLT error implements `Guidance` (`why`, `fix`), which maps into the `api` error shape.
 
 ```rust
 pub trait Storage: Send + Sync {          // native file systems, or OPFS in browsers
@@ -57,7 +57,7 @@ pub trait Storage: Send + Sync {          // native file systems, or OPFS in bro
 pub enum WriteDurability { Buffered, Data }   // Data: fdatasync, FlushFileBuffers, F_FULLFSYNC, OPFS flush
 ```
 
-`Journal` (append, flush, replay to the first bad record), `WindowHost` (windows, surfaces, IME, drags, accessibility hosts), `FileWatcher`, `Clipboard`, `Dialogs`, `Notifications`, `CredentialStore`, `SystemSignals` and `WallClock` follow the same pattern; `WallClock` never reaches evaluation. `Authenticator` returns WebAuthn assertions with user verification for the approval page (contract section 7.6), and `DeviceIo` opens serial and USB ports on native targets for MFG's machine gateway and ELX's bench adapters, never inside evaluation. `WriteDurability` renames round 1's `Durability` (contract section 12).
+`Journal` (append, flush, replay to the first bad record), `WindowHost` (windows, surfaces, IME, drags, accessibility hosts), `FileWatcher`, `Clipboard`, `Dialogs`, `Notifications`, `CredentialStore`, `SystemSignals` and `WallClock` follow the same pattern; `WallClock` never reaches evaluation. `Authenticator` returns WebAuthn assertions with user verification for the approval page (contract section 7.6), and `DeviceIo` opens serial and USB ports on native targets for MFG's machine gateway, whose device key stays non-exportable in the OS keystore, and for ELX's bench adapters, never inside evaluation. `CryptoProvider` supplies TLS, hashes and signatures; KLN's FIPS mode routes it through a FIPS 140-3 module, with AWS-LC through aws-lc-rs the leading candidate [certificate status unverified], and refuses non-approved algorithms.
 
 ### Paths, text and accessibility
 
@@ -89,7 +89,8 @@ Shells are thin `apps/` crates that wire `platform` into `api` and own OS integr
 | File locking | Exclusive lock on `.crucible/lock`; CAS writes by temporary file and rename | `LockError::Held { holder_pid, since }` with "close the other window or open read-only" | PLT-O-OS-4 | 0 |
 | Credentials | `CredentialStore` per account | `CredentialError::Unavailable`; sign-in asks again | PLT-O-OS-4 | 1 |
 | WebAuthn | `Authenticator` assertions with user verification | No verifying authenticator: approval refused with the reason | PLT-O-OS-4 | 1 |
-| Serial and USB | `DeviceIo` ports on native targets, outside evaluation | `DeviceError::Unavailable { port, reason }` | PLT-O-OS-4 | 2 |
+| Serial and USB | `DeviceIo` ports on native targets, outside evaluation; the gateway's device key in the OS keystore | `DeviceError::Unavailable { port, reason }` | PLT-O-OS-4 | 2 |
+| FIPS-mode cryptography | `CryptoProvider` through a FIPS 140-3 module on servers and desktops | Non-approved algorithm refused with the reason | KLN-O-SIG-2 | 2 |
 | System signals | Memory pressure, power, thermal state, scale, reachability | Unavailable signal: `Unknown` | PLT-O-OS-1 | 1 |
 | Portable paths | `RepoPath::parse`; OS paths only in `platform` | `PathError` with a suggested portable name | PLT-O-OS-5 | 0 |
 | Text normalization | UTF-8, LF, no BOM | `TextError::InvalidUtf8 { offset }` | PLT-O-OS-6 | 0 |
@@ -112,7 +113,7 @@ Contract section 9 fixes the tiers, the Tier 1 preview rule (R6-06) and parity. 
 
 Per the gpuweb status page, Chrome ships WebGPU on Windows x86-64, macOS and ChromeOS since 113, and on Linux only for Intel Gen12+ and NVIDIA on Wayland. Firefox ships it on Windows since 141 and macOS from 145, and Safari from 26.
 
-Wasmtime's tiers govern its CI and fuzzing: Windows ARM64 is Tier 3, missing "CI testing, full-time maintainer", and aarch64 macOS and Linux are Tier 2, missing "Continuous fuzzing" (R6-12). The Wasm runtime engineer of contract section 13.2 funds upstream fuzzing on aarch64 and CI for Windows ARM64, iOS and Android, aiming for Tier 2 on Windows ARM64 by the phase 1 gate.
+Wasmtime's Tier 3 (Windows ARM64) lacks "CI testing, full-time maintainer" and Tier 2 (aarch64 macOS and Linux) "Continuous fuzzing" (R6-12). The Wasm runtime engineer of contract section 13.2 funds upstream fuzzing on aarch64 and CI for Windows ARM64, iOS and Android, aiming for Tier 2 on Windows ARM64 by the phase 1 gate.
 
 **Decision D-PLT-2:** Native x86-64 builds target x86-64-v2 and dispatch hot kernels at run time to x86-64-v3 and x86-64-v4; ARM64 builds target ARMv8 with NEON. *Why:* every dispatched path produces identical canonical bits, so a low baseline costs speed only in cold code and keeps older CPUs supported. *Rejected:* an x86-64-v3 baseline (drops CPUs without AVX2 for a gain dispatch already captures); per-CPU builds (multiplies release artifacts).
 
@@ -124,7 +125,7 @@ Tier 2 covers viewing, review and light editing with the same core crates and UI
 
 **Decision D-PLT-33:** On iPadOS, Wasm runs inside WebKit, in a WKWebView worker beside the native engine threads or as the web build in a thin WKWebView shell, where JavaScriptCore compiles it as in Safari; Pulley is the fallback. std and first-party Wasm components ship in the binary, and registry packages appear only as dependencies of an opened design. *Why:* `allow-jit` exists only on macOS, and Pulley carries "a ~10x order-of-magnitude slowdown" (R6-13). *Rejected:* Pulley for all Wasm (too slow); remote-only evaluation (no offline editing); a browsable package catalog (App Review guideline 3.2.2(i)).
 
-A phase 3 spike measures WKWebView memory, WebAssembly speed and WebGPU before the shell form is fixed. The app meets App Review guidelines 2.5.2, 3.1, 3.2.2(i), 4.2.3(ii) and 4.7, with remote evaluation as the path if review rejects downloaded Wasm components; the native Ingot interpreter runs on the engine threads.
+The app meets App Review guidelines 2.5.2, 3.1, 3.2.2(i), 4.2.3(ii) and 4.7; the native Ingot interpreter runs on the engine threads.
 
 Google Play's ban on downloaded executable code "does not apply to code that runs in a virtual machine or an interpreter" with indirect API access. Android therefore runs Wasmtime with Cranelift, and no world imports Android APIs (R6-41). Builds use NDK r28 or later for the 16 KB pages Google Play requires from 1 February 2027.
 
@@ -179,7 +180,7 @@ WebAssembly threads need `SharedArrayBuffer`, which needs `Cross-Origin-Opener-P
 
 `same-origin` severs references to cross-origin popups, which breaks popup sign-in (R6-45). Sign-in therefore redirects to a non-isolated page on Crucible's origin that completes the authorization-code exchange with PKCE, keeps the token as a non-extractable WebCrypto key and redirects back.
 
-The web build requires SIMD128 (Chrome 91, Firefox 89, Safari 16.4), threads (74, 79, 14.1) and bulk memory (75, 79, 15) statically, per the WebAssembly feature table. Relaxed SIMD is never used, being nondeterministic by design, and memory64, exception handling and JS Promise Integration are not used.
+The web build requires SIMD128 (Chrome 91, Firefox 89, Safari 16.4), threads (74, 79, 14.1) and bulk memory (75, 79, 15) statically, per the WebAssembly feature table. Relaxed SIMD, memory64, exception handling and JS Promise Integration are not used.
 
 ### Memory
 
@@ -191,7 +192,7 @@ WebAssembly memory "can only grow and never shrink", and the memory-control prop
 
 **Decision D-PLT-30:** The engine worker keeps a fixed linear-memory cap, and every evaluation estimated above 512 MiB runs in a disposable heavy worker that writes results to the OPFS CAS and terminates, returning its memory; larger evaluations are offered to a team server or cloud worker. *Why:* termination is the only way a browser releases Wasm memory, and one table replaces the conflicting KLN, UIX and round 1 numbers. *Rejected:* one growing engine worker (idle memory never recovers); memory64 (D-PLT-11).
 
-The browser memory table of contract section 9, proposed until phase 0 measures the kill thresholds of Chrome, Edge, Firefox and Safari on 8 GB and 32 GB machines:
+The browser memory table of contract section 9, proposed until phase 0 measures kill thresholds (open question 3):
 
 | Context | Cap or target | Rule |
 | --- | --- | --- |
@@ -204,7 +205,7 @@ The browser memory table of contract section 9, proposed until phase 0 measures 
 
 ### Storage, hashing and updates
 
-WebGPU is used where an adapter exists, and WebGL2 with CPU compute otherwise. The CAS, journal and package cache live in OPFS, whose synchronous handles work only in dedicated workers. Quotas range from about 60% of disk in Chrome, Edge and Safari to the smaller of 10% or 10 GiB in Firefox, and Safari deletes script-written data after seven days without interaction.
+The CAS, journal and package cache live in OPFS, whose synchronous handles work only in dedicated workers. Quotas range from about 60% of disk in Chrome, Edge and Safari to the smaller of 10% or 10 GiB in Firefox, and Safari deletes script-written data after seven days without interaction.
 
 The engine requests persistence at first use and treats the browser CAS as a cache, with the team server or a user-chosen folder as source of truth [File System Access API coverage unverified]. Unsynced edits show a "not yet synced" indicator, with Safari's seven-day warning where persistence is denied.
 
@@ -233,7 +234,7 @@ The `runtime`, `simd`, `gpu` and `linalg` crates execute what Kiln schedules, an
 
 **Decision D-PLT-12:** The UI always talks to the engine through the `api` transport, and the engine runs as a separate OS process on desktop, a dedicated worker in browsers, threads on tablets (with Wasm in WebKit on iPadOS, D-PLT-33) or a remote `server`. Third-party native code and third-party Wasm components run in sandboxed processes outside the engine (D-PLT-31). *Why:* one boundary keeps the UI code identical, and an engine crash, out-of-memory kill or driver fault leaves the window intact while the engine restarts and replays its journal. *Rejected:* a single desktop process (an engine crash closes the window); one process per Op (start and copy costs exceed the drag-preview row). (revised in round 2)
 
-Desktop UI and engine processes share memory-mapped rings for tessellations and Field samples and exchange `api` messages over a local socket. On Linux a higher `oom_score_adj` makes the kernel stop the engine rather than the window. Licensed translators run outside evaluation in a sandboxed translator host (contract section 7.7).
+Desktop UI and engine processes share memory-mapped rings for tessellations and Field samples and exchange `api` messages over a local socket. On Linux a higher `oom_score_adj` makes the kernel stop the engine rather than the window. Licensed translators run outside evaluation in a sandboxed translator host (contract section 7.7), and external MCP servers that agent sessions start over stdio run in the same OS sandbox (D-PLT-31) with only their pipes and user-granted folders.
 
 [[DIAGRAM: process and thread model per target. Columns: Desktop, Browser, iPadOS and Android, Server. Desktop: "UI process" and "Engine process" (IO runtime, foreground and background pools, GPU queue thread, Wasmtime) joined by "shared-memory rings + api socket", plus "Wasm sandbox workers" and "Translator host". Browser: "Main thread", "Engine worker" with "Compute workers 1..N", "Heavy worker" and an opaque-origin "Wasm sandbox". iPadOS and Android: one process with UI, engine and pool threads, plus a "WKWebView worker" on iPadOS. Server: untrusted microVMs, trusted builders per (tenant, label set), attestation service.]]
 
@@ -246,7 +247,7 @@ Desktop UI and engine processes share memory-mapped rings for tessellations and 
 | Background pool (rayon) | One per logical core, halved on battery | QoS utility, below-normal with EcoQoS, nice 10 | Rebuilds, `SignOff` work, prefetch |
 | GPU queue thread | One per device | User-interactive | Encoding, submission, readback, device loss |
 
-`PoolLane { Foreground, Background }` replaces round 1's `Priority`, so AGT's `PriorityClass` keeps its meaning. Kiln maps the interactive class to the foreground lane, promotes a waiting background Op that has not started, and calls `ComputePool::boost` for one that has.
+Kiln maps AGT's interactive `PriorityClass` to the foreground `PoolLane`, promotes a waiting background Op that has not started, and calls `ComputePool::boost` for one that has.
 
 Operations are pure and read data only through the residency manager. Compute never runs on IO workers or calls `block_on`, and the browser engine worker awaits pools through `Atomics.waitAsync` where available [per-browser `waitAsync` support unverified]. `OpCx` checks cancellation at every chunk boundary and fuel check, and a cancelled Op ends in an Abort, never cached.
 
@@ -303,6 +304,7 @@ impl MemoryBudget { pub fn reserve(&self, bytes: u64, wait: Duration) -> Result<
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
 | Engine placement | Process, worker, tablet threads or remote server | Engine crash: restart and journal replay, window intact | PLT-O-REL-2 | 0 |
+| stdio MCP server sandbox | External MCP servers in the D-PLT-31 sandbox, pipes and granted folders only | Access outside the grant denied and logged | PLT-O-WASM-6 | 1 |
 | Pools and lanes | Two rayon pools by `PoolLane`; promotion and boost | Start beyond 2 ms at p99 fails the oracle | PLT-O-RT-1 | 0 |
 | Deterministic combinators | Data partitions, fixed trees, canonical lane order | Divergence fails the suite | PLT-O-DET-2 | 0 |
 | Combinator lints | Five Clippy rules in operation crates | Lint failure blocks the merge | PLT-O-DET-5 | 0 |
@@ -341,7 +343,7 @@ Every role relies on four `gpu` mechanisms:
 3. **Non-finite detection on the CPU.** Read-back exponent bits are inspected as integers, because in-shader NaN checks may be compiled away.
 4. **Math functions.** Fixed-sequence approximations with documented ulp bounds, never vendor built-ins (D-FLX-11).
 
-wgpu exposes `SHADER_F64` only on Vulkan, so `f64` GPU paths are Vulkan server paths from phase 3 (FLX). Without a usable adapter or in safe mode, Kiln records `ran_on: Cpu` with the reason, and the UI shows it.
+wgpu exposes `SHADER_F64` only on Vulkan, so `f64` GPU paths are Vulkan server paths from phase 3 (FLX). Without a usable adapter or in safe mode, Kiln records `ran_on: Cpu` with the reason.
 
 ```rust
 pub enum GpuRole { FilterCpuDecides, Interactive, CpuCertified }
@@ -378,7 +380,7 @@ The dense target is within 2.5 times faer's `CpuIsa` time for n ≥ 1,000; spars
 
 ## Numerical determinism
 
-Contract section 7.3 owns the rules and KLN the policy; this section owns the mechanisms, classes, agreement and the suite, and engine tabs keep at most 150 words of their own rules (R3-37).
+This section owns the mechanisms, classes, agreement and the suite, and engine tabs keep at most 150 words of their own rules (R3-37).
 
 ### Sources of divergence and their controls
 
@@ -404,9 +406,9 @@ Contract section 7.3 owns the rules and KLN the policy; this section owns the me
 
 **Decision D-PLT-17:** `detmath` returns correctly rounded results in round-to-nearest wherever CORE-MATH provides correctly rounded code, and otherwise a fixed sequence of IEEE basic operations with a documented ulp bound. By month 3 of phase 0, CORE-MATH's C sources (MIT) build behind the `detmath` API with clang and `-ffp-contract=off` on every target, wasm32 included; functions then move to Rust one at a time, hot ones first (`exp`, `ln`, `pow`, `sin`, `cos`, `atan2`), and batched paths are compared with crmvec. *Why:* a correctly rounded result is unique, so scalar, batched, FMA and FMA-free paths return the same bits, and the C build unblocks the suite while the port proceeds (R6-19). *Rejected:* platform libm (nondeterministic); porting musl or FreeBSD libm (not correctly rounded, so optimizations risk changing bits); Box2D-style approximations (too inaccurate for CAD); waiting for a complete Rust port. (revised in round 2)
 
-Without hardware FMA, the C build's correctly rounded `fma` keeps the bits at lower speed. The C build sits in `bridges/core-math` behind safe functions, so `detmath` stays free of `unsafe` (contract section 12), and two math specialists staff the work for 24 months (contract section 13.2).
+Without hardware FMA, the C build's correctly rounded `fma` keeps the bits at lower speed. The C build sits in `bridges/core-math` behind safe functions, so `detmath` stays free of `unsafe` (contract section 12).
 
-CORE-MATH's production use is narrower than round 1 stated: glibc integrates seven binary64 functions (`acosh`, `asinh`, `atanh`, `erf`, `erfc`, `lgamma`, `tgamma`) from 2.43, and AMD libm 4.2 integrates `tanhf`. Speed targets are therefore Crucible's own. On x86-64-v3, `exp` and `ln` stay within 1.5 times and `pow`, `sin` and `cos` within 2 times glibc 2.43; wasm32 stays within 3 times native, and batched paths reach at least 2 times scalar on AVX2.
+glibc 2.43 integrates seven CORE-MATH binary64 functions and AMD libm 4.2 its `tanhf`, so speed targets are Crucible's own. On x86-64-v3, `exp` and `ln` stay within 1.5 times and `pow`, `sin` and `cos` within 2 times glibc 2.43; wasm32 stays within 3 times native, and batched paths reach at least 2 times scalar on AVX2.
 
 **Decision D-PLT-18:** No implicit contraction exists anywhere, and explicit `mul_add` appears in canonical code only inside `detmath` and error-free transformations. A kernel family that loses more than 1.3 times without FMA may ship a `CpuIsa` variant with FMA for `Preview` and `Interactive` results; `SignOff` recomputes canonically, and Kiln's cost model counts the recompute. *Why:* x86-64-v2 and wasm32 lack FMA, while compute-bound kernels elsewhere halve their peak without it (R6-17). *Rejected:* FMA in canonical kernels (software FMA in browsers); no FMA anywhere (loses error-free transformations and fast previews); FMA variants at `SignOff` (contract section 7.3). (revised in round 2)
 
@@ -475,7 +477,7 @@ WASI 0.3.0 shipped on 11 June 2026. Wasmtime releases monthly, "Each release tha
 
 ### The determinizer
 
-`wasm-host` holds the determinizer, `determinize@N`, which the registry runs at publish and the local toolchain at build. Hosts execute only determinized binaries, whose hash enters the `OpKey` (contract section 7.2) and subsumes round 1's instrumentation version.
+`wasm-host` holds the determinizer, `determinize@N`, which the registry runs at publish and the local toolchain at build. Hosts execute only determinized binaries, whose hash enters the `OpKey` (contract section 7.2).
 
 | Step | Problem it removes |
 | --- | --- |
@@ -615,7 +617,7 @@ No crash, driver fault or power loss costs a user more than one second of edits,
 | Processing | rust-minidump; Breakpad, PDB, dSYM and DWARF symbols per build, kept 2 years for stable and the support period for LTS | Missing symbols block promotion |
 | Hang detection | 2 s without a UI event; 10 s without an engine cancellation check | Reported with a `hang:` signature |
 
-Minidumps hold stacks, registers and modules, never heap memory, but stacks can hold design fragments. Uploads default to `ask`, show their contents, scrub paths, go only to Crucible's or the organization's server and are deleted after 90 days; with labelled content open only the signature and modules leave (D-PLT-38). Promotion requires a crash-free session rate of 99.8% over the beta's last 7 days (target).
+Minidumps hold stacks, registers and modules, never heap memory, but stacks can hold design fragments. Uploads default to `ask`, show their contents, scrub paths, go only to Crucible's or the organization's server and are deleted after 90 days; labelled content follows D-PLT-38. Promotion requires a crash-free session rate of 99.8% over the beta's last 7 days (target).
 
 ### Autosave and recovery
 
@@ -669,7 +671,7 @@ Telemetry collects operation duration histograms, frame and startup times, peak 
 
 ## Build, release and CI
 
-`rust-toolchain.toml` pins one stable Rust version, moved at most every 6 weeks after the suite passes, and a pinned nightly builds only the threaded web engine (D-PLT-10). Dependencies are locked and vendored per release, and cargo-deny checks licences (no LGPL, GPL or AGPL linked), advisories and banned crates [cargo-deny capabilities unverified].
+`rust-toolchain.toml` pins one stable Rust version, moved at most every 6 weeks after the suite passes; the nightly pin serves only D-PLT-10. Dependencies are locked and vendored per release, and cargo-deny checks licences (no LGPL, GPL or AGPL linked), advisories and banned crates [cargo-deny capabilities unverified].
 
 **Decision D-PLT-40:** `deps/approved.toml` records each core dependency's licence, risk class, owning engineer, upgrade cadence and fork-or-replace plan, reviewed at each gate; first actions fund or vendor faer and pulp, evaluate fearless_simd, budget one wgpu upgrade a quarter (about three engineer-weeks, an estimate) and defer CubeCL. *Why:* core paths rest on young or single-maintainer crates (R6-30). *Rejected:* licence-only review; avoiding young crates (several have no alternative).
 
@@ -723,7 +725,7 @@ Releases ship a CycloneDX software bill of materials [generator unverified], an 
 
 ## Performance engineering
 
-PLT owns contract section 13.3's rows, their measurement and low-band targets. Staffing and the critical path are in contract section 13.2 (R6-01, R6-03, R6-04), where PLT's teams grow from 8 to 12 (platform, numerics, runtime, browser) and 4 to 5 (build, CI, GPU lab, SRE).
+PLT owns contract section 13.3's rows, their measurement and low-band targets. Staffing and the critical path are in contract section 13.2 (R6-01, R6-03, R6-04).
 
 **Decision D-PLT-28:** The reference laptop is fixed: Intel Core Ultra 7 258V (8 cores, 8 threads, AVX2, Arc 140V GPU), 32 GB, dual-booting Windows 11 and Ubuntu LTS, measured at 1920×1080. Only it blocks beta promotion, and every other Tier 1 OS's mid machine must land within 1.5 times of each row. *Why:* as the weaker candidate (no AVX-512, 8 threads) it makes wider dispatch elsewhere margin, and Chrome enables WebGPU for its GPU on Linux (R6-07). *Rejected:* an unnamed mid laptop; a Ryzen AI 300 reference (AVX-512 and 24 threads hide costs, and its GPU runs browsers on WebGL2 under Linux); Apple silicon; a desktop. (revised in round 2)
 
@@ -753,8 +755,6 @@ Benchmark files live in `oracles/plt/bench/`; "warm" means the CAS holds every d
 | Installed size | Per app package | Release builds | As mid | PLT |
 | Flux CPU throughput | `ceed.toml` | Median | Not set | FLX |
 
-PLT's own rows are an update check under 2 KB and the library, hashing and ratio targets of their sections.
-
 Startup shows the last layout while the engine maps the CAS index, loads precompiled std Wasm components and opens the last design. GPU pipelines compile in the background, asynchronously on DX12 and Metal, where wgpu's `PIPELINE_CACHE` is unavailable.
 
 ### Profiling and continuous benchmarking
@@ -768,7 +768,7 @@ Nightly, reference machines run the suite 30 times, and a median rise above 3% c
 | Reference laptop | Fixed model and resolution; sole beta blocker | A missed row blocks beta promotion | PLT-O-PERF-1 | 0 |
 | Bands and `HardwareProfile` | Measured properties place every machine | Unknown hardware: low band | PLT-O-PERF-1 | 1 |
 | Contract section 13.3 rows | Benchmark file, cache state and statistic per row | A missed row blocks beta promotion | PLT-O-PERF-1 | 1 |
-| PLT's own rows | Update check, library, hashing and ratio targets | A missed row files an issue | PLT-O-PERF-3 | 1 |
+| PLT's own rows | Update check under 2 KB; library, hashing and ratio targets | A missed row files an issue | PLT-O-PERF-3 | 1 |
 | Instruction-count gate | 1% per merge | Merge blocked without an approved reason | PLT-O-PERF-2 | 0 |
 | Wall-time tracking | Nightly, statistically confirmed | Issue with the commit range | PLT-O-PERF-2 | 0 |
 | Profiling | `tracing` spans to Tracy and browser profilers | Disabled span over 5 ns fails the oracle | PLT-O-PERF-4 | 0 |
@@ -825,18 +825,18 @@ These are the risks that can still break parity on each platform.
 
 | To | What | Types |
 | --- | --- | --- |
-| KLN | Lanes, cancellation, safe points, memory budgets, the class for keys, CAS storage, combinators, `detmath`, the mechanism table, the dispatch rule, worker images, attestation, memory tables, label-aware egress | `ComputePool`, `PoolLane`, `MemoryBudget`, `PlatformClass`, `Storage`, `WriteDurability`, `ChunkedBuffer<T>` |
+| KLN | Lanes, cancellation, safe points, memory budgets, the class for keys, CAS storage, combinators, `detmath`, the mechanism table, the dispatch rule, worker images, attestation, memory tables, label-aware egress, the FIPS-mode crypto provider | `ComputePool`, `PoolLane`, `MemoryBudget`, `PlatformClass`, `Storage`, `WriteDurability`, `ChunkedBuffer<T>`, `CryptoProvider` |
 | ANV | Canonical SIMD lanes, `detmath`, `det_sum` and `exact_sum`, `linalg`, GPU paths with known-answer tests, archived toolchains for frozen versions | `simd`, `detmath`, `det_*`, `GpuPath` |
 | FLX | `detmath`; `det_sum`, `det_reduce`, `exact_sum`; `linalg` jointly; `gpu` with known-answer tests and CPU fallbacks; the dispatch and agreement rules; the class enum; the browser memory table | `GpuCompute`, `GpuPath`, `RanOn`, `PlatformClass` |
 | UIX | Windows, input and IME, accessibility hosting, clipboard with exclusion flags, dialogs, surfaces, WebAuthn, hardware profile, workarounds, device-loss hooks, safe mode, crash monitor, rings, dispatch rule, memory caps, browser and startup rows, telemetry pipeline, renderer image, dependency register | `WindowHost`, `PlatformEvent`, `AccessibilityHost`, `Authenticator` |
 | `repo` | Journal, atomic writes, locks, watching, portable paths, text normalization | `Journal`, `WatchEvent`, `RepoPath` |
 | ING | Executors, the determinizer, verification of generated modules, `detmath` for native and wasm32, text normalization, the browser memory table | `WasmComponentEngine`, `CallLimits` |
 | ECO | The determinizer and its overhead table, Wasmtime LTS with 7-day security releases, world enforcement, the OS sandbox for workers, the browser Wasm component runtime, offline bundles, NFC normalization, TUF and signature formats | `WasmComponentEngine`, `CallLimits` |
-| AGT | `api` transport, `cli` exit codes, the keychain through `CredentialStore`, WebAuthn, `Usage` measurement with GPU timestamps | `Guidance` errors, `Authenticator` |
+| AGT | `api` transport, `cli` exit codes, the keychain through `CredentialStore`, WebAuthn, `Usage` measurement with GPU timestamps, the stdio sandbox for external MCP servers | `Guidance` errors, `Authenticator` |
 | MEC | `linalg` for constraint solving | `linalg` |
 | COV | `linalg` for calibration fits; `f64` availability per class; the browser memory table | `linalg`, `PlatformClass` |
 | ELX | `linalg` for circuit LU; `detmath`; the browser memory table; serial and USB access | `linalg`, `DeviceIo` |
-| MFG | Serial and USB access for the machine gateway; the browser memory table | `DeviceIo` |
+| MFG | Serial and USB access and a device key for the machine gateway; its packaging once an app exists (open question 13); the browser memory table | `DeviceIo` |
 
 ### Consumed by PLT
 
@@ -892,7 +892,7 @@ All PLT oracles live in `oracles/plt/`, readable but not writable by agents; loo
 | PLT-O-WASM-3 | Cancellation and failure kinds | Cancellation lands at fuel checks everywhere; `Failure`s cache identically; no Abort reaches a memo or the CAS |
 | PLT-O-WASM-4 | Observable NaN | NaN-observing modules agree across engines; others are unchanged |
 | PLT-O-WASM-5 | Ingot module verification | Each planted violation is rejected |
-| PLT-O-WASM-6 | Isolation and worlds | A hostile Wasm component reads no repository, OPFS, token or key; forbidden imports fail at install |
+| PLT-O-WASM-6 | Isolation and worlds | A hostile Wasm component or stdio MCP server reads no repository, OPFS, token or key; forbidden imports fail at install |
 | PLT-O-PKG-1 | Update security | TUF attacks rejected; power loss during apply leaves a runnable version; failed self-tests roll back |
 | PLT-O-PKG-2 | Install hygiene | Install, upgrade from the last 3 releases and uninstall leave no stray files; signatures and notarization verify |
 | PLT-O-PKG-3 | Dual signatures | Classical verifiers accept; post-quantum verifiers require both; unknown ids fail closed |
@@ -926,7 +926,7 @@ Gate contributions only, consistent with contract sections 13.1 and 13.2; no cap
 ## Open questions
 
 1. **App Review.** If review rejects registry Wasm components as dependencies of an opened design, iPadOS evaluates them remotely.
-2. **WebKit executor shape.** The phase 3 spike chooses between a WKWebView worker beside native threads and the web build in a thin shell.
+2. **WebKit executor shape.** A phase 3 spike measures WKWebView memory, WebAssembly speed and WebGPU and picks one of D-PLT-33's two forms.
 3. **Browser caps.** Phase 0 kill thresholds may lower the proposed 1.5 GiB engine and 512 MiB UI caps.
 4. **No-FMA penalties.** Which kernel families ship `CpuIsa` variants, measured with FLX in phase 0.
 5. **`detmath` speed.** Whether batched ports meet the `pow` and large-argument trigonometric targets.
@@ -937,6 +937,7 @@ Gate contributions only, consistent with contract sections 13.1 and 13.2; no cap
 10. **Extended support funding.** Backporting Wasmtime security fixes beyond its 24-month window needs a funded owner; otherwise retired engines run in sandboxed processes.
 11. **Fuel pricing.** AGT decides whether `Usage` prices fuel.
 12. **Declined in part.** R1-43's routine `SignOff` in `CpuIsa` with FMA is declined, because contract section 7.3 requires canonical recomputation for `SignOff`.
+13. **Machine gateway app.** MFG's gateway (D-MFG-20) needs an app package with `DeviceIo` and a device key, but contract section 12's crate map has no gateway app; round 3 files a contract request to add one.
 
 ## Contract change requests
 

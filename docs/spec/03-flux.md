@@ -199,7 +199,7 @@ Nodes record the fidelity of the bounds they observed, so a branch on `Undecided
 
 Flux evaluates COV's regime functions into a `Field<Body, ValidityZone>` and `Flag` or `Refuse` checks; it never switches models, only suggests escalation.
 
-Classes A and B agree by PLT's rule (D-PLT-35): |q_A − q_B| ≤ E_A + E_B for every checked quantity, E being the budget total in q's norm plus a floor scaled by the Field norm, with principle 4's rule for bifurcating and chaotic problems.
+Classes A and B agree by PLT's rule (D-PLT-35): |q_A − q_B| ≤ E_A + E_B for every checked quantity.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -341,7 +341,7 @@ Contract section 7.3 and PLT own the mechanisms. Flux adds six rules:
 
 **Decision D-FLX-19:** Canonical CPU solves, estimators and `flux::certify` are `Portable` in `CpuCanonical`. GPU solves are `ClassExact` in `Gpu(GpuClass)`, and a `SignOff` check on one rests on the pinned Field plus `certify` (D-FLX-17). *Why:* release gates need canonical outcomes, while GPUs pay off at `Interactive` and as solvers the CPU certifies. *Rejected:* the round 1 Flux class names, superseded by PLT's enum. (revised in round 2)
 
-Behavior versioning follows contract section 4 and the ANV and KLN policies: any output-bit change is a new version, including changed `flux::plan` defaults (D-FLX-20).
+Any output-bit change, including a changed `flux::plan` default (D-FLX-20), is a new behavior version (contract section 4).
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -621,7 +621,7 @@ A Network is a lumped model of elements joined through domain-typed ports (contr
 
 ### Multibody dynamics
 
-MEC hands over an Assembly with typed joints, the redundancy report, mass properties with bounds, contact pairs and drivers (D-MEC-12). `flux::solve_multibody` writes the motion as an index-3 DAE on the Lie group of rigid motions and integrates it with Lie group generalized-α, which needs no rotation parameterization and is globally second-order accurate for translations, rotations and multipliers [Brüls, Cardona, Arnold].
+MEC hands over an Assembly with typed joints, the redundancy report, mass properties with bounds, contact pairs and drivers (D-MEC-12). `flux::solve_multibody` integrates the motion by Lie group generalized-α (D-FLX-28), globally second-order accurate for translations, rotations and multipliers [Brüls, Cardona, Arnold].
 
 - Redundant but consistent joints are removed by rank-revealing QR in `linalg` and reported, or replaced by declared compliance.
 - Joint axes expose rotational and translational ports, so a motor drive's Network drives a joint directly.
@@ -634,7 +634,7 @@ Project Chrono (BSD-3-Clause) is the implementation to beat. MFG's assembly plan
 
 ### Cosserat rods
 
-`flux::solve_rod` models cables, harnesses and hoses as geometrically exact Cosserat rods: a centreline with a director frame, with bending, torsion, shear and extension. Kirchhoff rods, which MEC's harness model asks for, are the stiff-shear limit. Statics minimize energy by trust-region Newton; dynamics use Lie group generalized-α. Contact with Bodies uses Anvil distance queries and self-contact `bvh_build`, and results are Fields on the rod's wire Body. PyElastica (MIT) is the reference implementation [Gazzola et al.].
+`flux::solve_rod` models cables, harnesses and hoses as geometrically exact Cosserat rods: a centreline with a director frame, with bending, torsion, shear and extension. MEC's harness model uses the Kirchhoff limit (D-FLX-29). Statics minimize energy by trust-region Newton; dynamics use Lie group generalized-α. Contact with Bodies uses Anvil distance queries and self-contact `bvh_build`, and results are Fields on the rod's wire Body. PyElastica (MIT) is the reference implementation [Gazzola et al.].
 
 **Decision D-FLX-29:** Cables and hoses are geometrically exact Cosserat rods sharing the multibody integrator, with Kirchhoff behaviour as the stiff-shear limit. *Why:* hoses stretch and shear under pressure and clamping, and one integrator couples rods to joints and contact. *Rejected:* inextensible Kirchhoff rods only; spring–mass chains, which converge poorly in bending and torsion.
 
@@ -704,12 +704,12 @@ Transient adjoints use Revolve-style checkpointing extended to multistage scheme
 
 | Method | Formulation | Phase |
 | --- | --- | --- |
-| Density | SIMP on the immersed octree; Helmholtz filter; smoothed Heaviside projection; robust eroded, intermediate and dilated designs; MFG's manufacturing constraints | 1 (compliance, volume), 2 (stress, robust, manufacturing) |
+| Density | SIMP on the immersed octree; Helmholtz filter; smoothed Heaviside projection; robust eroded, intermediate and dilated designs; manufacturing-constraint forms | 1 (compliance, volume), 2 (stress, robust, manufacturing) |
 | Graded lattice | Homogenized cell-parameter maps, then dehomogenization | 1, 2 |
 | Level set | Shape and topological derivatives with CutFEM analysis | 3 |
 | Multiphysics | Any coupled form through the coupled adjoint | 4 |
 
-The optimizer is the method of moving asymptotes and its globally convergent variant, implemented natively as `flux::mma_step` [unverified: licence of Svanberg's reference code]; the loop is Ingot (`std::opt::topology`), so iterations are cached nodes. Results include `design.density` and `design.geometry_density`, the filtered, projected H¹ density with a gradient bound that `anvil::implicit_from_field` requires (R1-57). Stress constraints aggregate regularized stresses by p-norms (D-FLX-23).
+The optimizer is the method of moving asymptotes and its globally convergent variant, implemented natively as `flux::mma_step` [unverified: licence of Svanberg's reference code]; the loop is Ingot (`std::opt::topology`), so iterations are cached nodes. Results include `design.density` and `design.geometry_density`, the filtered, projected H¹ density with a gradient bound that `anvil::implicit_from_field` requires (R1-57). Stress constraints aggregate regularized stresses by p-norms (D-FLX-23). Flux defines the manufacturing-constraint forms; MFG's process profiles supply their overhang angle, build and draw direction and minimum feature size.
 
 ```
 use std::opt::topology::{minimize, compliance, volume_fraction, density, overhang}
@@ -727,7 +727,7 @@ Aage, Andreassen, Lazarov and Sigmund reached giga-voxel resolution for a full a
 
 ### Shape, parameter and experimental design
 
-Shape optimization works on Ingot parameters through the geometry chain rule, or on boundary-morphing Fields with Hilbertian gradients [unverified: Fireshape licence]. Optimizers: L-BFGS-B, SQP, interior point, MMA, trust region with Hessian-vector products, CMA-ES, and NSGA-II-type search giving Pareto fronts as Fields. Bayesian optimization belongs to AGT's `std::explore` (D-AGT-15), which consumes Flux gradients and surrogates. Stochastic optimizers use counter-based random streams keyed by the Op key. `std::sim::study` runs full factorial, maximin Latin hypercube, Sobol, Halton and adaptive designs; each point is a node, so a study caches per point and resumes after an Abort.
+Shape optimization works on Ingot feature parameters through the geometry chain rule, or on boundary-morphing Fields with Hilbertian gradients [unverified: Fireshape licence]. Optimizers: L-BFGS-B, SQP, interior point, MMA, trust region with Hessian-vector products, CMA-ES, and NSGA-II-type search giving Pareto fronts as Fields. Bayesian optimization belongs to AGT's `std::explore` (D-AGT-15), which consumes Flux gradients and surrogates. Stochastic optimizers use counter-based random streams keyed by the Op key. `std::sim::study` runs full factorial, maximin Latin hypercube, Sobol, Halton and adaptive designs; each point is a node, so a study caches per point and resumes after an Abort.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -833,7 +833,8 @@ Evaluators cover `Discrete` Fields of every element family, splines, `SparseGrid
 | Reports | `std::sim::report` data for UI and CI | Missing budgets are listed in the report | FLX-O-POST-1 | 1 |
 | Display evaluators | WGSL per-pixel evaluators on the UI's device | Tier without compute uses vertex samples, stated | FLX-O-POST-2 | 1 |
 | Display samples | Adaptive vertex samples on `DisplayPackage` with interpolation error | None | FLX-O-POST-2 | 1 |
-| Isosurfaces, slices, streamlines, response functions, mode shapes | Display geometry, plus Implicit Bodies for geometry use | Streamline error above tolerance refines the step | FLX-O-POST-1 | 2 |
+| Mode shapes | Per-mode deformation displays of modal and buckling eigenvectors | Degenerate eigenspaces shown as subspaces | FLX-O-POST-2 | 1 |
+| Isosurfaces, slices, streamlines and response functions | Display geometry, plus Implicit Bodies for geometry use | Streamline error above tolerance refines the step | FLX-O-POST-1 | 2 |
 
 ## State of the art
 
@@ -898,7 +899,7 @@ Linked dependencies are MIT, Apache-2.0 or BSD: faer 0.24.4 (MIT, `CpuIsa` only)
 | KLN | Operations with grades, fidelity maps, cost models, safe points, derivatives, step checkpoints; Fields by virtual partition; calibration tables as pinned data | `OpImpl`, `Differentiable` |
 | COV | Forms and solvers; estimators and η99 tables; solution verification; parameter-domain forms; per-region reduction and localization; coupling algorithms; `std::uq`; regime-variable Fields and zone evaluation; D-COV-11 operations | `Field`, `ValidityEnvelope` |
 | MEC | Multibody and rod solvers; beams and laminated shells; bolted-joint forms; calibrated estimates (D-FLX-24); influence coefficients; deformed-shape Fields | `Field`, `Assembly` |
-| MFG | Modal analysis; inherent-strain element activation; thermo-elasto-plasticity; level-set and Hele-Shaw flow; shells; rigid-body contact; sensitivities; constrained topology optimization | `Field`, `Body` |
+| MFG | Modal analysis; inherent-strain element activation; thermo-elasto-plasticity; level-set and Hele-Shaw flow; shells; rigid-body contact; sensitivities; topology optimization with manufacturing-constraint forms | `Field`, `Body` |
 | ELX | Network compiler and DAE solver; block-triangular LU in `linalg`; layered sheets; quasi-static, magnetostatic, eddy-current and full-wave solvers; conjugate heat transfer; parameter-domain forms; `fft_solve` through `crucible:ops/flux`; Verilog-A constructs in the kernel IR; the FMI and SSP runtime | `Network`, `Field` |
 | AGT | Study Evaluations; regularized goals; `ErrorBudget`s and validity zones; plan explanations; cost estimates; Field sampling | `SolvePlan`, `Field` |
 | UIX | WGSL evaluators with coefficient buffers; vertex samples with error; singular-set and validity masks; exact probes; `streamlines`; physics `Proxy` during geometric drags; reports | `Field` |
@@ -915,7 +916,7 @@ Linked dependencies are MIT, Apache-2.0 or BSD: faer 0.24.4 (MIT, `CpuIsa` only)
 | PLT | `detmath`; `det_sum`, `det_reduce`, `exact_sum`; `linalg` (joint); `gpu` with known-answer tests and CPU fallbacks; the dispatch and agreement rules; the class enum; the browser memory table |
 | COV | Physics and constitutive models with tangents; regime functions and envelopes; the calibration-class map; turbulence, fatigue, fracture and damage models; D-COV-11's operation needs |
 | MEC | Typed joints, drivers, redundancy reports, bounded mass properties, contact candidates, preload, member profiles, ABD matrices, default distributions (D-MEC-28), skin-model samples |
-| MFG | Manufacturing-constraint forms; process profiles with Cp and Cpk; inherent-strain calibration data |
+| MFG | Process profiles with Cp and Cpk, overhang angle, build and draw direction and minimum feature size; inherent-strain calibration data |
 | ELX | The `network { … }` builder, port types and element libraries, the Verilog-A front end, board excitations and layered-sheet geometry |
 | ECO | `crucible:ops/flux` generated from Flux's catalog; registry hosting for solver and constitutive Wasm components; FMU packaging with FMI-LS-WASM; readers and writers for Field formats in `io/` |
 
@@ -1010,7 +1011,7 @@ Capabilities that several tabs phase take their phase from contract section 13.4
 | Phase | Flux contribution to the gate |
 | --- | --- |
 | 0 | Determinism suite green for Flux kernels on the representative set; unit errors in forms fail to compile; kernel IR v0 frozen at month 6; H¹ elements, CG and manufactured-solution tests by month 12; CEED baselines, no-FMA penalties and the calibration rule published; no operation name or WIT package frozen before the Flux rename |
-| 1 | GP1: immersed elasticity (shifted boundary at `Interactive`, CutFEM at `SignOff`), calibrated DWR on regularized goals, singular sets, p-multigrid over AMG, Lanczos and LOBPCG. GP2: density topology optimization, steady adjoints, homogenization, beam-lattice verification with strut buckling, `geometry_density`, inherent-strain activation. WGSL `Interactive` elasticity within stage budgets. Deferred per contract section 13.2: guaranteed estimators on cut cells, GPU `SignOff` paths, CUDA or HIP |
+| 1 | GP1: immersed elasticity (shifted boundary at `Interactive`, CutFEM at `SignOff`), calibrated DWR on regularized goals, singular sets, p-multigrid over AMG, Lanczos and LOBPCG with mode-shape display. GP2: density topology optimization, steady adjoints, homogenization, beam-lattice verification with strut buckling, `geometry_density`, inherent-strain activation. WGSL `Interactive` elasticity within stage budgets. Deferred per contract section 13.2: guaranteed estimators on cut cells, GPU `SignOff` paths, CUDA or HIP |
 | 2 | GP3: fitted tetrahedra with mortar contact, rigid multibody, drivetrain Networks, transient solvers and adjoints, modal reduction. GP4: beams, shells, mixed-dimensional couplings, thermo-elasto-plasticity, weld-group activation for structure-scale weld distortion. Also GPU solves certified on the CPU and worst-case tolerance propagation |
 | 3 | GP5: free-surface filling with fibre-orientation transport, warpage, explicit dynamics for the drop test, laminar and natural-convection conjugate heat transfer, layered sheets for board thermal, circuit DAEs, FDTD, FMU import and master algorithms, statistical uncertainty |
 | 4 | GP6: turbulent conjugate heat transfer, electro-thermal coupling, FMU export and SSP, parameter-domain forms for SPMe cells, Navier–Stokes preconditioners and lattice Boltzmann, fluid–structure interaction, magnetodynamics with motion, full-wave antenna FEM, flexible multibody and rods, surrogates with per-prediction bounds, and distributed BDDC. Also laminated shells. A CUDA or HIP back end is reconsidered at this gate |

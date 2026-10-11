@@ -66,7 +66,7 @@ Hosts must treat tool annotations and skill content as untrusted [S3][S8]. Cruci
 
 A principal is a person (`user:<id>`), an agent instance (`agent:<org>/<role>/<instance>`) or a service (`service:<name>`); an agent always acts for a human. The delegation chain has the delegating human at index 0 and the current actor last. The server derives it from its own session lineage, never from token `act` claims, which RFC 8693 makes informational for nested actors [S47].
 
-Remote transports use OAuth 2.1 as MCP specifies: protected resource metadata, resource indicators, audience-bound tokens, step-up through `insufficient_scope`, and Client ID Metadata Documents for registration [S2][S6]. The local stdio server takes the signed-in user's credential from the OS keychain [S6].
+Remote transports use OAuth 2.1 as MCP specifies: protected resource metadata, resource indicators, audience-bound tokens, step-up through `insufficient_scope`, and Client ID Metadata Documents for registration [S2][S6].
 
 **Decision D-AGT-3:** A Session is an opaque 128-bit random handle that the server binds to the authenticated principal and token issuer. It expires after 24 hours idle or 7 days total by default. Atomicity is per Change, isolation is per branch, and there is no long-lived transaction object. *Why:* MCP 2026-07-28 has no protocol sessions and recommends explicit handles [S3]; possession of a handle never counts as authentication [S7]; cheap branches already isolate work. *Rejected:* protocol-level sessions (removed from MCP); multi-call transactions with locks (contention, leaked locks, a second concept beside branches).
 
@@ -288,7 +288,7 @@ Methods marked † change state or spend budget, so they need an idempotency key
 | `read.value` | `ValueRef` → typed value; marks the context `data_untrusted` | `read.unknown_handle` | AGT-O-17 | 1 |
 | `read.bom`, `read.where_used` | KLN's EBOM, then MBOM, service BOM and where-used | `read.not_found` | AGT-O-1 | 1 (EBOM), 2 |
 | `read.catalog` | Filters → catalog part summaries | `catalog.filter_invalid` | AGT-O-1 | 2 |
-| `read.packages`, `read.package`, `read.registry_bundle` | ECO registry search, package metadata and signed offline bundles | `package.not_found` with nearest names | AGT-O-1 | 1 (`read.package`), 2 |
+| `read.packages`, `read.package`, `read.registry_bundle` | ECO registry search, package metadata and signed offline bundles | `package.not_found` with nearest names; `package.unavailable` (bundles) | AGT-O-1 | 1 (`read.package`), 2 |
 | `read.events` | Source, cursor → events in sequence order | `events.cursor_expired` | AGT-O-1 | 1 |
 | `read.subscribe`, `read.unsubscribe` | Create or delete a webhook subscription; people with `maintainer` or `admin` only; thin payloads (ECO) | `events.url_refused` | AGT-O-22 | 1 |
 | `read.machine_data` | Machine → state and as-run records from MFG's gateway | `mfg.gateway_unreachable` | AGT-O-1 | 2 |
@@ -596,7 +596,7 @@ Within a class, Kiln shares capacity among principals by dominant resource [unve
 
 ## Proposals and review
 
-A Proposal is a branch plus rationale plus CI report, stored by `repo`. A change order is a Proposal against a released configuration whose approvals are those of the release Act's plan (contract section 7.1).
+A Proposal is a branch plus rationale plus CI report, stored by `repo`.
 
 ### The Proposal object
 
@@ -736,7 +736,7 @@ Prompt injection is not solved: Meta calls it "a fundamental, unsolved weakness 
 | Instructions in imported text, datasheets, comments, documents or textures (ASI01) | Three instruction sources (D-AGT-18); handles; context labels; extraction |
 | Misuse of a legitimate method (ASI02) | Scopes, write sets, risk classes, Act approvals |
 | Stolen or escalated credentials (ASI03) | Sender-constrained tokens; delegation grants (D-AGT-28) |
-| Malicious servers, skills or packages (ASI04) | Approved skill manifests; signed packages; no third-party MCP servers in hosted sessions by default |
+| Malicious servers, skills or packages (ASI04) | Approved skill manifests; signed packages; external MCP servers off by default in hosted sessions, and stdio ones only in PLT's sandbox |
 | Code execution (ASI05) | Only Ingot and determinized Wasm components; Proposal CI in single-use microVMs |
 | Poisoned memory, spoofed messages (ASI06, ASI07) | No shared agent memory; no direct messaging (D-AGT-14) |
 | Cascading failures (ASI08) | Budgets, attempt limits, merge-queue CI, freeze |
@@ -755,7 +755,7 @@ A span becomes trusted only through `propose.endorse_text`, a human action that 
 
 **Decision D-AGT-24:** Every model context carries a label, the join of the `Labels` of every value returned to it (contract section 7.6). Reading free text or images sets `instruction_tainted`; reading any untrusted value sets `data_untrusted`. Every write carries at least the context's label, a write to a lower-labelled destination fails with `label.write_down` unless a declassification record names it, and untrusted typed values travel by `ValueRef` so their labels follow exactly. *Why:* a model context is a derivation path that Kiln never sees, so ITAR content read in one repository could otherwise be written unlabelled into another (R5-01). *Rejected:* labelling only Kiln derivations; treating untrusted typed values as non-tainting, since they steer edits and re-enter as trusted literals.
 
-An external host gets a fresh label only through a fresh authorization grant. Writes are edits, Proposals, comments, reviews, exploration records and Act payloads. A declassification record is signed through `propose.declassify` by two people, one an export officer, and KLN stores it.
+An external host gets a fresh label only through a fresh authorization grant. Writes are edits, Proposals, comments, reviews, exploration records and Act payloads.
 
 ### Taint and the Rule of Two
 
@@ -882,7 +882,7 @@ The approval page is the only approval surface; UIX renders it on desktop, web a
 - a diff against the last approved plan of the same class to the same recipient;
 - the session's purpose, marked as agent text, and the context's integrity flags with their sources.
 
-Anyone else who opens a request sees "not assigned to you", and push notifications carry no content. A session holds at most three pending requests. A denial blocks re-preparing a plan to the same recipients for 24 h and offers "report as suspicious", which freezes the session.
+Anyone else who opens a request sees "not assigned to you", and push notifications carry no content. A denial blocks re-preparing a plan to the same recipients for 24 h and offers "report as suspicious", which freezes the session.
 
 `act.prepare` rejects payload text containing invisible characters, Unicode tag characters (U+E0000 to U+E007F), bidirectional controls or zero-width characters. A plan that changes after approval fails with `act.plan_changed`, and approvals are single-use.
 
@@ -890,7 +890,7 @@ A release plan's digest covers the `ApprovalSubject`'s `ObjectId`, the tag and t
 
 [[DIAGRAM: Act sequence. Lanes: Agent, api server with Cedar, Approver inbox and page, External system or device gateway. Agent → act.prepare → ActionPlan with digest; act.commit → approval request assigned to named approvers; act.approval_pending with a request id, no URL; approver opens the server page, WebAuthn, approves the digest; agent polls act.status → server rechecks plan, recipient, labels and screening → executes or delivers (never a machine start) → ActionReceipt; audit entry and KLN signature record.]]
 
-**Decision D-AGT-30:** Every byte that leaves a tenant goes through one Act family, `release_data { recipient, payload, purpose, authorization }`. Its members all run the same checks at commit: labels against the recipient's attributes, restricted-party screening, an export authorization record (licence number, licence exception or exemption) for any export control, a watermark record, expiry and audit. Recipients are KLN `RecipientRecord`s, verified out of band and screened, so a recipient that appears only in agent text is refused with `act.recipient_unverified`. *Why:* six egress paths with different controls invite the weakest (R5-06), and a recipient changed through an injected "our address has changed" email would redirect every later RFQ (R5-05). *Rejected:* per-path controls; recipient records changed by ordinary Proposals.
+**Decision D-AGT-30:** Every byte that leaves a tenant goes through one Act family, `release_data { recipient, payload, purpose, authorization }`, which AGT owns. KLN runs its checks as one stage at `act.commit` and records the result (D-KLN-40): labels against the recipient's attributes, restricted-party screening, an export authorization record (licence number, licence exception or exemption) for any export control, a watermark record, expiry and audit. Recipients are KLN `RecipientRecord`s, verified out of band and screened, so a recipient that appears only in agent text is refused with `act.recipient_unverified`. *Why:* six egress paths with different controls invite the weakest (R5-06), and a recipient changed through an injected "our address has changed" email would redirect every later RFQ (R5-05). *Rejected:* per-path controls; recipient records changed by ordinary Proposals.
 
 Recipient-record changes follow D-AGT-27, cannot come from a context with either integrity flag, and take effect after 24 h with notice to the previous contact (KLN). Agent writes on branches shared with another organization need `act:share_external` and are refused to `instruction_tainted` contexts. Webhooks carry thin payloads without design content (ECO), so they are not data release.
 
@@ -901,7 +901,7 @@ Recipient-record changes follow D-AGT-27, cannot come from a context with either
 - `run_rig_test` runs on KLN's hardware runner, only for rigs under an `unattended_safe` site policy, after an Approval of the test plan's digest (contract 7.1, 7.6).
 - Machine data collection is a Read, `read.machine_data`.
 
-These classes ship in phase 2 with MFG's transfer capabilities, since contract section 13.2 defers CAM, posts and slicing; no device transfer exists without them.
+These classes ship in phase 2 with MFG's transfer capabilities (contract section 13.2).
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -916,7 +916,7 @@ These classes ship in phase 2 with MFG's transfer capabilities, since contract s
 
 ## Model independence
 
-Every guarantee lives in the server, so models differ in how well they work, never in what they may do. An external host (any MCP 2026-07-28 client) owns its model loop while Crucible enforces every call; the hosted crew, `apps/crew`, runs Crucible's own loop inside the deployment through the public SDK (phase 2).
+Every guarantee lives in the server, so models differ in how well they work, never in what they may do. An external host owns its model loop while Crucible enforces every call; the hosted crew runs Crucible's own loop inside the deployment.
 
 **Decision D-AGT-21:** The hosted crew calls models through one Rust trait, `ModelEndpoint`, with adapters for major hosted APIs and local OpenAI-compatible servers. Crucible does not use MCP Sampling. *Why:* MCP 2026-07-28 deprecates Sampling and advises integrating with provider APIs directly [S2]; one trait keeps provider choice a configuration decision. *Rejected:* Sampling through the client (deprecated); a single provider (founder requirement and air-gapped installs).
 
@@ -1035,7 +1035,7 @@ A grant exposes at most 60 tools, and a new method needs a benchmark gain over c
 - **Browser, Tier 1.** Browser agents use the TypeScript SDK over Streamable HTTP to a team server; the page links `core/api` as Wasm for the user's own edits and runs no models.
 - **Servers.** `apps/mcp` and `apps/crew` ship as Linux containers for x86-64 and ARM64, routed by `shard_key`; Proposal CI runs in untrusted-evaluation microVMs.
 - **Air-gapped installs.** Local endpoints, bundled docs, skills and suites, qualification on site, no external MCP servers.
-- **Tier 2.** Tablets review and approve Acts with WebAuthn platform authenticators; phones never approve or merge.
+- **Tier 2.** Tablets review and approve Acts with WebAuthn platform authenticators.
 - **Snapshots.** Byte identity holds only on the pinned CI renderer image, a container with a pinned lavapipe build and fixed vector width and CPU capabilities [S61]; elsewhere ꟻLIP thresholds apply.
 - **Portability.** Python and TypeScript SDKs are pure-language; the Rust SDK builds for every Tier 1 target, `wasm32` included. Paths are repository-relative, forward-slash and NFC, and no agent function needs a GPU.
 
@@ -1047,7 +1047,7 @@ A grant exposes at most 60 tools, and a new method needs a benchmark gain over c
 | --- | --- | --- |
 | All tabs | The `api` catalog; sessions; labels at the boundary; budgets; idempotency; errors; the audit entry schema | API method |
 | ING | `SourcePatch` application in `edit.apply`; `read.*` and `inspect.describe` returning free-text spans as handles | API method |
-| KLN | Admission; `Budget` and `PriorityClass` fields; context labels on writes; Proposal fields, risk classes, auto-merge decisions; the approval page's content (D-AGT-20) | `Budget`, `Proposal` |
+| KLN | Admission; `Budget` and `PriorityClass` fields; the `release_data` Act family (D-AGT-30); context labels on writes; Proposal fields, risk classes, auto-merge decisions; the approval page's content (D-AGT-20) | `Budget`, `Proposal` |
 | UIX | `inspect.render` and `inspect.ask_render`; Proposals with plans, verifier reports, risk classes and provenance; open questions; `ActionPlan`s and approval requests; agent event streams and `session.control` | `Proposal`, `ActionPlan`, `ChangeProvenance` |
 | MFG | Physical-effect, `request_quote` and `publish_passport` Act classes, approved over posted programs and their evidence; `read.machine_data`; Proposals; the CAM programmer role (phase 2) | Act class |
 | ELX | Datasheet extraction into ELX's records, labelled `data_untrusted`; budget caps for long tool runs | Proposal |
@@ -1060,7 +1060,7 @@ A grant exposes at most 60 tools, and a new method needs a benchmark gain over c
 | From | Requirement |
 | --- | --- |
 | ING | Diagnostics with `SourcePatch` fixes; the formatter; metadata for tool schemas; doc comments and templates; `ExternalText` and free-text span classes; `CheckOutcome` and the decision rule; `#[was]`; `ING-L-FragileSelector` |
-| KLN | Evaluations with priority classes, safe points, work budgets and Aborts; labels as memo outputs and write-down at `repo`; Changes, semantic merge and diffs; span-level integrity; `RecipientRecord`s; declassification and signature records; the audit log in the transparency logs; two worker pools; lifecycle methods; Cedar |
+| KLN | Evaluations with priority classes, safe points, work budgets and Aborts; labels as memo outputs and write-down at `repo`; Changes, semantic merge and diffs; span-level integrity; `RecipientRecord`s; the `release_data` stage at commit (D-KLN-40); declassification and signature records; the audit log in the transparency logs; two worker pools; lifecycle methods; Cedar |
 | ANV | Entity inspection with provenance; `Query` resolution with ranked fixes and `RankSwap`; exact measures and sections; geometry diffs (volumes added and removed, Hausdorff deviation) |
 | FLX | Study Evaluations; regularized goals; `ErrorBudget`s and zones; plan explanations (`SolvePlan`); cost estimates; Field sampling; gradients and surrogates for `std::explore` |
 | COV | Validity envelopes; the coverage map and limit records; typed `ValidityError`s with escalation |
@@ -1069,7 +1069,7 @@ A grant exposes at most 60 tools, and a new method needs a benchmark gain over c
 | MEC | Std features with doc metadata; tolerance stacks; `SolveReport`s, `ContinuityReport`s and check Fields |
 | ELX | Electronics checks; Proposals from placement, routing, matching and decoupling tools; datasheet record templates with page references |
 | ECO | Signing for `std::agents` and `std::explore`; licence metadata; registry, event and archive behavior; importers emitting `ExternalText`; `release_data` members for archive, mirror, bundles, partners and connectors |
-| PLT | The `api` transport, `cli` exit codes and `Usage` measurement; keychain; a stdio sandbox; WebAuthn authenticators |
+| PLT | The `api` transport, `cli` exit codes and `Usage` measurement; keychain; the OS sandbox for external MCP servers on stdio; WebAuthn authenticators |
 
 ## Oracles
 

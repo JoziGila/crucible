@@ -614,7 +614,7 @@ Products with firmware fall under the EU Cyber Resilience Act, whose reporting d
 
 ### Data leaving a tenant
 
-**Decision D-KLN-40:** Every Act that moves bytes out of a tenant runs one commit-time stage, `release_data { recipient, payload, purpose, authorization }`. It checks labels against the recipient's attributes, restricted-party screening and, for `export_controlled` payloads, an export authorization record (licence, exception or exemption); it writes a deterministic watermark, an expiry and an audit entry. The family covers sending to a supplier, requesting a quote, export, Git mirror pushes, archive export and passport publication; agent writes to a branch shared with another organization run the same checks, need `share_external` and are refused to tainted contexts. *Why:* six exit paths had six sets of controls (R5-06). *Rejected:* per-path controls; exports as plain methods.
+**Decision D-KLN-40:** AGT owns the `release_data` Act family and its checks (D-AGT-30); `repo` runs that stage at `act.commit` and records it. The stage reads the labels, the `RecipientRecord`, its screening result and any export authorization record, and writes the data-package record, the deterministic watermark, the expiry and the audit entry in the commit's metadata transaction; agent writes to branches shared with another organization pass the same stage. *Why:* six exit paths had six sets of controls (R5-06), and checks committed with the records they read cannot drift from them. *Rejected:* per-path controls; exports as plain methods; a second definition of the family in this tab. (revised in round 2)
 
 A `RecipientRecord` holds the organization, endpoints (email domains, API hosts, connector ids), verification by out-of-band callback to a known contact with its date, screening result and date, clearance attributes (US-person status, country) and expiry. Recipient records are policy data: a change needs `policy:admin` plus a second person, is refused from a context with `instruction_tainted` or `data_untrusted`, and takes effect after 24 h with notice to the previous contact. The approval page flags recipients changed in the last 7 days (R5-05).
 
@@ -666,7 +666,7 @@ Roles come from identity-provider groups (`viewer`, `commenter`, `editor`, `main
 
 **Decision D-KLN-41:** Two distinct people approve each of: clearing an endpoint or recipient for `confidential` or `export_controlled` data; declassification; Cedar changes that widen access; auto-merge policy; recipient-record changes; oracle and protected-path changes; and purges. For label-related items one holds `export_officer`. *Why:* one phished or coerced administrator could otherwise export a whole ITAR program (R5-15). *Rejected:* single approvers with audit only. Policy Proposals from contexts holding untrusted data are refused, and break-glass access alerts every administrator and requires review afterwards.
 
-Protected refs take rules per pattern: no direct pushes, required checks and reviews without self-approval, signed Changes, forward-only refs and immovable tags, change orders for `Released` Items, and no agent ref updates, approvals or signatures. Agents follow AGT's label and taint model, in which a tainted session holds all three Rule of Two properties in a narrow form, supervised by review and Act approval. `repo` enforces the boundary: agents write only `agents/*` refs with the intersection of their scope and their owner's permissions, and never sign, approve, release, change policy or edit `oracles/`.
+Protected refs take rules per pattern: no direct pushes, required checks and reviews without self-approval, signed Changes, forward-only refs and immovable tags, change orders for `Released` Items, and no agent ref updates, approvals or signatures. Agents follow AGT's label and taint model. `repo` enforces the boundary: agents write only `agents/*` refs with the intersection of their scope and their owner's permissions, and never sign, approve, release, change policy or edit `oracles/`.
 
 ### Labels and export control
 
@@ -688,7 +688,7 @@ Clients keep the last checkpoint seen and verify consistency on every sync. Chec
 
 Transport is TLS 1.3, mutual between servers, workers and runners. FIPS mode routes all cryptography through a FIPS 140-3 module from PLT's provider, AWS-LC through aws-lc-rs being the leading candidate [unverified: current certificate status]; NIST moves FIPS 140-2 modules to the historical list after 21 September 2026. Release and checkpoint keys live in HSMs and are never exported.
 
-ECO owns the software supply chain (reproducible builds, SLSA provenance, Sigstore, The Update Framework, namespaces and package policy), and AGT owns prompt injection and exfiltration by agents.
+ECO owns the software supply chain, and AGT owns prompt injection and exfiltration by agents.
 
 | Threat | Controls | Residual risk |
 | --- | --- | --- |
@@ -708,7 +708,7 @@ ECO owns the software supply chain (reproducible builds, SLSA provenance, Sigsto
 | Residency | Region and operator constraints | `ResidencyDenied` | KLN-O-LABEL-1 | 2 |
 | End-to-end mode | Customer keys; recipient eligibility | Key release refused to an ineligible recipient | KLN-O-LABEL-2 | 3 |
 | Tamper-evident audit | tlog-tiles logs; witnesses | A fork is detected at the next sync | KLN-O-AUDIT-1 | 1 (signed log), 2 (witnesses) |
-| FIPS mode | FIPS 140-3 provider | Non-approved algorithms refused | KLN-O-SIG-2 | 2 |
+| FIPS mode | PLT's FIPS 140-3 provider | Non-approved algorithms refused | KLN-O-SIG-2 | 2 |
 
 ## Deployment
 
@@ -729,7 +729,7 @@ A desktop is a full peer that works offline and connects to any number of remote
 
 **Decision D-KLN-33:** The desktop is local-first: the local repository is authoritative for unpushed work, and everything except remote services (shared cache, cloud workers, relays for other machines) works offline. *Why:* engineers work on aircraft, at plants and on secure networks, and local-first makes interactive latency independent of the network. *Rejected:* a thin client over a cloud model (fails offline and air-gapped).
 
-**Decision D-KLN-44:** A browser origin runs one engine. The first tab's engine worker takes a Web Lock and owns every OPFS write handle (CAS packs, journal, SQLite on `opfs-sahpool`); other tabs run the UI only and reach that engine through a `MessagePort` brokered by PLT's service worker (D-PLT-29), and when the owner closes, the next tab takes the lock and replays the journal. *Why:* sync access handles lock files exclusively and `opfs-sahpool` fails in a second tab, so two engines would fail or corrupt state (R6-15). *Rejected:* one engine per tab; the `opfs` VFS (needs `SharedArrayBuffer`).
+**Decision D-KLN-44:** In a browser, Kiln and `repo` run only in the engine that PLT's one-engine-per-origin rule designates (D-PLT-29); it holds the CAS packs, the journal and this tab's SQLite store on `opfs-sahpool`, other tabs reach the repository through it, and a new owner replays the journal before accepting writes. *Why:* `opfs-sahpool` fails in a second tab, so two engines would fail or corrupt state (R6-15). *Rejected:* one engine per tab; the `opfs` VFS (needs `SharedArrayBuffer`). (revised in round 2)
 
 ### Sync, scale and recovery
 
@@ -752,7 +752,7 @@ Deployments ship records-of-processing entries, a DPIA template and the list of 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
 | Desktop offline | Full local repository and Kiln | Remote services report `Offline` with the queued step | KLN-O-DEPLOY-1 | 1 |
-| Browser engine ownership | Web Lock; brokered `MessagePort`; journal replay | A second engine refuses to start | KLN-O-DEPLOY-1 | 1 |
+| Browser engine ownership | PLT's one engine per origin (D-PLT-29); journal replay | A second engine refuses to start | KLN-O-DEPLOY-1 | 1 |
 | Team server and on-premises | One container; Kubernetes package | Refuses a schema mismatch with a migration hint; preflight names missing prerequisites | KLN-O-DEPLOY-2 | 1, 2 |
 | Cloud and regulated cloud | Regional cells; regulated controls | Cell failover | KLN-O-DEPLOY-3 | 2 (cloud), 3 (regulated) |
 | Air-gapped bundles | Signed bundles | Rejected on any verification failure, with the reason | KLN-O-DEPLOY-4 | 3 |
@@ -771,8 +771,8 @@ AGT owns the method catalog; this tab supplies repository behavior within contra
 | `edit.apply`, `edit.revert`, `edit.create_branch`, `edit.undo` | Edit | Own branches only |
 | `evaluate.*`, `evaluate.cancel` | Evaluate | Within budget |
 | `compare.diff`, `compare.merge_preview` | Compare | Allowed |
-| `propose.*`, `propose.change_request`, `propose.change_order`, `propose.policy`, `propose.declassify`, `propose.purge` | Propose | Drafts only; a person submits; never policy, declassification or purge |
-| Act classes `release`, `grant_deviation`, the `release_data` family and `run_rig_test` | Act | May prepare plans; never approve |
+| `propose.*`, `propose.change_request`, `propose.change_order`, `propose.policy`, `propose.declassify`, `propose.purge` | Propose | Open or draft Proposals under AGT's preconditions; merges follow risk classes and auto-merge policy (D-AGT-17); policy Proposals only from clean contexts, merged by people; declassification and purge human-only |
+| Act classes `release`, `grant_deviation`, AGT's `release_data` family and `run_rig_test` | Act | May prepare plans; never approve |
 
 **Decision D-KLN-34:** Events carry identifiers and states, never design content; receivers fetch content through `api` with their own credentials. ECO owns the envelope (CloudEvents), delivery and signing (D-ECO-12); this tab defines its event types and carries a per-repository sequence number in the CloudEvents `sequence` extension attribute. *Why:* thin events keep policy, labels and audit in one place, and one envelope serves every tab (R3-23). *Rejected:* full payloads (bypass policy); this tab's round 1 envelope and HMAC signing. (revised in round 2)
 
@@ -796,7 +796,7 @@ Checks use the measurement uncertainty MFG and FLX define, and Evidence records 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
 | `api` methods | Eight groups; labels on every response | Denials name the missing permission | KLN-O-API-1 | 1 |
-| Events | Event types; ECO's envelope; `sequence` attribute | Retries, then dead letter (ECO) | KLN-O-EVENT-1 | 2 |
+| Events | Event types; ECO's envelope and webhooks; `sequence` attribute | Retries, then dead letter (ECO) | KLN-O-EVENT-1 | 1 |
 | Evidence records | Signed; newest valid record per check; pinned by releases | `CalibrationExpired`; without a record the check stays `Undecided` | KLN-O-HW-1 | 1 (lab records), 2 |
 | Physical test Acts | Pull-based requests; transfer Acts and `run_rig_test`; site safety policy | Envelope violations abort and are recorded | KLN-O-HW-1 | 2 |
 
@@ -822,7 +822,7 @@ Checks use the measurement uncertainty MFG and FLX define, and Evidence records 
 | Long-lived signatures | ML-DSA (FIPS 204); LMS | Classical-only release signing | Dual signatures by phase 2 (D-KLN-42) | Verification under each algorithm alone |
 | PLM change control | ECR, ECO and ECN workflows with effectivity | Windchill, Teamcenter, Arena, Fusion Manage | Orders as Proposals; approvals over subjects (D-KLN-28) | Scripted-order cycle time; third-party Part 11 audit in phase 3 |
 | Variant management | 150% BOM with variant conditions | Teamcenter configurator [unverified] | `#[configuration]`, abstract interpretation, SAT (D-KLN-27) | KLN-O-PLM-5; solver time on 200 parameters |
-| Browser persistence | OPFS sync access handles; SQLite's `opfs-sahpool` VFS | Per-tab engines | One engine per origin (D-KLN-44) | KLN-O-DEPLOY-1 |
+| Browser persistence | OPFS sync access handles; SQLite's `opfs-sahpool` VFS | Per-tab engines | One engine per origin (D-PLT-29, D-KLN-44) | KLN-O-DEPLOY-1 |
 
 Vendor pages for the PLM rows gave only general claims, except Windchill's effectivity types, so those targets come from Crucible's oracles.
 
@@ -833,7 +833,7 @@ Vendor pages for the PLM rows gave only general claims, except Windchill's effec
 | Windows | Open pack files cannot be replaced; long paths; case-insensitive names | Packs replaced by rename after close; long-path APIs; paths differing only by case or normalization rejected |
 | macOS | Case- and normalization-insensitive file system; App Sandbox | The same path rule; security-scoped bookmarks (PLT) |
 | Linux | Weak `fsync` on some configurations | Write-then-rename with `fsync` on file and directory; simulation injects torn writes |
-| Browsers | Storage eviction; exclusive OPFS handles; no guaranteed SHA instructions; threads only under cross-origin isolation | Persistent storage and eager pushes; one engine per origin (D-KLN-44); `crypto.subtle` hashing; without isolation headers the engine runs on one worker and says so |
+| Browsers | Storage eviction; exclusive OPFS handles; no guaranteed SHA instructions; threads only under cross-origin isolation | Persistent storage and eager pushes; one engine per origin (D-PLT-29); `crypto.subtle` hashing; without isolation headers the engine runs on one worker and says so |
 | Browsers | Origin-bound WebCrypto keys | WebAuthn device keys where possible, re-enrolled when storage is cleared |
 | iPadOS and Android (Tier 2) | Memory pressure kills; on iPadOS Wasm runs inside WebKit (contract 7.4) | PLT's memory budget; heavy Evaluations run remotely |
 | Servers | FoundationDB operations burden; uneven conditional writes on S3-compatible stores | SQLite or PostgreSQL on team servers; ref updates through the metadata store where conditional writes are missing |
@@ -852,7 +852,7 @@ Vendor pages for the PLM rows gave only general claims, except Windchill's effec
 | COV | Evidence record lookup; label joins; human-only waivers; policy allowances and `min_evidence_level` | `CheckOutcome`, `Labels` |
 | UIX, AGT, CI | Changes, merge, diffs, Proposals, comments, review verdicts, live documents, presence, locks, span provenance; Items and where-used (R4-31) | `ChangeId`, `MergeDriver`, `Conflict` |
 | MEC, MFG, ELX | Items, revisions, definition digests, effectivity, BOM views, the 150% BOM, where-used, orders, MCOs, `Program` Items, parts policy, recipient records, Evidence pins | Item and revision records |
-| AGT | Labels and write-down at `repo`; `RecipientRecord`s; declassification and signature records; the audit log; `release_data`; lifecycle methods; Cedar | `Labels`, signature records |
+| AGT | Labels and write-down at `repo`; `RecipientRecord`s; declassification and signature records; the audit log; the `release_data` stage at commit and its records; lifecycle methods; Cedar | `Labels`, signature records |
 | ECO | Leaf inputs; Ops keyed by determinized hashes; event types with sequence numbers; data-package records; the system-of-record policy; the regulated cloud mode | Event types, Item records |
 | PLT | Grades and class acceptance; key composition; uncached Aborts; small-object packing; cost hints; what attestation signs | `DeterminismGrade`, `OpKey` |
 
@@ -864,11 +864,11 @@ Vendor pages for the PLM rows gave only general claims, except Windchill's effec
 | ANV | Graded `OpImpl`s with fidelity maps, cost estimates and two-stage keys; `Failure`s, never Aborts; `GeometryId`; canonical outputs; interference, deviation and history for merge; defeaturing and envelopes |
 | FLX | Cost models, safe points, step checkpoints; `Differentiable` operations; Fields by virtual partition; calibration tables as pinned data |
 | COV | Envelope and Material records; calibration chains as Ops; External Op keys; `DataLicence` values; `Material` composition; release checks |
-| PLT | `PoolLane`s; `det_sum`, `det_reduce`, `exact_sum`; `detmath`; the mechanism table; the dispatch rule; memory tables; storage and the journal; worker images; attestation; the crypto provider; label-aware egress |
+| PLT | `PoolLane`s; `det_sum`, `det_reduce`, `exact_sum`; `detmath`; the mechanism table; the dispatch rule; memory tables; storage and the journal; worker images; attestation; the FIPS-mode crypto provider; label-aware egress |
 | AGT | Method catalog; admission; `Budget` and `PriorityClass`; context labels; Proposal fields, risk classes and auto-merge; the approval page |
 | MEC, MFG, ELX | Parts with item numbers, `bom_item`, revision markers; MBOM rules, program subjects, as-built and QIF records, substance rules; net partitions, `bare_board_invariant`, Software items, lifecycle placeholders |
 | UIX | Comment anchors and review verdicts |
-| ECO | Event envelope, signing and delivery; determinized hashes; ERP and PLM connectors; the watermark transform; the supply chain; data packages as External inputs |
+| ECO | Event envelope, signing and webhook delivery from phase 1; determinized hashes; ERP and PLM connectors; the watermark transform; the supply chain; data packages as External inputs |
 
 ## Oracles
 
@@ -948,8 +948,8 @@ Oracles live in `oracles/kln/`, which agents can read but not write; held-out se
 | Phase | KLN contribution to the gate |
 | --- | --- |
 | 0 | Kiln core: memoization with multi-output entries, durability, cancellation, Aborts and limits, priority classes, `Differentiable` registration; local CAS with SHA-256 and canonical CBOR; Kiln's corpus green in the determinism suite; deterministic simulation; Changes and transaction log on the desktop |
-| 1 | GP1 and GP2: progressive results, drag lane, eviction and budgets; a single-node team server (SQLite or PostgreSQL) with branches, merge by source, verdicts and provenance, microVM Proposal CI, Cedar, two-person rules and a signed append-only audit log; labels and write-down; span provenance; Git export; the minimal lifecycle and EBOM; the release Act over approval subjects; `release_data` for STEP and 3MF exports; lab Evidence records; browser engine ownership. Deferred per contract 13.2: cloud SaaS and FoundationDB, live documents, encryption domains, witnessed transparency logs, the hardware runner |
-| 2 | GP3 and GP4: live documents, presence and locks; attested shared cache; cloud workers and residency; encryption domains; interference conflicts; change orders, MCOs, Part 11 signatures and dual signing; traceability; MBOM and service BOM; where-used; system-of-record connectors and parts policy; events; the hardware runner; partial clone and references; on-premises; restore verifier; privacy controls |
+| 1 | GP1 and GP2: progressive results, drag lane, eviction and budgets; a single-node team server (SQLite or PostgreSQL) with branches, merge by source, verdicts and provenance, microVM Proposal CI, Cedar, two-person rules and a signed append-only audit log; labels and write-down; span provenance; Git export; the minimal lifecycle and EBOM; the release Act over approval subjects; `release_data` for STEP and 3MF exports; events through ECO's webhooks; lab Evidence records; browser engine ownership. Deferred per contract 13.2: cloud SaaS and FoundationDB, live documents, encryption domains, witnessed transparency logs, the hardware runner |
+| 2 | GP3 and GP4: live documents, presence and locks; attested shared cache; cloud workers and residency; encryption domains; interference conflicts; change orders, MCOs, Part 11 signatures and dual signing; traceability; MBOM and service BOM; where-used; system-of-record connectors and parts policy; the hardware runner; partial clone and references; on-premises; restore verifier; privacy controls |
 | 3 | GP5: connectivity conflicts; effectivity; variants and the 150% BOM; the interchangeability check; compliance records; vulnerability where-used; supplier packages, derived views, redaction and quotas; end-to-end mode; regulated cloud; air-gapped bundles; third-party Part 11 assessment |
 | 4 | GP6: scale targets (100,000-Instance assemblies, cloud cells); evidence as Flux validation data; multi-region replication |
 | 5 and later | Certification evidence packages (DO-178C and DO-254 style traceability [unverified scope]); program-scale effectivity; federation between primes and suppliers at scale |

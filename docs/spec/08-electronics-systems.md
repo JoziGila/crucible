@@ -96,7 +96,7 @@ The `network { … }` block is a builder like `sketch { … }`. Its `connect` st
 
 Each port type declares its across and through quantities and its power expression, and the compiler checks that the expression is a power (contract section 5). A rotational port has angular velocity across and torque in J/rad through, so their product is watts under the strong angular system, while `Nm` literals stay short. Across variables are equal at a node, through variables sum to zero, and signal ports are causal.
 
-Flux compiles and integrates Networks (D-FLX-27), with dummy derivatives, per-mode compilation and consistent reinitialization at events. ELX supplies element libraries and the electrical fast path's stamps. Each element states its envelope; lumped wiring holds while a line is under a tenth of a wavelength.
+Flux compiles and integrates Networks (D-FLX-27), with dummy derivatives, per-mode compilation and consistent reinitialization at events. ELX supplies element libraries, including drivetrain elements built from MEC's gear records, and the electrical fast path's stamps. Each element states its envelope; lumped wiring holds while a line is under a tenth of a wavelength.
 
 ### Hierarchy, buses and ports
 
@@ -132,6 +132,7 @@ An unfitted part keeps its land pattern and leaves the assembly BOM and placemen
 | --- | --- | --- | --- | --- |
 | Network builder | `network { … }` returns a `Network`; `connect` is order-independent and idempotent | Type errors at compile time with fixes, such as an adapter part | ELX-O-NET-1 | 2 |
 | Domain port types | Across, through and power expression; std ports for every domain in D-ELX-15 | Power expression not a power: compile error | ELX-O-NET-3 | 2 |
+| Drivetrain elements | Gear ratio, mesh stiffness, couplings and bearing friction with rotational ports, parameterized from MEC's gear records | A gear record missing a parameter is a typed error naming it | ELX-O-NET-3 | 2 |
 | Electrical element library | Modified-nodal-analysis stamps for passive, source, switch and controlled elements, each with an envelope | Element outside its envelope flagged with the variable | ELX-O-NET-3 | 3 |
 | Hierarchy and buses | Sub-networks as features; `#[interface]` ports with roles; `Bus<N>` | Role or port mismatch is a compile error | ELX-O-NET-1 | 3 |
 | Net ties | `tie(net_a, net_b, at:)`; rule `named_net_join` | Unwaivable error naming the pin, nets and statements | ELX-O-NET-2 | 3 |
@@ -212,7 +213,7 @@ A catalog part's definition is a signed data package under `parts::<manufacturer
 | Identity | Manufacturer, part number, lifecycle, package, compliance | Plain values |
 | Pins | Name, electrical type, alternate functions, swap groups, ranges | `Pin` records with `Tol<Voltage>` |
 | Symbols and footprints | Symbol units; land patterns with pad-to-pin map and courtyard | Data modules; `Footprint` |
-| 3D body | Exact STEP body, envelope Body, keep-out Body | `Body` in CAS |
+| 3D body | Exact body from ECO's STEP reader, envelope Body, keep-out Body | `Body` in CAS |
 | Specifications | Capacitance, ratings, saturation current, θJA, with test conditions | `Quantity<D>` and `Tol<T>` |
 | Models | SPICE, Verilog-A, IBIS, IBIS-AMI, Touchstone, thermal, magnetics | References, each with a `ValidityEnvelope` |
 | Reliability and rules | Failure-rate category, derating curves, datasheet layout rules | Plain values and checks |
@@ -583,7 +584,7 @@ Solenoids and voice coils use magnetostatic force maps; piezo stacks use Flux's 
 
 A sensor has three layers: optional Flux transduction physics, such as a Hall element in a magnet's field; a behavioral element with transfer, noise, drift and quantization; and a register interface from CMSIS-SVD or SystemRDL [unverified: Renode support for both]. Its error budget is a check over the three, such as encoder angle error under 0.1°.
 
-Inverters range from averaged models to switching models with losses from catalog switching-energy curves. MEC's gear trains, couplings and bearings are lumped elements with rotational ports, so GP3's gearbox and a lumped motor form one drivetrain from phase 2.
+Inverters range from averaged models to switching models with losses from catalog switching-energy curves. ELX's drivetrain elements, parameterized from MEC's gear records, let GP3's gearbox and a lumped motor form one drivetrain from phase 2.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -594,7 +595,7 @@ Inverters range from averaged models to switching models with losses from catalo
 | Actuators | Force maps and lumped equivalents | As machine maps | ELX-O-MCH-2 | 4 |
 | Sensor models | Three layers with an error budget as a check | A missing layer leaves the budget `Undecided` | ELX-O-MCH-2 | 4 |
 | Drive models | Averaged and switching inverters with losses | Missing switching curves listed | ELX-O-MCH-2 | 4 |
-| Drivetrain coupling | MEC gear elements with ideal sources or a lumped DC motor in one Network | Port domain mismatch is a compile error | ELX-O-NET-3 | 2 |
+| Drivetrain coupling | ELX's drivetrain elements with ideal sources or a lumped DC motor in one Network | Port domain mismatch is a compile error | ELX-O-NET-3 | 2 |
 
 ## Controls and co-simulation
 
@@ -864,7 +865,7 @@ Commercial tools below (Allegro, Sigrity, Xpedition, HyperLynx, E3.series, Ansys
 | KLN and `repo` | Net partitions for the connectivity merge condition; `bare_board_invariant`; Software items and `load` bindings; lifecycle placeholders | `Network`, `Part` |
 | MEC | Bare and assembled boards (flat and folded), connector `CoordSys` values, harness connectivity and wire data, lumped motor and drive elements | `Part`, `Assembly`, `Network` |
 | MFG | The board model (layers, stackup, classes, netlist, footprints, placements, `test_point` features, rules); the DRC engine that runs MFG's rule packs; harness connectivity, wire tables and package data; DFM findings shown on board objects | `Part`, `Network` |
-| COV | Electrical use of physics models; equivalent-circuit and SPMe cells | `Material`, `Field` |
+| COV | Electrical use of physics models; equivalent-circuit and SPMe cells, swelling and stack pressure, and abuse mechanics (13.4); packs | `Material`, `Field` |
 | UIX | Canvas buffers for schematic, layout and constraint views; router and placement on the edit lane; rule declarations; `schematic_matches_network`; recorded routing and placement sessions for UIX-O-ELX-1 | `crucible:ui/canvas2d` buffers |
 | AGT | Std features with doc metadata; electronics checks for GP5; Proposals from placement, routing, matching and decoupling tools; datasheet extraction tasks | `CheckOutcome`, Proposal |
 | ECO | The board, netlist and library models; the electrical semantics of IDX, IPC-2581, ODB++, KiCad, harness, robot and systems formats; `CatalogSelection`; SysML v2 and ReqIF mappings | `Network`, `Part` |
@@ -872,15 +873,15 @@ Commercial tools below (Allegro, Sigrity, Xpedition, HyperLynx, E3.series, Ansys
 | From | ELX requires |
 | --- | --- |
 | ING | `network { … }` builder blocks with set-like accumulation; power expressions checked by the type checker; `#[configuration]`; `#[interface]` records; `Tol` correlation groups; `CatalogSelection` re-resolution; `#[waive]`; data modules with one item per line |
-| ANV | `anvil::planar::boolean`, `offset`, `distance` and `medial_axis` with conservative snapping; `anvil::fold`; `anvil::convex_decompose`; STEP body import |
+| ANV | `anvil::planar::boolean`, `offset`, `distance` and `medial_axis` with conservative snapping; `anvil::fold`; `anvil::convex_decompose` |
 | FLX | `compile_network` and `solve_dae`; block-triangular LU in `linalg`; layered sheets and quasi-static, magnetostatic, eddy-current and full-wave solvers; conjugate heat transfer; parameter-domain forms; multibody plants and their linearization; `fft_solve` through `crucible:ops/flux`; the FMI and SSP runtime; Verilog-A constructs in the kernel IR |
 | KLN and `repo` | The connectivity merge condition matched by provenance; option semantics and the 150% BOM; `Purchased` Items and the parts policy; definition digests with late-bound placeholders; untrusted-evaluation workers for External Ops; the hardware runner for rig tests |
 | MEC | Enclosure geometry, keep-ins and connector frames; joints, mates and gear records for plants and drivetrain Networks; harness routes, bundle geometry, lengths and formboard geometry; fastener selection under the parts policy |
 | MFG | Fabricator and assembler rule packs per class; output packages, panelization, stencils and test programs; DFX feedback; the harness manufacturing package |
 | COV | Dielectric, copper, magnetic and cell Materials with envelopes; physics models for EMC, thermal and cells; precision classes (D-COV-23) |
-| UIX | The Electronics preset and its keymap presets; schematic, layout and constraint-manager canvases on `crucible:ui/canvas2d` (D-UIX-27); the edit-lane client; waveform, Bode, Smith and eye charts |
+| UIX | The Electronics preset and its keymap presets; schematic, layout and constraint-manager canvases on `crucible:ui/canvas2d` (D-UIX-27); the edit-lane client; chart viewers for waveform, Bode, Smith and eye charts with time scrubbing; UIX-O-ELX-1 replaying ELX's recorded sessions |
 | AGT | Datasheet extraction with page references and labels; Proposals under a `Budget` for long tool runs |
-| ECO | Catalog service, definition packages, `parts::` publishing and the offer schema; offer connectors; every `io/` reader and writer with its phase, including IDF and STEP boards (phase 2), IDX, IPC-2581C, Gerber, ODB++, VEC, KiCad, EAGLE and the KiCad-based migration path |
+| ECO | Catalog service, definition packages, `parts::` publishing and the offer schema; offer connectors; every `io/` reader and writer with its phase, including STEP part bodies (phase 1), IDF and STEP boards (phase 2), IDX, IPC-2581C, Gerber, ODB++, VEC, KiCad, EAGLE and the KiCad-based migration path |
 | PLT | `detmath`; `linalg` for circuit LU; browser memory table; USB and serial access in `apps/platform` |
 
 ECO's format catalog owns versions, exchange levels and phases. ELX's formats are IDX V6 [14], IPC-2581C [19], Touchstone 2.1 and IBIS 8.0 [20][21], VEC 2.2.0 [22], SysML v2 [31] and ReqIF. They also include Specctra DSN and SES, URDF, SDFormat and MJCF [24][25], KiCad files, SPICE netlists and Verilog-A. KiCad's IPC API (Protocol Buffers over NNG [64]) serves as a live bridge for teams keeping some boards in KiCad during migration.
@@ -960,7 +961,7 @@ Capabilities that several tabs phase (conjugate heat transfer, electro-thermal c
 | --- | --- |
 | 0 | None; ELX has no team (contract section 13.2) |
 | 1 | No gate contribution. The two-person research track prototypes the modified-nodal-analysis engine, assembles the vendor-model corpus and settles the Verilog-A front end's scope |
-| 2 | GP3: the `network { … }` builder and rotational, translational and thermal port libraries for drivetrain Networks. Also ECO's IDF, STEP board and IDX baseline import, on an early 1.x train, for enclosure design |
+| 2 | GP3: the `network { … }` builder, rotational, translational and thermal port libraries, and drivetrain elements from MEC's gear records. Also ECO's IDF, STEP board and IDX baseline import, on an early 1.x train, for enclosure design |
 | 3 | GP5, its board fabricated and assembled from Crucible outputs alone: schematic, ERC, catalog parts and policy, footprints, stackup and classes, layout, DRC, fills, through, blind and buried vias, routing, delay tuning, test points, enclosure co-design, impedance, IR drop, board thermal, simulation with Monte Carlo and vendor models, variants, Software items and requirements. Evidence: DRC and ERC clean; MFG's fabricator DFM with zero errors; coupon impedance within ±10% and hottest part within ±5 K of measurement (targets); board data identical on every Tier 1 platform |
 | 4 | GP6: machines and drives, equivalent-circuit and SPMe cells, packs and swelling, converters and magnetics, electro-thermal coupling, controls, FMU elements, firmware-in-the-loop, HIL evidence, antennas, SI channels, PDN, EMC screening, HDI, rigid-flex, harness and VEC exchange, robot exports, reliability, SysML v2, placer and autorouter, IDX change proposals. Evidence (targets): hover endurance ±10% of flight test; motor efficiency ±5 points; pack voltage under 30 mV RMS per cell; attitude-loop overshoot and settling ±20%; antenna resonance ±2% |
 | 5 | GP7: the MEMS reduced-order model as a Network element for readout simulation. Also DFN cells (FLX), degradation, periodic steady state and harmonic balance, H∞ and MPC, FMI-LS-BUS, USD, immunity screening, RTL co-simulation, KBL import, planning hooks |
@@ -981,6 +982,7 @@ Capabilities that several tabs phase (conjugate heat transfer, electro-thermal c
 10. **Data-module size.** `Schematic` and `Layout` are Ingot data modules; if very large layouts parse too slowly, ING's binary sidecar keeps their semantics and changes only the file format.
 11. **ROS 2 target.** The LTS distribution to target needs confirmation from the release schedule [23].
 12. **Findings declined in part.** R1-39's CUDA and ROCm route waits for the phase 4 gate decision in contract section 7.5; Vulkan `SHADER_F64` server classes serve until then.
+13. **Firmware flashing outside `unattended_safe` rigs (round 3 contract request).** Contract section 7.6 names no Act for flashing a board on a bench without that policy, so a person flashes it there. Round 3 decides whether flashing becomes a physical-effect Act with an Approval over the image digest or stays manual.
 
 ## Contract change requests
 

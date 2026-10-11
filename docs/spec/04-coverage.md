@@ -153,21 +153,21 @@ Std ships detectors for common prose conditions: separation, by wall-shear sign 
 3. **A posteriori assessment.** Regime Fields from the solution are reduced per bound and mapped to zones; the worst zone per point forms the zone Field.
 4. **Composition.** Envelopes of coupled models and of the coupling itself compose by intersection.
 5. **Checks.** Each bound compiles to a check named `validity::<model>::<variable>`, with severity from the zone policy.
-6. **Display.** The UI paints the zone Field; inspection shows value, bound, basis and escalation options.
+6. **Display.** COV states each point's zone in the zone Field; UIX hatches the Extrapolated, Invalid and Unassessed zones and owns their display (UIX "Field views"). Inspection shows value, bound, basis and escalation options.
 
 Zone Fields are identical within the canonical class. Another class may differ only within twice the declared cross-class tolerance of a bound, reported as `NearBound`. Release decisions use canonical zones (R1-45). Assessment cost targets under 2% of solve time.
 
-[[DIAGRAM: Validity flow: "Inputs and Material" → "A priori screen" → "Flux solve" → "Regime variable Fields" → "Zone Field" → "Checks" → "UI paint" and "Release gate". Side arrows: screen –Refuse→ "Typed error with escalation list"; checks –Extrapolated or Flag→ "Human waiver in the change order". An "ErrorBudget" box fed by "Flux estimators (η99)", "Material uncertainty" and "Validation metric and inflation" attaches to the result Fields and tags checks with conditional_on.]]
+[[DIAGRAM: Validity flow: "Inputs and Material" → "A priori screen" → "Flux solve" → "Regime variable Fields" → "Zone Field" → "Checks" → "UIX hatching" and "Release gate". Side arrows: screen –Refuse→ "Typed error with escalation list"; checks –Extrapolated or Flag→ "Human waiver in the change order". An "ErrorBudget" box fed by "Flux estimators (η99)", "Material uncertainty" and "Validation metric and inflation" attaches to the result Fields and tags checks with conditional_on.]]
 
 ### Policy by zone
 
 | Zone | `Interactive` | `SignOff` | Release gate |
 | --- | --- | --- | --- |
 | Calibrated | Shown | Checks evaluate normally | Allowed |
-| Extrapolated | Amber overlay; model-form part inflated | Checks evaluate with the inflated part; the outcome names the zone | Human waiver in the change order |
-| Invalid, `Flag` | Hatched; dependent checks error | Dependent checks return `Error(Failure)` | Human waiver with rationale; agents cannot waive |
+| Extrapolated | Hatched by UIX; model-form part inflated | Checks evaluate with the inflated part; the outcome names the zone | Human waiver in the change order |
+| Invalid, `Flag` | Hatched by UIX; dependent checks error | Dependent checks return `Error(Failure)` | Human waiver with rationale; agents cannot waive |
 | Invalid, `Refuse` | Shown for diagnosis only | Dependent checks return `Error(Failure)` | Blocked; no waiver |
-| Unassessed | Missing-input notice | Dependent checks return `Error(Failure)` | Blocked until the input or a documented default exists |
+| Unassessed | Hatched by UIX with a missing-input notice | Dependent checks return `Error(Failure)` | Blocked until the input or a documented default exists |
 
 **Decision D-COV-5:** Validity bounds compile to ordinary checks, and validity zones are a Field. *Why:* checks already carry severity, CI, reports and review, and Fields already paint on geometry (composition over special cases). *Rejected:* a separate warnings channel (a parallel abstraction); clamping results to the envelope (silent).
 

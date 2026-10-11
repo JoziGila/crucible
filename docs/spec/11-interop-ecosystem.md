@@ -164,9 +164,10 @@ Every row shares one contract (`read`, `write` and `probe` at its level) and the
 | Parasolid; ACIS | Vendor formats | R/W | Structure, exact geometry | License | 2 | ANV |
 | CATIA V5 and 3D XML; NX; Creo; SOLIDWORKS; Inventor | Per translator | R | Structure, PMI where supported | License | 2 | ANV, MEC |
 | Solid Edge; Rhino | Per translator | R (Rhino R/W) | Structure | License | 3 | ANV |
+| PDF, SVG; PDF/A | [unverified versions]; ISO 19005 [unverified part] | W | Visual: drawing sheets | Build | 1 (GP1 drawings) | MEC |
 | DXF; DWG | [unverified]; vendor format | R/W | Geometry, 2D | Build (DXF); License (DWG) | 2; 3 | MEC |
 
-Crucible never writes native proprietary CAD formats. Exchange back uses AP242 with semantic PMI and persistent ids, tested by the CAx-IF for "ping-pong" iteration [CAx-IF 58J], or licensed Parasolid and JT.
+Apart from DWG drawings, Crucible never writes native proprietary CAD formats. Exchange back uses AP242 with semantic PMI and persistent ids, tested by the CAx-IF for "ping-pong" iteration [CAx-IF 58J], or licensed Parasolid and JT.
 
 ### Mesh, additive manufacturing, scans and buildings
 
@@ -197,6 +198,7 @@ ELX owns the board model, MFG the factory handoff (package choice, panelization,
 | KiCad files | S-expression formats [KiCad formats] | R; W of libraries | Semantics | Build | 3 |
 | EDIF; IPC-D-356; Specctra DSN and SES; placements | EDIF 2 0 0 [unverified]; others per ELX | W (SES R) | Connectivity, test, routing, placement | Build | 3 |
 | Touchstone, IBIS; VEC | 2.1 and 8.0; VEC 2.2.0, per ELX | R/W | Catalog-part models; harnesses | Build | 3; 4 |
+| KBL | [unverified version], per ELX | R | Harnesses | Build | 5 |
 | SPICE netlists and models; Verilog-A | Per ELX [unverified dialects] | R | Circuits and device models (Verilog-A by D-ELX-14) | Build | 3 |
 
 Proprietary ECAD designs migrate through KiCad's importers (D-ECO-31).
@@ -220,11 +222,8 @@ FLX owns the FMI and SSP runtime (D-FLX-30), and ECO owns FMU packaging, FMI-LS-
 
 ### Manufacturing, metrology, systems and materials
 
-MFG owns manufacturing semantics, ELX systems and robotics, COV materials.
-
 | Format | Version | R/W | Level | Phase | Owner |
 | --- | --- | --- | --- | --- | --- |
-| G-code | ISO 6983-1:2009 per MFG; dialects per `Controller` | W; R to verify and migrate | As the dialect allows | 2 | MFG |
 | Tool data | ISO 13399 inside vendor catalog packages; DIN 4000 mapping [unverified]; documented CAM tool libraries [unverified which] | R | Tool Assemblies; holders as collision Bodies | 2 | MFG |
 | Presetter readings | Per connector | R | Length, radius, runout as signed External inputs by tool serial | 2 | MFG |
 | QIF | QIF 3.0, ISO 23952:2020; DMSC Model-Based Characteristics 1.0 an ANSI standard since 24 June 2026 [QIF site] | R/W | Characteristics, plans, results | 2 (characteristics), 3 | MFG |
@@ -235,7 +234,7 @@ MFG owns manufacturing semantics, ELX systems and robotics, COV materials.
 | MatML; ISO 10303-235 | [unverified]; ISO 10303-235:2019, as COV states | R/W | Property and test records with units and sources | 2 | COV |
 | GDSII; OASIS | [unverified versions] | R/W | Mask and package layer geometry (D-COV-9) | 5 | COV, MEC |
 
-All rows here are Build. Crucible never reverse-engineers a proprietary format or imports feature history (D-ECO-25).
+All rows here are Build, and Crucible never reverse-engineers a proprietary format. G-code has no `io/` translator: MFG's post engine writes it through the `crucible:mfg` `post-processor` world (D-MFG-5), and MFG's `verify_nc` reads it.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -244,6 +243,7 @@ All rows here are Build. Crucible never reverse-engineers a proprietary format o
 | STEP layer 3: AP242 mapping | Geometry, structure, validation properties, PMI write; AP203 and AP214 read | Report entries per entity | ECO-O-1, ECO-O-2 | 1 |
 | AP242 PMI read, persistent ids, tessellation | Per recommended practice | Report entries | ECO-O-2, ECO-O-24 | 2 |
 | 3MF and STL | Core, Production, Materials, Beam Lattice | `ExportError` for unsupported extensions | ECO-O-16 | 1 |
+| Drawing writers | MEC's sheets as PDF, SVG and PDF/A; DXF; licensed DWG | `ExportError` listing what cannot be carried | ECO-O-3, ECO-O-4 | 1, 2 (DXF), 3 (DWG) |
 | Licensed MCAD translators | Mechanical table rows | Unqualified versions flagged | ECO-O-15 | 2 |
 | Board exchange for mechanical teams | IDF, STEP boards and IDX baselines to a read-only board Part, which MEC's enclosure checks (clearance, cut-outs, keep-ins) use | `ImportError` naming the missing data | ECO-O-26 | 2 |
 | Board fabrication and assembly writers | Gerber, XNC, IPC-2581C, ODB++, IPC-D-356, placements from ELX's model | `ExportError` listing missing board data | ECO-O-25 | 3 |
@@ -318,7 +318,7 @@ Wasm components are CPU-only; GPU work lives in operations, which they call thro
 | Context | Runs | May import | Never imports | Output enters |
 | --- | --- | --- | --- | --- |
 | Evaluation | Inside Kiln as an Op | `crucible:ops`, `geom`, `field`, `model`, `host`, type-only `crucible:` interfaces | Every `wasi:` interface, `crucible:api` | Kiln, under the Op's key |
-| Panel | In the app, within UIX's frame budget | `crucible:api/read`; `crucible:api/edit` when granted | Clocks, randomness, files, network | `api` calls; edits record the package in `ChangeProvenance` |
+| Panel | Out of process if third-party (contract section 7.4), within UIX's frame budget | `crucible:api/read`; `crucible:api/edit` when granted | Clocks, randomness, files, network | `api` calls; edits record the package in `ChangeProvenance` |
 | Tool | In a tool runner | `crucible:api`, `wasi:filesystem` on granted directories, `wasi:clocks`, `wasi:random`, `crucible:tool/process` | Network unless granted as a connector | External inputs, `api` calls |
 | Connector | On a team server or desktop | `crucible:api` scoped to its record types, `wasi:http` to declared hosts, `wasi:clocks`, `wasi:random`, `crucible:connect` | Files, process spawning | External inputs, events, Acts |
 
@@ -337,9 +337,9 @@ PLT applies Wasmtime security releases within 7 days on every supported line (D-
 | iPadOS | WebKit, with Pulley as fallback (contract section 7.4); std and first-party Wasm components inside the app binary |
 | Android tablets | Wasmtime, which rates `aarch64-linux-android` Tier 3 [Wasmtime tiers]; Google Play allows downloaded code run by a virtual machine or interpreter with indirect access to Android APIs [Google Play DNA], so no world imports an Android API |
 
-Tool and connector Wasm components run locally on desktops and on the server for browsers and tablets; only the location differs.
+Tool and connector Wasm components run on the server for browsers and tablets.
 
-On iPadOS, registry packages appear only as dependencies of an opened design, since guideline 3.2.2(i) rejects store-like catalogs of extensions [App Review]. The registry meets guideline 4.7 for them with an index and universal links (4.7.4), reporting and blocking (4.7.1) and age ratings (4.7.5), and paid packages follow guideline 3.1. First-launch downloads show their size (4.2.3(ii)), and designs evaluate remotely if review rejects downloads.
+On iPadOS, registry packages appear only as dependencies of an opened design, since guideline 3.2.2(i) rejects store-like catalogs of extensions [App Review]. The registry meets guideline 4.7 for them with an index and universal links (4.7.4), reporting and blocking (4.7.1) and age ratings (4.7.5), and paid packages follow guideline 3.1. First-launch downloads show their size (4.2.3(ii)).
 
 **Decision D-ECO-10:** The registry ships determinized core modules plus a data description of each Wasm component, never per-component JavaScript. Browsers instantiate them through one first-party, generic Wasm component runtime that lifts and lowers the Canonical ABI from that description. Third-party Wasm components run in a separate opaque-origin sandboxed worker with no OPFS, cookies or credentials, exchanging data by `postMessage`, and an oracle compares every browser result with the native one. *Why:* generated glue would run in the engine worker's origin, with access to every local repository, authenticated `fetch` and WebCrypto keys, so the glue, not Wasm, would be the boundary; a fixed runtime is reviewed once. *Rejected:* per-component ES modules as jco generates them [jco]; transpiling in the client (the same glue, more variance); Pulley compiled to Wasm (an interpreter inside an engine). (revised in round 2)
 
@@ -358,7 +358,7 @@ Each package is versioned with SemVer [WIT guide] and published in the registry.
 | `crucible:host` | `diagnostics`, `progress` (write-only), `cas`, `parallel` | | KLN |
 | `crucible:io` | `types`, `read`, `write` | `importer`, `exporter` | ECO |
 | `crucible:physics`; `crucible:material` | `solve`; `model` | `solver`; `constitutive` | COV, FLX |
-| `crucible:mfg` | `strategy`, `post` | `toolpath-strategy`, `post-processor` | MFG |
+| `crucible:mfg` | `strategy`, `post` | `toolpath-strategy`, `post-processor`, and MFG's nesting, packing, slicer and recognizer worlds | MFG |
 | `crucible:ui` | `types`, `view`, `canvas-host`, `canvas` | `panel`, `canvas2d` | UIX |
 | `crucible:api` | One interface per method group | | AGT |
 | `crucible:tool` | `process`, `external` | `driver` | ECO, PLT |
@@ -427,9 +427,9 @@ An update that adds a capability or changes the signer waits as a Proposal while
 
 ### Determinism and limits
 
-Contract section 7.4 states the rules. PLT owns the determinizer, its fuel table and its overhead targets: scalar-float Wasm components ≤ 10%, SIMD-float ≤ 25%, metering ≤ 10%. ECO adds three rules for Wasm components:
+Contract section 7.4 states the rules, and PLT owns the determinizer and its overhead table. ECO adds three rules for Wasm components:
 
-1. Randomness comes only from a seed that Kiln derives from the Op's inputs.
+1. Randomness arrives only as an explicit `seed` argument from an Ingot `Rng`; ING owns randomness.
 2. `OutOfFuel`, `StackLimit` and `MemoryLimit` are cached `Failure`s; host resource errors and cancellation are Aborts.
 3. Data parallelism uses `crucible:host/parallel`, which returns outputs in input order.
 
@@ -468,7 +468,7 @@ WASI 0.3.0 shipped on 11 June 2026 and 0.3.1 on 11 August 2026, with no date for
 | `crucible:ops` | Generated `anvil` and `flux` interfaces; recorded Op dependencies | `OpVersionRetired` with an upgrade Proposal | ECO-O-6 | 1 (`anvil`), 2 (`flux`) |
 | Process isolation | Third-party Wasm components in sandboxed workers; per (tenant, label scope) on servers | Worker loss is an Abort | ECO-O-8 | 1 |
 | Capability grants and flow rule | Scoped grants; at most one of labelled reads, egress and file writes | `CapabilityDenied { capability, package, fix }` | ECO-O-8 | 1 |
-| Determinized execution and limits | Contract section 7.4; seeds from inputs; limits above | Limit failures as cached `Failure`s | ECO-O-6, ECO-O-7 | 0 |
+| Determinized execution and limits | Contract section 7.4; explicit seeds (ING); limits above | Limit failures as cached `Failure`s | ECO-O-6, ECO-O-7 | 0 |
 | Browser Wasm component runtime | Generic runtime; third-party Wasm components in an opaque-origin worker | Without isolation, third-party Wasm components run remotely | ECO-O-6, ECO-O-8 | 1 |
 | Tablet execution | WebKit with bundled std; Android without Android API imports | Rejected downloads evaluate remotely | ECO-O-6 | 3 |
 | WIT versioning | Additive minors, deprecation window, adapters, retention | A removal in a minor is refused | ECO-O-10 | 0 |
@@ -507,13 +507,13 @@ Every method is `<group>.<name>` in the contract's eight groups (section 7.6). E
 
 Publishing, yanking, deprecating and every export are Act classes (AGT).
 
-The `crucible` CLI maps subcommands one-to-one onto methods, with aliases for daily work. For licensed formats, `crucible import` first records the External input. `crucible update parts` refreshes only catalog-part data pins and lists every substitution a `CatalogSelection` makes, and `crucible publish` is an Act.
+The `crucible` CLI maps subcommands one-to-one onto methods, with aliases for daily work. For licensed formats, `crucible import` first records the External input. `crucible update parts` refreshes only catalog-part data pins and lists every substitution a `CatalogSelection` makes.
 
 Output is human-readable, or canonical JSON with `--json`. Exit codes are 0 success, 1 Check failures, 2 usage, 3 build error, 4 authorization and 5 infrastructure, and `--offline` turns any network need into a typed error.
 
 ### Events and webhooks
 
-**Decision D-ECO-12:** ECO owns the event envelope, delivery and signing for every tab. Events use the CloudEvents 1.0 envelope; webhooks follow the Standard Webhooks specification, signed with Ed25519 (`v1a`) by default; payloads are thin: identifiers, hashes and a link, never design content. Other tabs define event types, and KLN's per-repository sequence number travels as the CloudEvents extension attribute `seq`. *Why:* both are open specifications with receiver libraries; asymmetric signatures let receivers verify without a secret that could forge events; thin payloads mean a leaked endpoint reveals no design data. *Rejected:* a custom envelope (no tooling); HMAC-only signing (every receiver holds a forging secret); fat payloads (data bypasses access control); per-tab envelopes (round 1, where two tabs contradicted each other). (revised in round 2)
+**Decision D-ECO-12:** ECO owns the event envelope, delivery and signing for every tab. Events use the CloudEvents 1.0 envelope; webhooks follow the Standard Webhooks specification, signed with Ed25519 (`v1a`) by default; payloads are thin: identifiers, hashes and a link, never design content. Other tabs define event types, and KLN's per-repository sequence number travels, zero-padded, as the `sequence` attribute of the CloudEvents sequence extension, which orders values as strings [CloudEvents sequence]. *Why:* both are open specifications with receiver libraries; asymmetric signatures let receivers verify without a secret that could forge events; thin payloads mean a leaked endpoint reveals no design data. *Rejected:* a custom envelope (no tooling); HMAC-only signing (every receiver holds a forging secret); fat payloads (data bypasses access control); per-tab envelopes (round 1, where two tabs contradicted each other). (revised in round 2)
 
 CloudEvents requires `id`, `source`, `specversion` and `type`, with `source` plus `id` unique, and extension names in lowercase letters and digits [CloudEvents]. `source` is the repository, registry or catalog URI and `type` a reverse-DNS name such as `dev.crucible.proposal.opened` [unverified: domain]. KLN defines repository, lifecycle and evaluation types, AGT the Act types, and ECO registry and catalog types such as `package.yanked` and `offer.changed`.
 
@@ -521,7 +521,7 @@ CloudEvents requires `id`, `source`, `specversion` and `type`, with `source` plu
 2. **Push.** Deliveries carry `webhook-id`, `webhook-timestamp` and `webhook-signature` over id, timestamp and payload; HMAC-SHA256 (`v1`) serves receivers that cannot verify Ed25519 [Standard Webhooks spec]. Receivers reject timestamps over 5 minutes old.
 3. **At least once.** Receivers deduplicate by `webhook-id`, equal to the CloudEvents `id`. Retries use exponential backoff with jitter over about three days, following the specification's example [Standard Webhooks spec], then a dead-letter queue that administrators see.
 4. **SSRF protection.** URLs must use HTTPS and must not resolve to loopback, link-local or private ranges unless a self-hosted policy names internal hosts [Standard Webhooks].
-5. **People only.** Only people create subscriptions; agents receive the same events as MCP resource subscriptions (AGT).
+5. **People only.** Agents receive the same events as MCP resource subscriptions (AGT).
 
 ### Exit surfaces
 
@@ -565,7 +565,7 @@ External approvals return as signed External inputs naming the Crucible content 
 
 ## Package registry
 
-The registry distributes every package, from std and translators to solvers, panels, templates and catalog-part definitions. The core team publishes through it like anyone else (Principle 1).
+The registry distributes every package, from std and translators to solvers, panels, templates and catalog-part definitions.
 
 Phase 1 ships a signed first-party index of std, `crucible::` packages and translators, built by the hermetic builder and served as TUF targets. The public registry with trusted publishing opens in phase 2 (contract section 13.2).
 
@@ -605,7 +605,7 @@ secrets = ["acme_api_token"]
 
 For each resolved package the lockfile records name, exact version, registry and granted capabilities. It also records the SHA-256 of the source archive and of each determinized binary, and the signer identity (OIDC issuer and subject) with the signature bundle's digest. Assets and External inputs are pinned too.
 
-A signer change needs human approval like a capability escalation, and an entry whose registry changes fails resolution. Resolution uses PubGrub, whose derivation tree becomes a typed explanation with fixes [PubGrub].
+An entry whose registry changes fails resolution. Resolution uses PubGrub, whose derivation tree becomes a typed explanation with fixes [PubGrub].
 
 At publish the registry measures three kinds of change against the previous version. Incompatible interface changes are refused in minors and patches, as cargo-semver-checks does for Rust [cargo-semver-checks]. Changed outputs of examples and test designs are recorded, and so are changed `EntityId`s that public features produce on test designs.
 
@@ -642,11 +642,11 @@ The pipeline runs in order, and a failure at any step returns a typed error with
 
 Every signature record carries an algorithm id. From phase 2, as contract section 7.8 requires, the TUF root and targets, log checkpoints and registry provenance are dual-signed: a classical signature plus ML-DSA-87, standardized in FIPS 204 on 13 August 2024 [FIPS 204], or LMS for release signing.
 
-Long-retention records are re-timestamped before an algorithm retires, and a CNSA 2.0 profile uses only those algorithms [unverified: NSA dates]. A key ceremony gives the TUF root and namespace-policy keys to keyholders at least half of whom are not company employees (D-ECO-22). Air-gapped registries run their own Fulcio and Rekor or organization keys [unverified: Sigstore key-based mode].
+Long-retention records are re-timestamped before an algorithm retires, and a CNSA 2.0 profile uses only those algorithms [unverified: NSA dates]. The TUF root keys follow D-ECO-22's key ceremony. Air-gapped registries run their own Fulcio and Rekor or organization keys [unverified: Sigstore key-based mode].
 
 ### Scanning, advisories and removal
 
-Every publish runs scans: a capability and signer diff shown to dependents, import validation, network targets, secrets, dependency advisories and malware heuristics. A malware finding quarantines the version for human review within 24 h (target). Paid packages' escrowed source is scanned privately before listing, and no code runs at install.
+Every publish runs scans: a capability and signer diff shown to dependents, import validation, network targets, secrets, dependency advisories and malware heuristics. A malware finding quarantines the version for human review within 24 h (target), and no code runs at install.
 
 Advisories use OSV 1.9.1 [OSV]. The **correctness advisory** names an operation behavior version, translator or package version whose outputs were wrong. Lockfiles pin every version, so `repo` lists exactly the released designs that used it.
 
@@ -715,7 +715,7 @@ Badges link to the dated record of the checks that ran and never claim quality.
 | Export | A declared `export_classification` (ECCN, EAR99 or not subject, with the basis); screened purchases; comprehensively sanctioned jurisdictions geo-restricted |
 | Pricing | Per seat, organization or usage, metered outside evaluation; a cap never stops a pinned design from building |
 
-Suppliers publish catalog-part definitions as signed data packages (D-ECO-18) and offers through a connector. One `offer` record covers price breaks, stock, lead time, minimum quantity, packaging and validity, and a catalog part's key is (manufacturer namespace, manufacturer part number).
+Suppliers publish offers through a connector (D-ECO-18); one `offer` record covers price breaks, stock, lead time, minimum quantity, packaging and validity, and a catalog part's key is (manufacturer namespace, manufacturer part number).
 
 Manufacturing partners (machine shops, sheet-metal shops, print services, board fabricators and assemblers) implement `crucible:connect/partner`, with async `request-quote`, `place-order` and `get-status`. A quote request names a release by its signed tag and carries content-addressed Files. It therefore runs only inside a `request_quote` Act of the `release_data` family (D-ECO-28), and orders run inside `order` Acts.
 
@@ -803,7 +803,7 @@ AGT specifies agent-facing references (D-AGT-23) and UIX tutorials verified by s
 
 **Decision D-ECO-24:** Documentation is organized by the four Diátaxis types: tutorials, how-to guides, reference and explanation [Diátaxis]. Reference is generated, and every code sample in every type is a tested example. *Why:* the four types serve four distinct needs [Diátaxis], so each page does one job; generated reference cannot drift from the code. *Rejected:* a single manual (mixes learning and lookup); a wiki (unversioned, untested).
 
-Tutorials follow each golden product from sketch to release, and how-to guides cover tasks such as running a private registry. Reference covers methods, std, worlds, error codes, manifest keys, the CLI and each catalog format, and explanation covers concepts.
+Tutorials follow each golden product from sketch to release, and how-to guides cover tasks such as running a private registry. Reference covers methods, std, worlds, error codes, manifest keys, the CLI and each catalog format.
 
 Every code block builds with its Checks passing, and every public item has a doc comment, an example and units. Pages name their versions and ship with the desktop app for offline use. The registry generates reference documentation for every package, and a failing `examples::` package (MIT-0) blocks a std release.
 
@@ -930,8 +930,8 @@ Deviations, with reasons:
 | ING | Registry and signing; publish-time interface diffs (D-ECO-14); determinized Wasm components (D-ECO-10); the RFC process |
 | KLN | Determinized hashes for keys; the event envelope, signing and delivery; ERP, MES and PLM connectors; the software supply chain; connector feeds as External inputs; the watermark transform |
 | AGT | Signing for `std::agents` and `std::explore`; registry, event and archive behavior; importers returning `ExternalText`; licence metadata; partner connectors; `release_data` members for every exit path |
-| MEC | IDF and STEP board readers; AP242 and QIF translators; standards data packages |
-| ELX | Board readers and writers; EAGLE and KiCad-based migration; `parts::` publishing, the offer schema and offer connectors |
+| MEC | IDF and STEP board readers; AP242 and QIF translators; PDF, SVG, PDF/A, DXF and DWG writers; standards data packages |
+| ELX | Board and harness readers and writers; EAGLE and KiCad-based migration; `parts::` publishing, the offer schema and offer connectors |
 | MFG | Every `io/` writer and its phase (3MF, IPC-2581, Gerber, ODB++, QIF, STEP-NC, USD); tool-data readers; the `erp-connector` world; NC migration |
 | FLX, COV | Hosting for solver and constitutive Wasm components; the publish pipeline and package metadata for the coverage map; FMU and SSP packaging with FMI-LS-WASM; codecs for Field formats, IFC 4.3, GDSII, OASIS, MatML and ISO 10303-235 |
 | UIX | The registry (a signed first-party index in phase 1); package metadata, capability descriptions and badges; licensed translators as external tools |
@@ -983,7 +983,7 @@ ECO's oracles live in `oracles/eco/`, readable but not writable by agents; held-
 | Phase | ECO contribution to the gate |
 | --- | --- |
 | 0 | ECO-O-6 and ECO-O-7 green in the determinism suite; `crucible:` packages at 0.x, none frozen before names clear; STEP layer 1; licence and contribution checks; the charter's binding stewardship trigger, key ceremony and trademark clearance commissioned; Rust SDK |
-| 1 | GP1: AP242 with geometry, structure, validation properties and semantic PMI passing ECO-O-1 to ECO-O-4, in a release bundle. GP2: 3MF with beam lattice passing consortium validation. Also AP203 and AP214 read, STL, the signed first-party index, the first CAx-IF round, the Python SDK, CLI, events, archive and docs. Deferred per contract section 13.2: the public registry and trusted publishing |
+| 1 | GP1: AP242 with geometry, structure, validation properties and semantic PMI passing ECO-O-1 to ECO-O-4, in a release bundle. GP2: 3MF with beam lattice passing consortium validation. Also GP1's PDF, SVG and PDF/A drawings, AP203 and AP214 read, STL, the signed first-party index, the first CAx-IF round, the Python SDK, CLI, events and webhooks, archive and docs |
 | 2 | GP3 and GP4 exchanged with an external CAD system by AP242 round trip with persistent ids; GP3's legacy programs and tool libraries imported for MFG. Also licensed translators, board exchange, the public registry, enterprise connectors, the TypeScript SDK, the C ABI and dual signatures |
 | 3 | GP5's board fabricated and assembled from Crucible's Gerber X2, XNC, IPC-2581C or ODB++ and placement outputs; FMI import; ECAD migration; paid packages and certified partners |
 | 4 | GP6 FE and CFD models exchanged with an external solver; FMU export and SSP (contract section 13.4); robot descriptions; IDX change proposals |
@@ -1072,6 +1072,7 @@ Pages opened during research for this tab.
 - [OSV] OSV schema: https://ossf.github.io/osv-schema/
 - [Maven Central namespaces] Maven Central namespace registration: https://central.sonatype.org/register/namespace/
 - [CloudEvents] CloudEvents specification: https://github.com/cloudevents/spec/blob/main/cloudevents/spec.md
+- [CloudEvents sequence] CloudEvents sequence extension: https://github.com/cloudevents/spec/blob/main/cloudevents/extensions/sequence.md
 - [Standard Webhooks] Standard Webhooks home: https://www.standardwebhooks.com/
 - [Standard Webhooks spec] Standard Webhooks specification: https://github.com/standard-webhooks/standard-webhooks/blob/main/spec/standard-webhooks.md
 - [Apache-2.0] Apache License 2.0: https://www.apache.org/licenses/LICENSE-2.0
