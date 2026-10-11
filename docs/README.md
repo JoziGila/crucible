@@ -43,7 +43,7 @@ Round 2 is in progress: each tab is revised against contract v4.2 and the review
 | AGT | v2 | 17,900 | 42 (7) | No |
 | UIX | v2 | 17,900 | 42 (3) | No |
 | ECO | v2 | 17,900 | 48 (1) | No |
-| PLT | v1 | 24,100 | 61 (2) | No |
+| PLT | v2 | 17,900 | 61 (2) | No |
 | Adversarial review | not written | | | No |
 | Decisions log | not compiled | | | No |
 
