@@ -27,25 +27,25 @@ The published view is the Claude Doc [Crucible — Platform Spec](https://claude
 
 ## Status
 
-Round 2 is in progress: each tab is revised against the contract and the review findings that target it.
+Round 2 is closed (tag `round-2`): every tab is revised against contract v5 and the review findings that target it, the tabs agree with each other, and every tab is published in the Claude Doc.
 
 | Tab | Version | Words excluding Sources | Review findings (Critical) | In the doc |
 | --- | --- | --- | --- | --- |
-| Overview | v2 | 6,600 | n/a | Pre-review version |
-| ING | v2 | 19,600 | 47 (6) | No |
-| ANV | v2 | 19,900 | 61 (8) | v2 |
-| FLX | v2 | 17,900 | 66 (7) | No |
-| COV | v2 | 17,800 | 33 (5) | No |
-| KLN | v2 | 17,900 | 79 (12) | No |
-| MEC | v2 | 17,900 | 45 (2) | No |
-| MFG | v2 | 17,800 | 41 (3) | No |
-| ELX | v2 | 17,300 | 36 (4) | No |
-| AGT | v2 | 17,900 | 42 (7) | No |
-| UIX | v2 | 17,900 | 42 (3) | No |
-| ECO | v2 | 17,900 | 48 (1) | No |
-| PLT | v2 | 17,900 | 61 (2) | No |
-| Adversarial review | v1 | 7,800 | n/a | No |
-| Decisions log | v1 | 380 decisions | n/a | No |
+| Overview | v2 | 6,600 | n/a | v2 |
+| ING | v2 | 19,600 | 47 (6) | v2 |
+| ANV | v2 | 20,000 | 61 (8) | v2 |
+| FLX | v2 | 17,900 | 66 (7) | v2 |
+| COV | v2 | 17,800 | 33 (5) | v2 |
+| KLN | v2 | 17,900 | 79 (12) | v2 |
+| MEC | v2 | 17,900 | 45 (2) | v2 |
+| MFG | v2 | 17,800 | 41 (3) | v2 |
+| ELX | v2 | 17,400 | 36 (4) | v2 |
+| AGT | v2 | 17,800 | 42 (7) | v2 |
+| UIX | v2 | 17,900 | 42 (3) | v2 |
+| ECO | v2 | 17,900 | 48 (1) | v2 |
+| PLT | v2 | 17,800 | 61 (2) | v2 |
+| Adversarial review | v1 | 7,800 | n/a | v1 |
+| Decisions log | v1 | 380 decisions | n/a | v1 |
 
 A finding can target several tabs, so the column sums to more than the 295 findings.
 
@@ -66,6 +66,7 @@ tools/                   check.py (spec check), extract.py (cross-tab extracts),
 | `round-1` | First drafts of the twelve subsystem tabs under contract v3 |
 | `review` | Six adversarial reviews: 295 findings, 23 of them Critical |
 | `contract-v4` | Contract v4 with the review rulings, the round 2 brief and the revision packets |
+| `round-2` | Contract v5, all twelve tabs revised and consistent, the overview, the adversarial review and the decisions log, all published |
 
 `git show round-1:docs/spec/<file>.md` prints a tab's first draft.
 
