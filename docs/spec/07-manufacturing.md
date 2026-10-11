@@ -60,7 +60,7 @@ pub enum MfgError {
 }
 ```
 
-Each `Fix` is a typed edit, and no strategy substitutes a tool, direction or material silently. `BudgetExhausted` is a cacheable `Failure`, because a search budget is an argument; an Evaluation's cost budget running out is an Abort (contract 7.2).
+Each `Fix` is a typed edit, and no strategy substitutes a tool, direction or material silently. `BudgetExhausted` is a cacheable `Failure`, because a search budget is an argument; an Evaluation's `Budget` (AGT) running out is an Abort (contract 7.2).
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -77,7 +77,7 @@ Simulation proves a program consistent with the model; this path binds the model
 
 1. CI simulates the posted NC text and runs every machining oracle on it.
 2. A named person approves the program subject: the posted programs, machine and controller versions, tool table, setup sheet, simulation verdicts and `BlockMap`.
-3. The program releases as an Item of kind `Program` through KLN's manufacturing change order: `Prototype`, then `Proven` after a passing first article, then `Released`.
+3. The program releases as an Item (contract 2) through KLN's manufacturing change order, in KLN's states `Prototype`, `Proven` after a passing first article and `Released` (D-KLN-38).
 4. An assigned person approves a `send_to_machine` Act; the gateway checks the hash and offsets (D-MFG-24).
 5. A person at the machine loads the program and starts the cycle, with tool-length checks and reduced override as the setup sheet says.
 
@@ -90,9 +90,9 @@ Simulation proves a program consistent with the model; this path binds the model
 | `store_machine_job` | OPC UA `Store` of a job order | `Start`, `StoreAndStart`, `Resume` and `RevokeStart` never called |
 | `send_print_job` | Uploads a print job | Upload only |
 | `start_print` | Starts a print | Contract 7.6 conditions; off by default per site |
-| Machine data collection | Status, offsets, programs, alarms | A Read method, never an Act |
+| `read.machine_data` | Status, offsets, programs, alarms | A Read method (AGT), never an Act |
 
-ISA-95 Job Control defines eleven job-order methods, among them `StoreAndStart`, `Start`, `RevokeStart` and `Resume` [ISA-95 Job Control]. Crucible calls only `Store`, `Update`, `Cancel` and `Clear`, on jobs it stored. Physical-effect Acts are approvable on desktops and tablets, never phones (contract 7.6), and `unattended_safe` never covers machine tools, robots or lasers (CCR-MFG-6).
+`run_rig_test`, the sixth physical-effect Act, serves hardware CI (contract 7.1). ISA-95 Job Control defines eleven job-order methods, among them `StoreAndStart`, `Start`, `RevokeStart` and `Resume` [ISA-95 Job Control]. Crucible calls `Store` only inside `store_machine_job`, and `Cancel` and `Clear` only on jobs it stored, to revoke them before start; a changed job is revoked and stored again. Physical-effect Acts are approvable on desktops and tablets, never phones (contract 7.6), and `unattended_safe` never covers machine tools, robots or lasers (contract 7.1).
 
 The EU Machinery Regulation applies from 20 January 2027 with cyber-safety provisions for safety-relevant software [EU Machinery]. MFG's safety documentation states that Crucible issues no motion command.
 
@@ -105,7 +105,7 @@ Offsets come from MTConnect `ToolOffsets` and `WorkOffsets`, OPC UA, a vendor co
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
 | Program subject | `ProgramSubject { programs, machine, controller, tool_table, setup_sheet, verdicts, block_map }`; Approvals sign its `ObjectId` | Changes inside the subject void the Approval; changes outside do not | MFG-O-SAFE-1 | 2 |
-| Manufacturing change lane | Programs, routings, fixtures, instructions and inspection plans release through KLN's manufacturing change order | A change to an EBOM definition is rejected | MFG-O-SAFE-1 | 2 |
+| Manufacturing change lane | MBOM, programs, routings, fixtures, work instructions and inspection plans release through KLN's manufacturing change order (D-KLN-38) | A change to an EBOM definition is rejected | MFG-O-SAFE-1 | 2 |
 | Change impact | A design change invalidates exactly the programs whose targets or setups changed | None; the set is reported | MFG-O-SAFE-1 | 2 |
 | Transfer Acts | The Act table above, committed after an assigned human Approval | Refused without an approved subject | MFG-O-SAFE-2 | 2 |
 | Restricted print start | `start_print` per contract 7.6 | Refused without declarations or on-site confirmation | MFG-O-SAFE-2 | 2 |
@@ -259,7 +259,7 @@ GP3 needs turning and gear cutting in phase 2. MEC owns gear geometry and rating
 
 ## Sheet cutting, nesting and press brake
 
-GP4's guards need profile cutting, nesting and press-brake planning in phase 2. MEC owns flat patterns, bend allowances (phase 2 per contract 13.4) and self-clinching hardware rules.
+GP4's guards need profile cutting, nesting and press-brake planning in phase 2. MEC owns flat patterns, flat DXF export, the bend-allowance model (`BendRule`, `BendTable`) and self-clinching hardware rules. MFG and COV supply press-brake allowance data in phase 2.
 
 Sparrow (MIT) is the strongest published 2D irregular strip-packing heuristic, using guided local search on the jagua-rs collision engine (MPL-2.0) [Gardeyn et al. 2025; jagua-rs]. In 20-minute runs it matches or beats every best-known ESICUP density, most on SWIM (79.83% versus 75.94%) [Gardeyn et al. 2025]. It does not exploit repeated patterns, and jagua-rs is linked unmodified under contract 7.7.
 
@@ -270,8 +270,8 @@ Sparrow (MIT) is the strongest published 2D irregular strip-packing heuristic, u
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
 | Profile cutting and ordering | Laser, plasma or waterjet paths with kerf, lead-ins, micro-joints, pierce strategy, common lines; inner before outer, heat spread, minimal rapids | `Infeasible` below kerf plus minimum web | MFG-O-CUT-1 | 2 |
-| Flat-pattern DXF export | `export_flat_dxf(flat, convention)`; layer conventions as data; bend table | Unmapped entities listed | MFG-O-CUT-2 | 2 |
-| Press-brake planning | Bend sequence, tool stations and backgauge (D-MFG-8) | `Infeasible` with the colliding bend | MFG-O-CUT-3 | 2 |
+| Flat-pattern hand-off | MEC's `export_flat_dxf` (MEC-O-SM-4) with the layer convention and bend table chosen per cutting machine or shop | Unmapped entities listed | MFG-O-CUT-2 | 2 |
+| Press-brake planning | Bend sequence, tool stations and backgauge (D-MFG-8); allowance tables per punch, die and material for MEC's `BendTable` | `Infeasible` with the colliding bend | MFG-O-CUT-3 | 2 |
 | Waterjet taper, bevels and punching | Taper and corner compensation (3); 5-axis bevels (4); turret tooling, nibbling, repositioning (3) | `MissingData`; `AxisLimit`; missing tool | MFG-O-CUT-1 | 3, 4 |
 | Sheet nesting | `nest(items, sheets, rules, seed, budget) -> Nest` with rotation, grain, spacing, zones and common lines | `Infeasible`; `BudgetExhausted` with the best nest | MFG-O-NEST-1 | 2 |
 | Remnants, associativity and inventory | Remnant Parts; warm-started regeneration; mixed sheets and remnants by cost (3) | As nesting | MFG-O-NEST-1 | 2, 3 |
@@ -303,7 +303,7 @@ ModuleWorks states that more than 60% of leading CAM vendors use its 5-axis libr
 
 The crash corpus plants dog-leg rapids, rotary unwinding, reference returns through parts, wrong retract planes, compensation-entry gouges and tool changes inside the envelope.
 
-**Decision D-MFG-28:** A product NC interpreter, separate from the oracle's interpreter, verifies any NC text, including programs from other CAM systems and hand programming. `verify_nc` returns stock, collisions, gouges, cycle time and a `BlockMap`, and legacy programs import as Items of kind `Program` that are never converted to workingsteps. *Why:* shops hold thousands of proven programs and need them verified and under revision control, and two interpreters keep the oracle independent (R4-09). *Rejected:* one interpreter for product and oracle (a shared bug passes both); converting legacy NC into workingsteps (guesses intent).
+**Decision D-MFG-28:** A product NC interpreter, separate from the oracle's interpreter, verifies any NC text, including programs from other CAM systems and hand programming. `verify_nc` returns stock, collisions, gouges, cycle time and a `BlockMap`, and legacy programs import as Assets released as program Items (contract 2) that are never converted to workingsteps. *Why:* shops hold thousands of proven programs and need them verified and under revision control, and two interpreters keep the oracle independent (R4-09). *Rejected:* one interpreter for product and oracle (a shared bug passes both); converting legacy NC into workingsteps (guesses intent).
 
 UIX's Manufacture mode shows NC text beside the toolpath with two-way highlighting through `BlockMap`, and a setup-sheet preview.
 
@@ -313,7 +313,7 @@ UIX's Manufacture mode shows NC text beside the toolpath with two-way highlighti
 | Certified gouge check | Per cutting move, certified distance between the exact swept envelope (`swept_volume`, `tool_contact`) and the design B-rep | `Gouge` with depth and block | MFG-O-SIM-1 | 2 |
 | Machine collision and clearance | Continuous detection between links, tool, holder, fixture and stock along every posted move; near-miss Field against clearance | `Collision` with block, pair and fixes; warning below clearance | MFG-O-SIM-2 | 2 (to 3+2), 3 (5-axis) |
 | Controller motion | Rapids, unwinding, reference returns, retract planes, compensation entry and tool-change envelopes | `Unsupported` for undeclared semantics | MFG-O-SIM-2 | 2 |
-| External NC verification | `verify_nc(nc: Asset, machine, setup, tools) -> NcVerification`; legacy programs as `Program` Items on the same approval path | Parse errors with the block | MFG-O-SIM-3 | 2 |
+| External NC verification | `verify_nc(nc: Asset, machine, setup, tools) -> NcVerification`; legacy programs as program Items on the same approval path | Parse errors with the block | MFG-O-SIM-3 | 2 |
 | Cycle time | Jerk-limited kinematics with look-ahead, tool changes and dwell | None; time per workingstep | MFG-O-SIM-4 | 2 |
 | Viewer cache | GPU tri-dexel render cache for playback, never a model | CPU rendering fallback | MFG-O-SIM-5 | 2 |
 
@@ -346,7 +346,7 @@ STEP-NC is ISO 14649, in parts for process data, milling, turning, tools, EDM an
 | Templates, matching and setup planning | Ingot templates ranked by applicability predicates; targets grouped by access direction into setups | No match typed, never a silent default; `Unreachable` | MFG-O-PROG-2 | 2 |
 | Target recognition | Rule-based (2) and learned (3) proposals; CPU inference with pinned weights | Unconfirmed targets never drive toolpaths | MFG-O-PROG-3 | 2, 3 |
 | Agent-proposed programs | Branch, CI, Proposal, human Approval | Agents cannot approve, commit transfer Acts or edit oracles | MFG-O-PROG-4 | 2 |
-| STEP-NC | ISO 14649 parts 10, 11, 12, 111, 121 export (3); AP238 export and import (4); parts 13, 14, 17 (5) | `Unsupported` per workingstep; never invents feeds | MFG-O-PROG-5 | 3, 4, 5 |
+| STEP-NC | ISO 14649 parts 10, 11, 12, 111 and 121 and AP238, read and written through ECO's codec at its catalog phase (3); parts 13, 14 and 17 (5) | `Unsupported` per workingstep; never invents feeds | MFG-O-PROG-5 | 3, 5 |
 
 ## Additive processes and build preparation
 
@@ -421,21 +421,17 @@ Inherent-strain prediction is phase 1 for GP2, owned by FLX, with MFG's calibrat
 
 Printer profiles are packages holding the printer Assembly, parameter sets with envelopes, material profiles and calibration programs such as OrcaSlicer's flow and retraction prints [OrcaSlicer]. Calibrated values record date, serial and uncertainty. The 3MF suite is ISO/IEC 25422:2025; the Toolpath extension was updated on 17 September 2026 and is still a draft [3MF specifications; 3MF Toolpath].
 
-| Specification | In ISO/IEC 25422:2025 | Latest | Phase |
-| --- | --- | --- | --- |
-| Core, Production, Materials and Properties, Beam Lattice | 1.3.0, 1.1.2, 1.2.1, 1.2.0 | 1.4.0, 1.1.2, 1.2.1, 1.2.0 | 1 |
-| Boolean Operations; Toolpath | 1.1.0; not included | 1.1.1; 1.0.0 | 2 |
-| Secure Content; Volumetric | 1.0.2; not included | 1.0.2; 0.8.0 | 3 |
+ECO's catalog owns 3MF versions and writer phases: Core, Production, Materials and Properties and Beam Lattice in phase 1, Toolpath in 2, the rest in 3.
 
-Every printer is reached through the machine gateway, because Web Serial is not Baseline [MDN Web Serial]. Status is a Read; pause and cancel are Acts that need an Approval but no on-site confirmation; resuming is a start under `start_print`.
+Every printer is reached through the machine gateway, because Web Serial is not Baseline [MDN Web Serial]. Status is a Read (`read.machine_data`). Cancelling a job Crucible sent is the cancellation AGT declares for `send_print_job` and `start_print`, with no on-site confirmation; resuming is a new `start_print`.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
 | 3MF production write | Build items, object references, UUIDs, materials, beam lattices and thumbnails through ECO's writer | Unsupported constructs listed, never dropped | MFG-O-AM-10 | 1 |
-| Further 3MF extensions | Boolean and version-gated Toolpath (2); Volumetric and Secure Content (3) | Not written unless the target declares support | MFG-O-AM-10 | 2, 3 |
+| Further 3MF extensions | Version-gated Toolpath (2); Boolean, Volumetric and Secure Content (3), through ECO's writer | Not written unless the target declares support | MFG-O-AM-10 | 2, 3 |
 | Binary G-code | bgcode from the published description | Unsupported blocks listed | MFG-O-AM-11 | 2 |
 | Printer profiles and calibration | Profiles with envelopes; calibration prints and coupons | `OutsideEnvelope` outside the profile | MFG-O-AM-11 | 2 |
-| Print transfer and control | `send_print_job` to OctoPrint, Moonraker, PrusaLink and sanctioned vendor paths; `start_print`, pause and cancel as Acts | Never retried without a person; starts refused without contract 7.6 conditions | MFG-O-SAFE-2 | 2 |
+| Print transfer and control | `send_print_job` to OctoPrint, Moonraker, PrusaLink and sanctioned vendor paths; the restricted `start_print`; cancellation of jobs Crucible sent | Never retried without a person; starts refused without contract 7.6 conditions | MFG-O-SAFE-2 | 2 |
 
 ## Molds and injection molding
 
@@ -445,7 +441,7 @@ Tooling is designed in Ingot as Parts and Assemblies, the process is simulated a
 
 **Decision D-MFG-15:** Fill, pack and cool at `SignOff` run 3D non-isothermal solvers in Flux with a level-set fill front on the immersed octree for the Stokes-regime melt, with mass checks. A Hele-Shaw model on a mid-surface serves `Interactive` and is valid only inside a declared thickness-ratio envelope. *Why:* 3D handles thick sections and ribs that Hele-Shaw ignores, a level-set front conserves mass with a checkable error, and Hele-Shaw answers in seconds for thin walls (R1-41). *Rejected:* Hele-Shaw only (invalid for thick parts); 3D only (too slow for interactive design); an unnamed free-surface method. (revised in round 2)
 
-**Decision D-MFG-29:** Short-fibre orientation uses an anisotropic rotary diffusion model with reduced strain closure (ARD-RSC) and a fitted closure, keeping Folgar–Tucker as the lowest rung. Warpage comes from residual stress along the pvT path with frozen-layer pressure and mold constraint, plus crystallization kinetics for semicrystalline grades and optional viscoelastic relaxation after ejection. *Why:* Folgar–Tucker changes orientation too fast in concentrated suspensions, and pressure history and mold constraint dominate warpage accuracy (R1-41) [unverified: primary papers not opened]. *Rejected:* Folgar–Tucker alone; warpage from thermal shrinkage only.
+**Decision D-MFG-29:** Short-fibre orientation uses an anisotropic rotary diffusion model with reduced strain closure (ARD-RSC) and a fitted closure, keeping Folgar–Tucker as the L0 model level (COV). Warpage comes from residual stress along the pvT path with frozen-layer pressure and mold constraint, plus crystallization kinetics for semicrystalline grades and optional viscoelastic relaxation after ejection. *Why:* Folgar–Tucker changes orientation too fast in concentrated suspensions, and pressure history and mold constraint dominate warpage accuracy (R1-41) [unverified: primary papers not opened]. *Rejected:* Folgar–Tucker alone; warpage from thermal shrinkage only.
 
 The Hele-Shaw envelope defaults to local thickness under one tenth of local flow length, calibrated in phase 3 [unverified]. Filling, orientation and warpage are phase 3 with MFG as owner, because GP5's measured warpage needs them (contract 13.4).
 
@@ -526,17 +522,15 @@ part.heat_treat(solution_and_age(spec: shop::t6_6061), inspect: hardness(points:
 
 ## Electronics and harness manufacturing handoff
 
-MFG owns the factory handoff: package choice, fabricator and assembler capability records and rule packs, panels, stencils, test strategy and the harness package. ELX owns the board model, the DRC engine that runs MFG's rule packs, the IPC-2152 current screen and `test_point` features; ECO owns the writers in `io/`. A board passes DFM for a specific fabricator and class, never in the abstract.
+MFG owns the factory handoff: package choice, fabricator and assembler capability records and rule packs, panels, stencils, test strategy and the harness package. ELX owns the board model, the DRC engine that runs MFG's rule packs, the IPC-2152 current screen and `test_point` features; ECO owns every writer in `io/` and its phase. A board passes DFM for a specific fabricator and class, never in the abstract.
 
-**Decision D-MFG-16:** The default fabrication package is IPC-2581 revision C together with Gerber X2 layers (Layer Format revision 2026.05), an XNC drill file and the Gerber job file, generated from one board model. Crucible builds its own ODB++ writer from the published specification in phase 3, after checking Siemens' current terms once, with KiCad's writer as an external differential oracle that is never linked. *Why:* IPC-2581 is open and bi-directional [IPC-2581], revision C carries DFX feedback [IPC-2581C], Gerber is what fabricators most widely accept [unverified], and an open-source tool already writes ODB++ [KiCad 9.0] (R3-25, R4-24, R4-27). *Rejected:* Gerber only (no stackup, BOM or DFX feedback); ODB++ only through a licensed translator (weakens GP5's "outputs alone" gate at board houses that read ODB++). (revised in round 2)
-
-Ucamco lists Layer Format revision 2026.05 of 19 May 2026, Job Format 2020.08 and XNC 2021.11 [Ucamco Gerber downloads]. IPC released IPC-2581C on 1 December 2020 with DFX exchange, rigid-flex and embedded parts [IPC-2581C].
+**Decision D-MFG-16:** The default fabrication package is IPC-2581 revision C together with Gerber X2 layers (Layer Format revision 2026.05), an XNC drill file and the Gerber job file, generated from one board model. ODB++ is the alternative for board houses that read it, from ECO's own writer in phase 3. MFG chooses the package per fabricator; ECO owns every writer, its phase and its oracles. *Why:* IPC-2581 is open and bi-directional [IPC-2581], revision C carries DFX feedback [IPC-2581C], Gerber is what fabricators most widely accept [unverified], and an open-source tool already writes ODB++ [KiCad 9.0] (R3-25, R4-24, R4-27). *Rejected:* Gerber only (no stackup, BOM or DFX feedback); ODB++ only through a licensed translator (weakens GP5's "outputs alone" gate at board houses that read ODB++). (revised in round 2)
 
 Boards carry `fab_class` and `assembly_class` (Class 2, 3 or 3/A) that select rule packs citing IPC-6012, IPC-A-600, IPC-A-610 and J-STD-001, pinned in licensed packages [unverified revisions]. Test-point checks and test programs are phase 3, because GP5 is assembled then.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
-| Fabrication package | IPC-2581C, Gerber X2, XNC drill and route, Gerber job file, impedance and stackup tables; own ODB++ writer (D-MFG-16) | Unsupported constructs listed per output | MFG-O-PCB-1 | 3 |
+| Fabrication package | Package choice per fabricator (D-MFG-16): IPC-2581C, Gerber X2, XNC drill and route, Gerber job file, impedance and stackup tables, or ODB++, all written by ECO's `io/` writers | Unsupported constructs listed per output | MFG-O-PCB-1 | 3 |
 | Assembly package | Placement data, Gerber X3, assembly BOM with approved manufacturers, rotation conventions per line, assembly drawings | `MissingData` for parts without a rotation convention | MFG-O-PCB-2 | 3 |
 | Classes, rule packs and fabrication drawing | Classes select annular ring, plating and acceptability rules; drawing notes for class, IPC-4101 material, finish, impedance tolerance and acceptance | A board without a class blocks the package | MFG-O-PCB-3 | 3 |
 | Panels, stencils and reflow | Rails, tabs, V-score, fiducials and coupons, mixed panels by nesting, tab stress in Flux; apertures with area ratios and step stencils; reflow limits from paste and part ratings | `Infeasible` beyond line limits; apertures below the ratio; `OutsideEnvelope` without ratings | MFG-O-PCB-4 | 3 |
@@ -586,7 +580,7 @@ MEC draws the labels as a characteristic-balloon annotation. A customer PDF with
 
 ## Quality records: SPC, MSA, FAI and PPAP
 
-Process profiles declare Cp and Cpk per process and feature class. MEC's default distribution reads them: uniform without data, normal with mean shift and spread with data (R1-37).
+Process profiles declare Cp and Cpk per process and feature class. MEC's default distribution (`std::mech::tol::default_distribution`, D-MEC-28) reads them: uniform without data, normal with mean shift and spread with data (R1-37).
 
 Per the IAQG summary of 9102 revision C, FAI is not product acceptance, each item needs its own FAI, and Form 1 gains "FAIR Verified By" [IAQG 9102C]. AIAG lists PPAP-4 [AIAG PPAP] and the AIAG & VDA FMEA Handbook [AIAG-VDA FMEA]; its 7-step structure and action priority are [unverified in the handbook itself].
 
@@ -621,9 +615,9 @@ Cost elements are material and scrap, machine and setup time, labor, consumables
 
 MTConnect 2.5.0 Part 1 was prepared on 5 January 2026, and its REST API is "read-only and does not produce any side effects" [MTConnect 2.5]. OPC 40501-1 (Machine Tools) is at 1.02.0 [OPC 40501-1] and OPC 40001-3 (Machinery Job Management) at 1.0.1 of 1 May 2024 [OPC 40001-3]. The async-opcua client is MPL-2.0 [async-opcua], linked unmodified under contract 7.7.
 
-**Decision D-MFG-20:** Machine data enter through two native adapters, MTConnect and OPC UA, running in the gateway or on servers outside evaluation. Both read; OPC UA additionally calls only non-motion job management (`Store`, `Update`, `Cancel`, `Clear` on jobs Crucible stored). Collected data become External inputs signed by the gateway's device key. *Why:* both are open standards with published information models, reads cannot move a machine, and signed inputs keep evaluation deterministic (R4-01, R5-18). *Rejected:* vendor protocols in the core (they are connectors); live data inside evaluation (breaks determinism); OPC UA writes wherever a server allows them (a write can start motion). (revised in round 2)
+**Decision D-MFG-20:** Machine data enter through two native adapters, MTConnect and OPC UA, running in the gateway or on servers outside evaluation. Both read; OPC UA additionally calls only non-motion job management (`Store` inside `store_machine_job`; `Cancel` and `Clear` on jobs Crucible stored). Collected data become External inputs signed by the gateway's device key. *Why:* both are open standards with published information models, reads cannot move a machine, and signed inputs keep evaluation deterministic (R4-01, R5-18). *Rejected:* vendor protocols in the core (they are connectors); live data inside evaluation (breaks determinism); OPC UA writes wherever a server allows them (a write can start motion). (revised in round 2)
 
-ECO specifies the `io/erp` connector world with OAGIS and B2MML messages [unverified versions]. MFG supplies routings and reads costs, lead times and inventory back as External inputs.
+ECO specifies the `erp-connector` and `mes-connector` worlds in `crucible:connect` with OAGIS and B2MML messages (D-ECO-30) [unverified versions]. MFG supplies routings and reads costs, lead times and inventory back as External inputs.
 
 Routing steps reference MBOM Instances without copying them. The digital twin is the design plus as-planned, as-run and as-measured records per serial, and calibration is always a Proposal.
 
@@ -635,7 +629,7 @@ AOUSD announced OpenUSD Core Specification 1.0 on 17 December 2025 [AOUSD Core 1
 | --- | --- | --- | --- | --- |
 | Gateway | Shop-network gateway for machines, printers and CMMs; device key under measured boot; offline buffering | Gaps recorded explicitly | MFG-O-FAC-1 | 2 |
 | MTConnect and OPC UA adapters | Observations on axes, spindles, programs, tools and offsets (MTConnect 2); Machine Tools and Machinery models, job orders mapped to routing steps (OPC UA 3) | Schema and security-policy failures typed; partial data marked | MFG-O-FAC-2 | 2, 3 |
-| MES and ERP mapping | Work orders, routing status, scrap and labor; routing fields to `io/erp` | Mapping errors per field | MFG-O-FAC-3 | 4 |
+| MES and ERP mapping | Work orders, routing status, scrap and labor; routing fields through the `erp-connector` and `mes-connector` worlds | Mapping errors per field | MFG-O-FAC-3 | 4 |
 | MBOM and routings | EBOM-to-MBOM rules as Ingot (phantoms, kits, stations, consumables); routing steps with times and work centers (2); effectivity by serial, date, work order or lot (3) | Unconsumed items; unmapped work centers; overlaps rejected | MFG-O-FAC-4 | 2, 3 |
 | OpenUSD export | Cells as USD layers with joints and prim paths from `EntityId`s, process animation (3); incremental layers (4) | Unsupported constructs listed | MFG-O-FAC-5 | 3, 4 |
 | As-built records and deviation | Per serial: lots, revisions, operators, deviations, nonconformances, Evidence records, deviation Fields | Gaps flagged, never back-filled with nominal values | MFG-O-FAC-6 | 3 |
@@ -658,12 +652,12 @@ A release fails on a missing required declaration unless a person records a time
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
-| Embodied carbon | Global warming potential per BOM line as per-Instance and density Fields; supplier data override generic factors | Generic versus specific flagged | MFG-O-SUST-1 | 2 |
+| Embodied carbon | Global warming potential per BOM line from COV's per-material `EnvironmentalRecord`s, as per-Instance and density Fields; supplier data override generic factors | Generic versus specific flagged | MFG-O-SUST-1 | 2 |
 | LCA scope and inventory | Typed functional unit, boundary and allocation; flows from materials, power over cycle time, consumables, scrap and transport | Missing scope fails to compile; flows without factors reported, never zeroed | MFG-O-SUST-1 | 3 |
 | Impact, hotspots and uncertainty | Versioned factor packages (EF or ecoinvent under licence [unverified versions]); contributions; Monte Carlo (4) | Unlicensed datasets unavailable, never substituted | MFG-O-SUST-2 | 3, 4 |
 | Recyclability and repairability | Recoverable mass per stream from the disassembly graph; contaminating joints; depth, time and tools to each service part | Unlisted materials count as unrecoverable; `Unreachable` service parts | MFG-O-SUST-3 | 3 |
 | Passport mapping and identifiers | Delegated-act elements mapped to queries; identifiers per model, batch or item; carriers; public, professional and authority views | Unmapped elements block publication; unauthorized fields never published | MFG-O-DPP-1 | 3 |
-| Registration and back-up copy | Registration through the Commission's API inside `publish_passport`, keeping the proof; each passport mirrored to the independent provider | Rejections typed; publication fails unless both copies succeed | MFG-O-DPP-2 | 3 |
+| Registration and back-up copy | Registration through the Commission's API inside `publish_passport`, keeping the proof; each passport mirrored to the independent provider; AGT phases the Act | Rejections typed; publication fails unless both copies succeed | MFG-O-DPP-2 | 4 |
 | Battery passport | Battery Regulation elements for GP6's pack where in scope [unverified dates] | As mapping | MFG-O-DPP-1 | 4 |
 | RoHS, REACH and SCIP | Ten RoHS substances per homogeneous material against Annex II [EU RoHS] [unverified values]; Candidate List above 0.1% w/w, Annex XVII, SCIP data (3); IPC-1752B declarations read in A and B forms [unverified], substances mapped through the package's declarable-substance list | Unknown content reported as unknown, never compliant | MFG-O-REG-1 | 2, 3 |
 | 3TG sourcing data | Smelter lists and due-diligence evidence collected for reporting | Data-completeness check only | MFG-O-REG-2 | 3 |
@@ -700,7 +694,7 @@ All numeric goals in the last column are targets.
 | Inspection | Model-based QIF plans [ISO 23952]; GUM and JCGM 101 [BIPM JCGM] | PC-DMIS, CALYPSO, PolyWorks [unverified] | Provenance identities (D-MFG-18), stable balloons (D-MFG-26), typed budgets | QIF round trip; JCGM examples reproduced exactly |
 | Should-cost | Process-model cost from CAD [aPriori] | aPriori | Cost from generated plans, basis labelled (D-MFG-19) | Held-out quotes within the stated interval for 90% of parts |
 | Machine connectivity | MTConnect 2.5 [MTConnect 2.5]; OPC 40501-1 [OPC 40501-1] | Vendor MES connectors [unverified] | Read adapters, non-motion job management, signed inputs (D-MFG-20) | Conformance against reference agents and servers |
-| PCB handoff | IPC-2581C with DFX [IPC-2581C]; Gerber 2026.05 [Ucamco Gerber downloads] | Siemens Valor NPI [unverified] | IPC-2581C with Gerber X2, own ODB++ writer (D-MFG-16) | 1 µm XOR against independent readers; seeded-defect boards |
+| PCB handoff | IPC-2581C with DFX [IPC-2581C]; Gerber 2026.05 [Ucamco Gerber downloads] | Siemens Valor NPI [unverified] | IPC-2581C with Gerber X2 by default, ODB++ through ECO's writer (D-MFG-16) | 1 µm XOR against independent readers; seeded-defect boards |
 | Life-cycle assessment | ISO 14040 and 14044 process LCA [ISO 14044] | openLCA, SimaPro [unverified] | Inventory from actual process plans | Mass balance; reference product systems |
 
 ## Platform notes
@@ -721,28 +715,30 @@ All numeric goals in the last column are targets.
 | From | Canonical name or type | Used for |
 | --- | --- | --- |
 | Anvil | `section`, `offset_curve`, `medial_axis`, `tool_contact`, `swept_volume`, `distance`, `interference`, `deform`, `split`, `extend`, `visibility`, `draft_map`, `thickness`, `voxelize`, `correlate_grids`, `align`, `fit`, `boolean`; wire and `Implicit` Bodies | Every planning capability, at Anvil's phases |
-| Flux | Modal analysis and receptance coupling, inherent strain with activation, thermo-elasto-plasticity, level-set and Hele-Shaw flow, solidification, shells, rigid-body contact, current distribution, sensitivities | Process physics |
-| COV | `ValidityEnvelope`s and models for cutting, melts, cast alloys, forming, transformation and cure; OOR-8 | Envelope checks |
-| MEC | Kinematic mates; `FlatPattern`, `HoleSpec`, `ThreadSpec`, `Weld` with quality level; `split_mold`; `lattice`; gear records; plies; harness geometry; GD&T and characteristic balloons | Machines, forming, joining, molds, inspection |
-| ELX | Board model, classes, `test_point` features, DRC engine, connectivity and wire tables | Electronics and harness handoff |
-| KLN and `repo` | Items of kind `Program`, manufacturing change orders, effectivity, EBOM and MBOM views, serials, recipient records, Evidence pins | Release, routings, FAI, as-built |
-| AGT and `api` | Act classes and Approvals, Read methods, Proposals, CAM programmer role (phase 2) | Transfers, quotes, passports, agent programs |
-| ECO | `io/` writers (3MF, IPC-2581, Gerber, ODB++, QIF, STEP-NC, USD), `io/erp`, registry packages | Outputs and packages |
-| UIX | NC panel with `BlockMap` highlighting, setup-sheet preview, playback, cost panel | Review |
+| Flux | Modal analysis and receptance coupling; element activation and inherent-strain prediction (FLX's, contract 13.4); thermo-elasto-plasticity; level-set free-surface flow and Hele-Shaw; solidification, shells, rigid-body contact, current distribution, sensitivities; constrained topology optimization | Process physics; manufacturing constraints in design optimization |
+| COV | Process models, `ValidityEnvelope`s and state Fields for cutting, melts, cast alloys, forming, transformation and cure; OOR-8; per-material `EnvironmentalRecord`s | Envelope checks; product LCA |
+| MEC | Kinematic mates; `FlatPattern` and `export_flat_dxf`; `HoleSpec`, `ThreadSpec`, `Weld` with quality level; ply flats; core and cavity from `split_mold`; `lattice`; gear records; PMI; characteristic balloons that draw MFG's labels; harness geometry | Machines, forming, joining, molds, inspection |
+| ELX | The board model (layers, stackup, classes, netlist, footprints, placements, `test_point` features, rules); the DRC engine; harness package data; findings shown on board objects | Electronics and harness handoff |
+| KLN and `repo` | Items and revisions (programs among them, contract 2), late-bound fields, effectivity, BOM views, where-used, change orders and MCOs (D-KLN-38), parts policy, serials, recipient records, Evidence pins | Release, routings, FAI, as-built |
+| AGT and `api` | Physical-effect and data-release Act classes with Approvals; `read.machine_data`; Proposals; the CAM programmer and cost engineer roles (phase 2) | Transfers, quotes, passports, agent programs |
+| ECO | Manufacturing, board and tool-data readers and writers in `io/` (3MF, IPC-2581, Gerber, ODB++, QIF, STEP-NC, USD, ISO 13399 tool data) at ECO's phases; `parts::` publishing and the offer schema; NC migration; `crucible:connect` worlds; registry packages | Outputs, imports and packages |
+| UIX | The Manufacture preset: toolpath playback, NC code panel with `BlockMap` highlighting, setup-sheet preview, cost panel | Review |
 | PLT | Gateway packaging, serial and USB access, device keys, browser memory table | Connectivity |
-| ING | Records, enums, `Map`, quantity-type Field domains, `Money<C>`, `require` | Every Ingot interface |
+| ING | Records, enums, `Map`, `Range` as interval, `Decimal` and `Money<C>`, `require`, kinds for parameter domains | Every Ingot interface |
 
 ### What MFG provides
 
 | To | Provided | Type |
 | --- | --- | --- |
 | All tabs | `std::mfg` packages: `core`, `machining`, `am`, `molding`, `casting`, `forming`, `joining`, `treatment`, `electronics`, `assembly`, `inspection`, `cost`, `sourcing`, `factory`, `sustainability` | Ingot packages |
-| MEC and FLX | Process profiles with Cp and Cpk, tooling minimums, process cost models, DFM, DFA and DfAM checks, inherent-strain calibration data | `Check`, `Field`, packages |
-| ELX | Fabricator and assembler rule packs by class; DFX feedback | `Check` |
-| KLN and `repo` | Program subjects, routings, setup sheets, work instructions, inspection plans, as-built records | CAS objects |
-| AGT | Act payloads for `send_to_machine`, `send_robot_program`, `store_machine_job`, `send_print_job`, `start_print`, `request_quote`, `publish_passport`; machinability reports; `MfgError` fixes | Act plans, plain values |
-| UIX | Toolpaths, stock, collisions, NC text with `BlockMap`, cost and carbon Fields | `Body`, `Field` |
-| ECO | WIT worlds for strategies, posts, nesting, packing, slicers, recognizers and connectors | WIT interfaces |
+| MEC | Process profiles with Cp and Cpk, tooling minimums and press-brake allowance data, process cost models, characteristic identities and balloon labels (D-MFG-18, D-MFG-26), the harness manufacturing package, DFM, DFA and DfAM checks | `Check`, `Field`, packages |
+| FLX | Manufacturing-constraint forms from process profiles; process profiles with Cp and Cpk; inherent-strain calibration data | `Check`, `Field`, packages |
+| COV | Process setups and data for the process capabilities MFG owns (contract 13.4) | Packages |
+| ELX | Fabricator and assembler rule packs by class; the package choice, written by ECO; panels, stencils and test programs; DFX feedback; the harness manufacturing package | `Check`, packages |
+| KLN and `repo` | Program subjects with simulation evidence; MBOM rules and routings; setup sheets, work instructions and inspection plans; as-built records and QIF results; substance rules | CAS objects |
+| AGT | Act payloads for `send_to_machine`, `send_robot_program`, `store_machine_job`, `send_print_job`, `start_print`, `request_quote`, `publish_passport`; DFM rules, CAM, cost with intervals, the re-verifying gateway with edit capture and printer profiles for agent roles; `MfgError` fixes | Act plans, plain values |
+| UIX | Toolpaths, stock, collisions, NC text with `BlockMap`, `setup_sheet`, DfAM check Fields and the 3MF build layout, cost lines and carbon Fields | `Body`, `Field` |
+| ECO | The factory handoff; machine, tool and toolpath models; `verify_nc`; offer usage; partner flows; `crucible:mfg` worlds (`toolpath-strategy`, `post-processor`, nesting, packing, slicers, recognizers); machine-connector interfaces | WIT interfaces, packages |
 
 ```rust
 // crates: std/mfg-wit, io/nc-post, io/stepnc, io/qif, io/mtconnect, io/opcua-mfg, io/usd-factory, oracles/mfg
@@ -796,7 +792,7 @@ Oracles live in `oracles/mfg/`, which agents read but never write; held-out part
 | MFG-O-GEAR-1 | Gear cutting and grinding | Simulated flanks within the design's quality grade; ground profiles within allowance |
 | MFG-O-GEAR-2 | Gear inspection | Plans evaluate the design flank on reference gears |
 | MFG-O-CUT-1 | Profile cutting | Kerf, taper, bevel and punched sheet match the part; tour against a lower bound |
-| MFG-O-CUT-2 | Flat DXF | Re-import equals the flat pattern; layers follow the convention |
+| MFG-O-CUT-2 | Flat-pattern hand-off | Each shop convention maps every flat-pattern entity; re-import equals the flat pattern; layers follow the convention |
 | MFG-O-CUT-3 | Press brake | Bend simulation collision-free; optimal on small instances |
 | MFG-O-NEST-1 | Nests | Exact overlap, rule and containment checks; remnant plus parts plus kerf equals the sheet; warm starts never worsen; density target on ESICUP and GARDEYN |
 | MFG-O-FEED-1 | Cutting data | Labels match sources; calibrated coefficients reproduce calibration cuts within uncertainty |
@@ -807,7 +803,7 @@ Oracles live in `oracles/mfg/`, which agents read but never write; held-out part
 | MFG-O-SIM-2 | Collision | Ordinary and controller-semantics crash corpora detected 100% per family; undeclared semantics never pass |
 | MFG-O-SIM-3 | External NC | Hand-written and third-party programs with planted crashes all detected |
 | MFG-O-SIM-4 | Cycle time | Within 5% of measured after calibration (target) |
-| MFG-O-SIM-5 | Viewer | Visual regression snapshots |
+| MFG-O-SIM-5 | Viewer | Visual regression Snapshots under a fixed `RenderProfile` |
 | MFG-O-PROG-1 | Regeneration | Unchanged designs keep every `ObjectId`; identical programs diff empty |
 | MFG-O-PROG-2 | Templates and setups | Golden programs for template parts; deterministic ranking; each target in exactly one setup |
 | MFG-O-PROG-3 | Recognition | Panoptic quality targets on MFInstSeg |
@@ -839,7 +835,7 @@ Oracles live in `oracles/mfg/`, which agents read but never write; held-out part
 | MFG-O-JOIN-4 | Composites | Every ply placed once in order; gaps and overlaps within limits; spring-in on L-sections |
 | MFG-O-TREAT-1 | Coatings | Every treated face resolved; dimensions recomputed; plating cases and film thickness |
 | MFG-O-TREAT-2 | Heat treatment | Targets within COV bands; measured distortion on golden parts |
-| MFG-O-PCB-1 | Fabrication outputs | Independent readers and a 1 µm XOR against the board are empty; ODB++ agrees with KiCad's writer on golden boards |
+| MFG-O-PCB-1 | Fabrication packages | Each package holds every file its fabricator profile requires; independent readers and a 1 µm XOR against the board are empty; writer conformance, ODB++ against KiCad's writer included, is ECO-O-25 |
 | MFG-O-PCB-2 | Assembly outputs | Placement from the 3D Assembly within 0.01 mm and 0.1° |
 | MFG-O-PCB-3 | Classes and drawing | Each class selects its rule pack; notes equal the board values |
 | MFG-O-PCB-4 | Panels, stencils, reflow | Panel rules hold; area ratios recomputed; profile inside every part's rating |
@@ -883,16 +879,16 @@ Oracles live in `oracles/mfg/`, which agents read but never write; held-out part
 
 ## Phasing
 
-MFG-O-GOLD-1 collects the gate evidence below.
+MFG-O-GOLD-1 collects the gate evidence below. Shared physics capabilities take their phase from contract 13.4, as the capability tables state; press-brake allowance data and metal PBF compensation keep MFG's phase 2.
 
 | Phase | MFG contribution to the gate |
 | --- | --- |
 | 0 | Core types, `MfgError`, seeded search rules and the protected oracle directory; no manufacturing gate evidence |
-| 1 | GP1: coating specification, parametric cost and BOM roll-up; the shop programs with its own CAM. GP2: DfAM and lattice checks, orientation, 3MF production output with beam lattices, slicer hand-off, inherent-strain prediction (13.4), AM cost. Deferred per contract 13.2: CAM, posts, stock simulation, slicing and nesting |
-| 2 | GP3: Crucible CAM (2.5D and 3-axis, adaptive after the opinion, drilling, turning, gear generating), Fanuc, Haas, Siemens and Heidenhain posts, stock and posted-code simulation, `verify_nc`, setup sheets, tools, fixtures, transfer Acts, gateway, DNC. GP4: profile cutting, nesting, press brake, weld procedures and structure-scale distortion (13.4). One part through Crucible's slicer; metal PBF compensation (13.4) |
-| 3 | GP5: mold design, filling, orientation and warpage (13.4); board fabrication, assembly and test outputs; CMM, SPC, MSA and AS9102; simultaneous 5-axis; stability lobes (13.4) |
-| 4 | GP6: harness package, composites layup, joint-scale welds (13.4), PPAP, MES mapping, battery passport |
-| 5 and later | Sheet forming and springback (13.4, 5); bulk forming; casting simulation (13.4, 6) |
+| 1 | GP1: coating specification, parametric cost and BOM roll-up; the shop programs with its own CAM. GP2: DfAM and lattice checks, orientation, 3MF production output with beam lattices, slicer hand-off, inherent-strain prediction, AM cost. Deferred per contract 13.2: CAM, posts, stock simulation, slicing and nesting |
+| 2 | GP3: Crucible CAM (2.5D and 3-axis, adaptive after the opinion, drilling, turning, gear generating), Fanuc, Haas, Siemens and Heidenhain posts, stock and posted-code simulation, `verify_nc`, setup sheets, tools, fixtures, transfer Acts, gateway, DNC. GP4: profile cutting, nesting, press brake, weld procedures and structure-scale distortion. One additive part through Crucible's slicer. Also metal PBF compensation |
+| 3 | GP5: mold design, filling, orientation and warpage; board fabrication, assembly and test packages; CMM, SPC, MSA and AS9102. Also simultaneous 5-axis and stability lobes |
+| 4 | GP6: harness package, composites layup, battery passport and passport publication. Also joint-scale weld simulation, PPAP and MES mapping |
+| 5 and later | Sheet forming and springback (5); bulk forming; casting simulation (6) |
 
 ## Open questions
 
@@ -911,15 +907,15 @@ MFG-O-GOLD-1 collects the gate evidence below.
     - R4-35's controller families, each one phase later than proposed;
     - R4-01's transfer Acts, so its reason for moving AGT's Acts to phase 1 lapses, and agent-proposed programs, which move to phase 2 with AGT's CAM programmer role (R4-12).
 11. **Findings declined in part.**
-    - R5-18's rename of `send_to_machine` to `queue_program`: R4-01, accepted in contract section 15, names `send_to_machine`. R5-18's semantics (delivery to the queue, start at the machine) are adopted, and CCR-MFG-5 asks the contract to fix the list.
-    - R3-25's "licensed external tool" for ODB++ gives way to R4-27's own writer.
+    - R5-18's rename of `send_to_machine`: R4-01, accepted in contract section 15, names `send_to_machine`, and contract 7.6 now fixes the list of physical-effect Acts. R5-18's semantics (delivery to the queue, start at the machine) are adopted.
+    - R3-25's "licensed external tool" for ODB++ gives way to R4-27's own writer, which ECO builds.
     - R4-24's output writers stay ECO's under R3-25 and contract 7.7; MFG chooses the package.
     - Owned elsewhere, with MFG stating its side: R4-25's IPC-2152 screen and `test_point` features (ELX), R4-14's balloon annotation and R1-37's default distribution (MEC), R4-18's connector world (ECO), R5-05's recipient records (KLN) and R5-06's Act family (AGT).
 
 ## Contract change requests
 
-- **CCR-MFG-5. One list of physical-effect Acts.** In contract 2 (Act) and 7.6, name the physical-effect Act classes: `send_to_machine`, `send_robot_program`, `store_machine_job` (OPC UA `Store` only), `send_print_job` and `start_print`. Machine data collection is a Read. *Reason:* R4-01 asks MFG and AGT to adopt one list, and only the contract can bind both tabs.
-- **CCR-MFG-6. `unattended_safe` excludes machines that cut or move.** In contract 7.1 (Hardware CI), add that `unattended_safe` is a signed site policy, never self-declared by a runner and never granted to machine tools, robots or lasers. *Reason:* R4-01's fix for KLN; without it, an agent-branch rig run could move a machine nobody is watching.
+- CCR-MFG-5, one list of physical-effect Acts: accepted in contract v5; contract 2 (Act) and 7.6 (Physical safety).
+- CCR-MFG-6, `unattended_safe` excludes machines that cut or move: accepted in contract v5; contract 7.1 (Hardware CI).
 
 ## Sources
 
