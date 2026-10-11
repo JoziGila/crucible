@@ -69,7 +69,7 @@ Every result Field carries contract section 5's `ErrorBudget<Q>`, one bound per 
 | Evidence levels | E0 to E4, raised only by CI-signed results and protected validation | Unsigned or agent-set levels rejected | COV-O-VER-3 | 0 |
 | Solution-verification status | `Estimator`, `Gci` or `None` on every result | `None` keeps the discretization part `Indicator` | COV-O-VER-4 | 1 |
 | Model-form part | V&V 20 metric; inflation g(d) over the Extrapolated band | `NotQuantified { NoValidationData }` at E2 | COV-O-VAL-2 | 1 |
-| Input part | Material uncertainty through `std::uq` | `NotQuantified { MissingUncertainty }` | COV-O-ERR-1 | 2 |
+| Input part | Material uncertainty through `std::uq` | `NotQuantified { MissingUncertainty }` | COV-O-ERR-1 | 2, 3 epistemic |
 | Calibration classes | Model-to-class map with pinned η99 entries | No entry: `Indicator` | COV-O-ERR-2 | 1 |
 | Conditional passes | `Pass { conditional_on }`; policy allowances with citations | `Undecided { reason: Unquantified(components) }` | COV-O-ERR-3 | 1 |
 
@@ -291,7 +291,7 @@ Lattice strength checks read localized strut stresses, and a lattice part's crit
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Conduction | N µ Me P L | Slab, fin and shape factors · RC networks · moment matching | High-order FEM, IGA, immersed methods | Fourier law `Refuse` where a declared share of conductivity comes from mean free paths above the feature size | NAFEMS T2 to T4 [S2][S5] | Nat | 1 |
 | Convection | Me P L | Nusselt correlations within published ranges · flow networks · — | Conjugate heat transfer on laminar, RANS or LES flow | Correlation ranges `Refuse`; conjugate analysis inherits the flow envelope | NAFEMS T4 [S5]; Graetz | Nat | 2 correlations, 3 laminar and natural, 4 turbulent (13.4) |
-| Radiation | Me P L | Two-surface enclosures · radiosity networks · — | Ray-traced view factors; Monte Carlo for specular and spectral surfaces; discrete ordinates (D-FLX-38) | Gray-diffuse declared; spectral bands where emissivity varies | Analytic view factors; closure ΣF = 1 within 10⁻⁶ (target) | Nat | 3 |
+| Radiation | Me P L | Two-surface enclosures · radiosity networks · — | Ray-traced view factors; Monte Carlo for specular and spectral surfaces; discrete ordinates (D-FLX-38) | Gray-diffuse declared; spectral bands where emissivity varies | Analytic view factors; closure ΣF = 1 within 10⁻⁶ (target) | Nat | 3, 4 discrete ordinates |
 | Solid–liquid phase change | µ Me P | Stefan, Neumann · — · — | Enthalpy method with mushy zone | Freezing range declared; no undercooling | Stefan analytic | Nat | 3 |
 | Boiling, condensation, heat pipes | Me P | Rohsenow, Nusselt film · heat-pipe and vapour-compression networks with CoolProp [S43] · — | VOF with phase change | Correlations `Refuse` outside range; heat-pipe capillary, sonic, entrainment and boiling limits reported; resolved boiling `Flag` | Nusselt film analytic | Nat | 4 |
 | Moisture and hygro-mechanics | µ Me P L | Equilibrium moisture tables · — · — | Fickian diffusion with sorption isotherms, hygro-expansion, mechano-sorptive creep | Humidity and temperature within sorption data; mechano-sorptive creep `Flag` | Fickian slab | Nat | 3 packages, 7 timber |
@@ -339,7 +339,7 @@ COV owns free-surface and multiphase flow beyond mould filling (13.4). Real-flui
 | Electric machines | Me P | dq circuits · loss and thermal networks · flux-linkage maps | Motion with sliding interfaces; Bertotti iron loss; magnet eddy loss; demagnetization | Loss coefficients per lamination grade and band | GP6 motor tests | Nat | 4 |
 | RF and antennas | Me P L | Line formulas · S-parameter networks · Krylov sweeps | Frequency-domain Nédélec FEM with wave ports and fast sweep for narrowband; FDTD for broadband (D-FLX-32); MoM with multilevel fast multipole | Dispersion fit inside the measured band | Dipole with a Hallén reference; Mie sphere | Nat | 4 drone antenna, 5 general |
 | Signal and power integrity | µ Me | RLGC lines · — · vector fitting | Quasi-static and full-wave extraction | Causality and passivity enforced | Microstrip | Nat; ELX owns use | 3 |
-| EMC | Me P | Shielding formulas · cable models · — | FDTD and DG time domain with field-to-cable coupling | `Flag` always for compliance prediction | Aperture cases [unverified] | Nat | 5 |
+| EMC | Me P | Shielding formulas · cable models · — | FDTD and DG time domain with field-to-cable coupling | `Flag` always for compliance prediction | Aperture cases [unverified] | Nat | 4 emissions, 5 immunity |
 
 ### Optics and photonics
 
@@ -355,17 +355,17 @@ COV owns free-surface and multiphase flow beyond mould filling (13.4). Real-flui
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Battery cells, reduced | µ Me P | Capacity formulas · equivalent circuits with OCV, entropic heat and LFP hysteresis [S62] · SPM, SPMe | — | C-rate, temperature and SOC bounds per rung; lithium plating `Flag` | Ladder at low C-rate; drive cycles | Nat | 4 (13.4) |
 | Battery cells, DFN | µ Me P | — | Doyle–Fuller–Newman as parameter-domain forms (D-FLX-38); multi-species multi-reaction OCV, as PyBaMM's MSMR [S61]; PyBaMM reference [S19][S20] | As above, plus particle-radius range | PyBaMM DFN | Nat | 5 (13.4) |
-| Swelling and stack pressure | Me P | Thickness change with SOC · pad and stack springs · — | Particle expansion homogenized to cell expansion against pad stiffness; PyBaMM swelling submodels at particle scale [S63] | Expansion curve from measured cell thickness; pad stiffness from test | Thickness and force against SOC | Nat | 4 |
-| Battery packs | Me P | Series-parallel scaling · cell, busbar and thermal networks · — | Cells in 3D pack thermal and coolant flow; pseudo-4D packs | Cell spread from measurement | GP6 pack test | Nat | 4, 5 pseudo-4D |
+| Swelling and stack pressure | Me P | Thickness change with SOC · pad and stack springs · — | Particle expansion homogenized to cell expansion against pad stiffness; PyBaMM swelling submodels at particle scale [S63] | Expansion curve from measured cell thickness; pad stiffness from test | Thickness and force against SOC | Nat | 4 (13.4) |
+| Battery packs | Me P | Series-parallel scaling · cell, busbar and thermal networks · — | Cells in 3D pack thermal and coolant flow; pseudo-4D packs | Cell spread from measurement | GP6 pack test | Nat | 4, 6 pseudo-4D |
 | Battery degradation | µ Me P | Calendar and cycle fade · — · — | SEI growth, plating, particle cracking, active-material loss | `Flag` always; beyond tested duration `Invalid` (OOR-5) | Held-out ageing data | Nat | 5 |
-| Abuse mechanics | Me P | — | Homogenized jelly-roll crush with failure strain, coupled to runaway screening | `Flag` always: short onset is empirical | Crush tests [unverified] | Nat | 6 |
+| Abuse mechanics | Me P | — | Homogenized jelly-roll crush with failure strain, coupled to runaway screening | `Flag` always: short onset is empirical | Crush tests [unverified] | Nat | 6 (13.4) |
 | Thermal runaway | Me P | ARC onset · multi-step Arrhenius · — | 3D abuse with decomposition kinetics and propagation | `Flag` always; venting and fire out of reach (OOR-14) | ARC data | Nat | 5 |
 | Fuel cells and electrolysers | µ Me P | Polarization curves · 1D membrane models · — | 3D two-phase PEM with Butler–Volmer kinetics | `Flag`: water closures are empirical | Polarization curves [unverified] | Nat | 6 |
 | Corrosion and electroplating | µ Me P L | Galvanic series, Faraday's law · — · — | Secondary and tertiary current distribution; cathodic protection; Nernst–Planck in crevices | Polarization data in the same electrolyte; long horizons `Flag` (OOR-5); additive chemistry empirical | Cathodic-protection cases; Hull cell [unverified] | Nat | 5 |
 | Gas-phase kinetics | — | Equilibrium · reactors and flames with Cantera [S21][S22] · mechanism reduction | Finite-rate chemistry in CFD | Mechanism ranges enforced | Ignition delay | Wasm | 6 |
 | Cure and crystallization kinetics | Me P | — · Kamal–Sourour cure, crystallization kinetics · — | Cure–thermal–residual-stress coupling | DSC calibration range | DSC data | Nat | 3 |
 
-ELX owns equivalent-circuit and SPMe cells and FLX the DFN solver (13.4); COV owns their envelopes and the swelling, degradation, abuse and runaway models.
+ELX owns equivalent-circuit and SPMe cells, swelling and stack pressure, and abuse mechanics; FLX owns the DFN solver (13.4). ELX also owns packs, and COV owns every row's envelope and the degradation and runaway models.
 
 ### Particles, molecules and multiscale
 
@@ -394,7 +394,7 @@ ELX owns equivalent-circuit and SPMe cells and FLX the DFN solver (13.4); COV ow
 | Implants | Me P | Beam and plate formulas · — · — | Nonlinear FEM with bone–implant contact; fatigue per ASTM F2996 [unverified] | Declared density–modulus relation | GP15 bone plate tests | Nat | 7 |
 | Cardiovascular flow | Me P | Poiseuille, Womersley · Windkessel · — | ALE fluid–structure interaction | `Flag`: patient boundary conditions dominate | FDA nozzle [unverified] | Nat | 7 |
 | Musculoskeletal posture | P | Anthropometric tables · — · — | Multibody with optimal control; OpenSim (Apache-2.0) reference [S41] | Population and task within data | Gait data [unverified] | Wasm | 5 |
-| Human factors | P | Reach envelopes, NIOSH lifting [unverified] · — · — | Digital humans from ANSUR II (6,068 subjects, 93 measures [S47]) | Multivariate percentiles, not single-measure | Fit and reach | Nat | 3 reach, 5 posture |
+| Human factors | P | Reach envelopes, NIOSH lifting [unverified] · — · — | Digital humans from ANSUR II (6,068 subjects, 93 measures [S47]) | Multivariate percentiles, not single-measure | Fit and reach | Nat | 5 |
 | Cloth and soft goods | Me P | — | Shell or discrete elastic models with IPC contact [S26] | Fabric data from Kawabata-type tests [unverified] | Cusick drape [unverified]; GP16 | Nat | 5 |
 
 ### Manufacturing process physics
@@ -465,7 +465,7 @@ Flux owns rigid and flexible multibody dynamics and rods (contract section 14); 
 | Thermal and fluid models | Conduction to two-phase rows; turbulence closures and wall treatments | Correlations outside range `Refuse`; separation `Flag` | COV-O-BENCH-3 | 1 to 6 per row |
 | Free surface and multiphase beyond mould filling (13.4) | VOF, level set, phase field, SPH and dispersed models with resolution envelopes | Under-resolved interfaces `Flag`; breakup per OOR-8 | COV-O-BENCH-8 | 5 |
 | Electromagnetic and optical models | Static to full-wave rows | Non-causal fits rejected; EMC prediction `Flag` | COV-O-BENCH-4 | 3 to 6 per row |
-| Electrochemical models | Battery ladder, swelling, degradation, abuse, corrosion | Plating, degradation and abuse `Flag` | COV-O-BENCH-6 | 3 to 6 per row |
+| Electrochemical models | Envelopes of the battery ladder, swelling and abuse rows, whose capabilities ELX and FLX own (13.4); degradation, runaway and corrosion models | Plating, degradation and abuse `Flag` | COV-O-BENCH-6 | 3 to 6 per row |
 | Process models | State Fields per process | Uncalibrated machine or alloy: `Unassessed` | COV-O-BENCH-5 | 1 to 6 per row |
 | Constitutive draping and cure (13.4) | Draped fibre-angle and cure-state Fields; spring-in stress | Shear above the locking angle: `Invalid` | COV-O-BENCH-9 | 5 |
 | Wasm and External Op domains | Granular, particles, kinetics, MD, plasma, transport | Host failure is a `Failure`; worker loss an Abort | COV-O-BENCH-7 | 5 to 7 |
@@ -733,7 +733,7 @@ An `EnvironmentalRecord` gives global warming potential per unit mass by life-cy
 | Directional properties | Tensors in a material frame with a symmetry class | Ill-formed tensor rejected with the failing eigenvalue | COV-O-MAT-1 | 1 |
 | Units | Every property a `Quantity<D>` | Compile error | COV-O-MAT-2 | 0 |
 | Statistical basis | Lower and upper bases; side by sensitivity sign | `MissingBasis { available }` | COV-O-MAT-6 | 1 |
-| Uncertainty | Aleatory with groups; epistemic intervals | Input part `NotQuantified` | COV-O-ERR-1 | 2 |
+| Uncertainty | Aleatory with groups; epistemic intervals | Input part `NotQuantified` | COV-O-ERR-1 | 2, 3 epistemic |
 | Designations and certification | Equivalence basis; specification and lot-certificate links | "Nearest" fails specification checks; a missing certificate fails release | COV-O-MAT-7 | 1, 3 certification |
 | Constitutive library | `crucible:material/constitutive`; `local_solve` tangents | Inadmissible models do not register; `TangentInconsistent` | COV-O-MAT-1 | 1 to 7 per family |
 | Calibration | `calibrate(model, tests) -> (ConstitutiveBinding, CalibrationReport)`; inverse, full-field and model selection | Non-identifiable parameters reported with their null space; ties never broken silently | COV-O-MAT-3 | 2, 3 inverse, 5 DIC |
@@ -789,31 +789,32 @@ Targets are measured on contract section 13.3's reference laptop or a named GPU.
 
 | To | What COV provides | Types |
 | --- | --- | --- |
-| FLX | Physics and constitutive models; regime functions and envelopes; the calibration-class map; turbulence, fatigue, fracture and damage models; D-COV-11's operation needs | `Field`, `Material`, `ValidityEnvelope` |
+| FLX | Physics models and constitutive models with tangents; regime functions and envelopes; the calibration-class map; turbulence, fatigue, fracture and damage models; D-COV-11's operation needs | `Field`, `Material`, `ValidityEnvelope` |
 | ING | `std::physics` and `std::materials`; envelope record syntax needs | Ingot packages |
-| KLN | Envelope and Material records as CAS inputs; calibration chains as Ops; External Op keys (D-COV-12); `DataLicence` values for the label lattice | `Op`, `Labels` |
+| KLN | Envelope and Material records as CAS inputs; calibration chains as Ops; External Op keys (D-COV-12); `DataLicence` values for the label lattice; `Material` composition (each `EnvironmentalRecord`'s restricted substances) for compliance roll-ups | `Op`, `Labels`, `Material` |
 | `repo` | Material versions; waivers; validity, certification and licence release checks | `Material`, `CheckOutcome` |
-| AGT and `api` | Coverage map; limit records; typed `ValidityError`s; calibration Ops | Read and Inspect methods |
-| UIX | Zone Fields; budget displays with the model-form part; basis citations; escalation options | `Field<Body, ValidityZone>` |
-| MEC | Solid, contact, joint, fatigue and dynamics models with envelopes; the basis side per check | `PhysicsModel` |
-| MFG | Process models, envelopes and state Fields; per-material environmental records for product LCA | `Field`, `EnvironmentalRecord` |
-| ELX | Electromagnetic, thermal and electrochemical models with envelopes; precision classes; electronic materials | `PhysicsModel`, `Material` |
-| ECO | Domain acceptance checks for the registry; semantics of the `crucible:physics` and `crucible:material` worlds | Package |
+| AGT and `api` | Coverage map; limit records; validity envelopes; typed `ValidityError`s with escalation; calibration Ops | Read and Inspect methods |
+| UIX | Zone Fields with their assumptions; budget displays with the model-form part; basis citations; escalation options | `Field<Body, ValidityZone>` |
+| MEC | Materials with yield, locking angle and process windows; solid, contact, joint, fatigue and dynamics models with envelopes; the basis side per check; constitutive draping in phase 5 (13.4) | `Material`, `PhysicsModel` |
+| MFG | Process models and `ValidityEnvelope`s for cutting, melts, cast alloys, forming, transformation and cure; state Fields; OOR-8; per-material environmental records for product LCA | `Field`, `ValidityEnvelope`, `EnvironmentalRecord` |
+| ELX | Dielectric, copper, magnetic and cell Materials with envelopes; electromagnetic (EMC included), thermal and electrochemical models with envelopes; precision classes | `PhysicsModel`, `Material` |
+| ECO | Domain acceptance checks for the registry; semantics of the `crucible:physics` and `crucible:material` worlds; material semantics for MatML; OpenFOAM case semantics with FLX | Package |
 | PLT | Precision classes per model; External Op worker needs | Model metadata |
 
 ### What COV requires
 
 | From | Requirement |
 | --- | --- |
-| FLX | Estimators and η99 tables; solution verification; parameter-domain forms; per-region reduction and localization; coupling algorithms; `std::uq`; the D-COV-11 operations |
-| ING | Records, intervals and typed regime functions; `require`; `CheckOutcome` with `conditional_on`; the `Truth` decision rule |
+| FLX | Forms and solvers; estimators, the calibration corpus and η99 tables; solution verification; parameter-domain forms; per-region reduction and localization; regime-variable Fields and zone evaluation; coupling algorithms; `std::uq`; the D-COV-11 operations |
+| ING | Records, enums, `Range` as interval and kinds for parameter domains; typed regime functions; `require`; `CheckOutcome` with `conditional_on`; the `Truth` decision rule |
 | KLN | Deterministic calibration and External Op evaluation; label joins; Evidence record lookup; two-builder agreement at `SignOff` |
 | `repo` | Human-only waivers and envelope approvals; policy allowances with citations; `min_evidence_level` |
-| ECO | The registry pipeline and coverage index; IFC 4.3, GDSII, OASIS, MatML and ISO 10303-235 codecs |
+| ECO | The registry, its publish pipeline with domain acceptance checks, and package metadata for the coverage map; hosting for solver and constitutive Wasm components; IFC 4.3, GDSII, OASIS, MatML and ISO 10303-235 codecs |
 | ANV | Implicit and lattice Bodies; mid-surfaces and member axes; per-entity tolerances |
-| MEC | Which mechanical checks need calibrated classes; plies and kinematic draping |
+| MEC | Laminate data (plies and kinematic draping) and part data for envelopes; which mechanical checks need calibrated classes |
 | MFG | Process setups and data for the process capabilities it owns |
-| PLT | `f64` availability per class; the browser memory table |
+| ELX | Equivalent-circuit and SPMe cells, swelling and stack pressure, and abuse mechanics (13.4); packs; the electrical use of physics models |
+| PLT | `linalg` for calibration fits; `f64` availability per class; the browser memory table |
 
 ## Oracles
 
@@ -872,9 +873,9 @@ Phases of shared capabilities follow contract section 13.4; golden products 7 to
 | 1 | GP1 and GP2: linear elasticity, modal analysis and linear buckling, conduction, stress-life fatigue, lattice envelopes with localized strut stresses, inherent-strain distortion; metals and print polymers with specification-limit bases; E2 checks passing on cited allowances |
 | 2 | GP3 and GP4: plasticity, mortar contact, shells, beams and frames, joints, lubrication, vibration, rotordynamics, strain-life and weld fatigue, weld distortion by inherent strain, bend allowances, calibration Ops; the weld-distortion model at E3 |
 | 3 | GP5: viscoelasticity, creep, crack growth, moisture, laminar and natural conjugate heat transfer, radiation, moulding models with ARD-RSC orientation, drop, electrostatics, magnetostatics, acoustics, chatter, allowables, connectors; warpage and drop models at E3 |
-| 4 | GP6: RANS and turbulent conjugate heat transfer, rotor aerodynamics and acoustics, motors, Joule heating, antennas, equivalent-circuit and SPMe cells, swelling, laminates, two-phase heat transfer, flight dynamics; models validated against flight, dynamometer and thermal tests |
+| 4 | GP6: RANS and turbulent conjugate heat transfer, rotor aerodynamics and acoustics, motors, Joule heating, antennas, EMC emissions, equivalent-circuit and SPMe cells, swelling, laminates, two-phase heat transfer, flight dynamics; models validated against flight, dynamometer and thermal tests |
 | 5 | GP7 MEMS, GP8 steel platform with the IFC structural check, GP9 crash box; DFN cells, free surface and multiphase, draping and cure, sheet forming, scale-resolving CFD |
-| 6 | GP10 wing box, GP11 CubeSat, GP12 battery sub-pack: aeroelasticity, transonic flow, ice accretion, spacecraft thermal, launch environments, dose, abuse mechanics, casting |
+| 6 | GP10 wing box, GP11 CubeSat, GP12 battery sub-pack: aeroelasticity, transonic flow, ice accretion, spacecraft thermal, launch environments, dose, abuse mechanics, pseudo-4D packs, casting |
 | 7 | GP13 hull, GP14 timber pavilion (timber, structural fire, IFC export), GP15 bone plate (V&V 40 package), GP16 sewn pack; marine, geomechanics, seismic, plasma and radiation transport |
 
 ## Open questions
@@ -894,13 +895,13 @@ Phases of shared capabilities follow contract section 13.4; golden products 7 to
     - R1-01, R1-02, R1-04, R1-07, R1-08, R1-21 to R1-25, R3-08 and R5-03: applied to COV's rows, envelopes and records; the machinery is FLX's or the contract's.
     - R1-36 and R1-39: COV owns the uncertainty representation and precision classes; FLX owns the methods, and ELX restates its Monte Carlo target.
     - R1-41 and R1-54: COV owns the models and envelopes; MFG owns the capabilities (contract section 13.4).
-    - R1-40: pseudo-4D packs land in phase 5 with DFN, which contract section 16 moved from phase 4.
+    - R1-40: DFN cells are phase 5 (contract section 13.4), and pseudo-4D packs land in phase 6 with ELX's pack-scale DFN.
     - R1-33: superconductors are out of scope (OOS-3) rather than a matrix row.
     - R3-55: "Coverage by category" became the out-of-reach list's Categories column; scope lives in contract section 13.1.
 
 ## Contract change requests
 
-- **CCR-COV-9. Model level and evidence level in the glossary.** Add "Model level: the form of a physics model, L0 analytic to L3 full 3D (COV); never call it 'fidelity'" and "Evidence level: the credibility of a physics model, E0 to E4 (COV); distinct from an Evidence record". *Reason:* round 1's "fidelity levels" collided with `Fidelity`, and "evidence" already names Evidence records and `CheckOutcome.evidence`.
+- CCR-COV-9, model level and evidence level in the glossary: accepted in contract v5 (section 2).
 
 ## Sources
 
