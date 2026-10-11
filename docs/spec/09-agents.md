@@ -528,7 +528,7 @@ A `Plan` holds the goal, the items, the integration branch, a budget carved from
 
 ### Execution
 
-[[DIAGRAM: swarm flow. Boxes: Human goal → Planner → Plan (validated by propose.plan) → Workers in parallel, one per work item, each on a child branch forked from the integration branch → child Proposals → Verifier (light) → Merge queue (CI on the merged result) → Integration branch → Parent Proposal → Verifier (full) → Human review or auto-merge policy → Target branch. Side arrows: every Evaluation goes to Kiln workers; budget flows Organization → Proposal tree → Work items → Sessions.]]
+[[DIAGRAM diagrams/09-agents-swarm-flow.jsx: swarm flow · planner, parallel workers, merge queue, two verifiers]]
 
 1. **Dispatch.** The runtime leases each ready item up to `max_parallel`, opening a child session on a branch forked from the integration head with the item's write set, scopes and budget.
 2. **Work.** The worker reads, edits, builds, checks and inspects, then proposes into the integration branch.
@@ -888,7 +888,7 @@ Anyone else who opens a request sees "not assigned to you", and push notificatio
 
 A release plan's digest covers the `ApprovalSubject`'s `ObjectId`, the tag and the effectivity, never the `ChangeId` or the CI report. A rebase or CI re-run that leaves the subject unchanged therefore keeps its approvals, and a change order's approvals are exactly these (R3-16, R3-22). Every approval of a release or an R4 Act becomes a KLN signature record with meaning, printed name and time (R5-21).
 
-[[DIAGRAM: Act sequence. Lanes: Agent, api server with Cedar, Approver inbox and page, External system or device gateway. Agent → act.prepare → ActionPlan with digest; act.commit → approval request assigned to named approvers; act.approval_pending with a request id, no URL; approver opens the server page, WebAuthn, approves the digest; agent polls act.status → server rechecks plan, recipient, labels and screening → executes or delivers (never a machine start) → ActionReceipt; audit entry and KLN signature record.]]
+[[DIAGRAM diagrams/09-agents-act-sequence.jsx: Act sequence · two-phase commit with the approval out of band]]
 
 **Decision D-AGT-30:** Every byte that leaves a tenant goes through one Act family, `release_data { recipient, payload, purpose, authorization }`, which AGT owns. KLN runs its checks as one stage at `act.commit` and records the result (D-KLN-40): labels against the recipient's attributes, restricted-party screening, an export authorization record (licence number, licence exception or exemption) for any export control, a watermark record, expiry and audit. Recipients are KLN `RecipientRecord`s, verified out of band and screened, so a recipient that appears only in agent text is refused with `act.recipient_unverified`. *Why:* six egress paths with different controls invite the weakest (R5-06), and a recipient changed through an injected "our address has changed" email would redirect every later RFQ (R5-05). *Rejected:* per-path controls; recipient records changed by ordinary Proposals.
 
