@@ -27,7 +27,7 @@ The published view is the Claude Doc [Crucible — Platform Spec](https://claude
 
 ## Status
 
-Round 2 is in progress: each tab is revised against contract v4.1 and the review findings that target it.
+Round 2 is in progress: each tab is revised against contract v4.2 and the review findings that target it.
 
 | Tab | Version | Words excluding Sources | Review findings (Critical) | In the doc |
 | --- | --- | --- | --- | --- |
@@ -52,7 +52,7 @@ A finding can target several tabs, so the column sums to more than the 295 findi
 ## Layout
 
 ```
-contract.md              binding architecture contract (v4.1)
+contract.md              binding architecture contract (v4.2)
 spec/                    the doc's tabs, one file each; diagrams/ holds widget sources
 review/                  six adversarial reviews, their brief and findings.json
 revision/                round 2 brief, one findings packet per tab, publishing notes, work in progress

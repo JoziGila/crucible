@@ -1,6 +1,6 @@
-# Crucible architecture contract (v4.1)
+# Crucible architecture contract (v4.2)
 
-Binding for every design agent and reviewer. Version 4 integrates the rulings on the first round's contract change requests (section 14) and on the adversarial review (section 15); version 4.1 rules on the change requests of the first revised tabs (section 16). Where a draft disagrees with this contract, the contract wins. If you believe a ruling is wrong, do not work around it: say so under "Contract change requests" with your reason.
+Binding for every design agent and reviewer. Version 4 integrates the rulings on the first round's contract change requests (section 14) and on the adversarial review (section 15); versions 4.1 and 4.2 rule on the change requests of the first revised tabs (section 16), and 4.2 adds the shared phase table (13.4). Where a draft disagrees with this contract, the contract wins. If you believe a ruling is wrong, do not work around it: say so under "Contract change requests" with your reason.
 
 ## 1. Mission
 
@@ -330,7 +330,7 @@ Dependencies point down this list; apps talk to the engine only through `api`.
 
 `unsafe` is allowed only in `simd`, `gpu`, `wasm-host`, the code-loading parts of `kernels`, `bridges/` and `apps/platform`. Everything else is `forbid(unsafe_code)`. PLT renames its pool priority to `PoolLane` and its file durability to `WriteDurability`, so `PriorityClass` and Kiln's durability keep their meanings.
 
-## 13. Roadmap, program plan and performance targets
+## 13. Roadmap, program plan, performance targets and shared phases
 
 ### 13.1 Phases and golden products
 
@@ -399,6 +399,36 @@ Owned by PLT. The reference laptop is fixed: Intel Core Ultra 7 258V (8 cores, 8
 | Memory | under 1 GiB with GP1 open; idle 300 MiB with the GPU device created lazily | per PLT's browser memory table |
 | Installed size | 400 MiB | |
 | Flux CPU throughput (CEED bake-off) | BP3 and BP5 at p ≥ 3: at least 50% of MFEM or libCEED; memory-bound cases (BP1, BP2, p ≤ 2): at least 80% | |
+
+### 13.4 Shared phases
+
+A capability that several tabs phase has one phase, set here. The owner's capability table specifies it: contract, failure and oracle. Every other tab states the phase in one line and cites this table. A capability lands in the phase of the first gate that needs it; one that no gate needs takes the latest phase any tab proposed. A tab that needs a different phase files a change request.
+
+| Capability | Phase | First gate that needs it | Owner | Also phased in |
+| --- | --- | --- | --- | --- |
+| Modal analysis and linear buckling: Lanczos and LOBPCG eigen-solvers | 1 | GP2 strut buckling | FLX | COV |
+| Additive distortion by inherent strain: layer activation and prediction | 1 | GP2 | FLX | COV, MFG |
+| Weld distortion at structure scale, by inherent strain | 2 | GP4 measured weld distortion | MFG | COV, FLX |
+| Fitted FEM on conforming curved tetrahedra, with mortar contact | 2 | GP3 gear contact | FLX | ANV |
+| Conjugate heat transfer, laminar and natural convection | 3 | GP5 | FLX | COV, ELX |
+| Injection moulding: level-set fill front, pack, cool and warpage | 3 | GP5 measured warpage | MFG | COV, FLX |
+| Short-fibre orientation transport and its effect on warpage | 3 | GP5 measured warpage | MFG | COV, FLX |
+| Explicit dynamics for drop | 3 | GP5 drop response | FLX | COV |
+| Stability lobes and chatter prediction | 3 | None; GP3's programs use tool-library cutting data | MFG | COV |
+| Conjugate heat transfer, turbulent (RANS) | 4 | GP6 thermal test data | FLX | COV, ELX |
+| Electro-thermal coupling: Joule heating with temperature-dependent resistivity | 4 | GP6 thermal test data | FLX | ELX |
+| FMU export and SSP | 4 | GP6 | FLX | ELX |
+| Battery cells: equivalent-circuit and SPMe models | 4 | GP6 pack voltage | ELX | COV |
+| Composite laminates: zone-based plies, kinematic draping and laminate analysis | 4 | GP6 | MEC | ANV, COV |
+| Weld simulation at joint scale, transient | 4 | None | MFG | COV |
+| Battery cells: Doyle–Fuller–Newman (P2D) | 5 | None | FLX | COV, ELX |
+| Free-surface and multiphase flow beyond mould filling | 5 | None | COV | FLX |
+| Explicit dynamics with erosion for crash | 5 | GP9 | FLX | COV |
+| Sheet forming simulation and springback compensation | 5 | None | MFG | COV |
+| Constitutive draping and composite cure simulation | 5 | None | COV | MFG |
+| Casting simulation: mould filling, solidification and porosity for sand, high-pressure die and investment casting | 6 | None | MFG | COV |
+
+Three neighbours keep their own tab's phase: board thermal from part power Fields (ELX, 3), press-brake bend allowances (MFG and COV, 2) and distortion compensation for metal powder bed fusion (MFG, 2).
 
 ## 14. Ruling log, round 1 (contract change requests from the first drafts)
 
@@ -508,4 +538,4 @@ Each revised tab files its change requests under "Contract change requests". The
 | CCR-ANV-7 fidelity of the rebuild rows | Accepted (13.3): the rebuild row states its fidelity per benchmark, and a `SignOff` recertification row is added. |
 | CCR-ANV-8 `Unknown` bounds | Accepted (5 `Body`): unpropagated bounds become `NotQuantified`. |
 | CCR-FLX-8 `regularization` error source | Accepted (5 `ErrorBudget`), as 7.1 already requires the regularization error of peak and pointwise goals in the budget. |
-| CCR-FLX-9 one physics phase table | Open. Ruled before the remaining tabs are revised, so each cites one table. |
+| CCR-FLX-9 one physics phase table; R1-35 | Accepted (13.4): one row per shared capability, phased by the first gate that needs it or else by the latest phase a tab proposed. R1-35's fixes hold except DFN, which goes to phase 5 rather than 4 because no gate names it; GP6 uses equivalent-circuit and SPMe cells. Five shared capabilities beyond R1-35 get rows: free-surface flow beyond moulding, electro-thermal coupling, FMU export and SSP, sheet forming and springback, and composite laminates. FLX v2 moves electro-thermal coupling and FMU export and SSP to phase 4 and DFN to phase 5 in the consistency pass. |
