@@ -153,11 +153,11 @@ Every row shares one contract (`read`, `write` and `probe` at its level) and the
 
 | Format | Version | R/W | Level | Strategy | Phase | Owner |
 | --- | --- | --- | --- | --- | --- | --- |
-| STEP AP242, Part 21 | ISO 10303-242:2025, edition 4; next edition at committee draft [ISO 242] | R/W | Identity | Build | 1: geometry, structure, validation properties, PMI write. 2: PMI read, persistent ids, tessellation. 3: composites, kinematics | ANV, MEC |
+| STEP AP242, Part 21 | ISO 10303-242:2025, edition 4; next edition at committee draft [ISO 242] | R/W | Identity | Build | 1: geometry, structure, validation properties, PMI write. 2: PMI read, persistent ids, tessellation. 3: kinematics. 4: composites | ANV, MEC |
 | AP242 edition 5 schema; domain model XML | Used in CAx-IF round 58J for threads and for assembly and kinematics data [CAx-IF 58J] | R/W | Semantics; structure | Build | 3 | MEC; KLN |
 | STEP AP203, AP214 | Edition 2; edition 3 [CAx-IF GVP] | R; W | Structure | Build | 1 (R), 2 (W) | ANV |
 | STEP AP209 | Extension of AP242 [ISO 10303 wiki] | R/W | Semantics: FE models, results as Fields | Build | 4 | FLX |
-| STEP AP238 and ISO 14649 | [unverified edition] | R/W | Semantics: workingsteps | Build | 3 | MFG |
+| STEP AP238 and ISO 14649 | AP238 edition 3, ISO 10303-238:2022, as MFG states | R/W | Semantics: workingsteps | Build | 3 | MFG |
 | STEP AP239; AP233 | [unverified editions] | R/W; R | Structure | Build | 5 | KLN; ELX |
 | IGES | 5.3 [unverified] | R/W | Geometry | Build | 2 | ANV |
 | JT | ISO 14306-1:2024 [ISO 14306] | R/W | Structure, B-rep and PMI where present | License (CAD Exchanger, HOOPS Exchange [CAD Exchanger formats][HOOPS Exchange]), then own reader | 2 (License), 4 (Build) | ANV |
@@ -179,7 +179,7 @@ A point cloud is a `Mesh` Body with vertices and no faces, with attributes as Fi
 | 3MF | ISO/IEC 25422:2025. Core 1.4.0, Production 1.1.2, Materials 1.2.1, Beam Lattice 1.2.0, Boolean 1.1.1, Secure Content 1.0.2, Volumetric 0.8.0, Toolpath 1.0.0 [3MF specifications] | R/W | Semantics for additive manufacturing | Build; lib3mf as an external oracle [licence unverified] | 1 (Core, Production, Materials, Beam Lattice), 2 (Toolpath), 3 (others) | MFG |
 | AMF | ISO/ASTM 52915 [unverified edition] | R/W | Geometry, materials | Build | 2 | MFG |
 | glTF 2.0 | ISO/IEC 12113:2022 [Khronos glTF ISO] | W; R | Visual, structure | Build | 2 | UIX |
-| OpenUSD | Core Specification 1.0 [AOUSD core 1.0] | R/W | Structure, visual | Build; Pixar's OpenUSD as oracle | 3 | UIX |
+| OpenUSD | Core Specification 1.0 [AOUSD core 1.0] | R/W | Structure, visual | Build; Pixar's OpenUSD as oracle | 3 | UIX, MFG, ELX |
 | E57; LAS and LAZ | ASTM E2807; LAS 1.4 [unverified revisions] | R/W | Scans, poses, classification | Build | 3 | MEC |
 | IFC | IFC 4.3, ISO 16739-1:2024 [ISO 16739][buildingSMART IFC 4.3] | R/W | Semantics for members, plates, openings, property sets | Build on the STEP layers | 5 | MEC |
 
@@ -197,6 +197,7 @@ ELX owns the board model, MFG the factory handoff (package choice, panelization,
 | KiCad files | S-expression formats [KiCad formats] | R; W of libraries | Semantics | Build | 3 |
 | EDIF; IPC-D-356; Specctra DSN and SES; placements | EDIF 2 0 0 [unverified]; others per ELX | W (SES R) | Connectivity, test, routing, placement | Build | 3 |
 | Touchstone, IBIS; VEC | 2.1 and 8.0; VEC 2.2.0, per ELX | R/W | Catalog-part models; harnesses | Build | 3; 4 |
+| SPICE netlists and models; Verilog-A | Per ELX [unverified dialects] | R | Circuits and device models (Verilog-A by D-ELX-14) | Build | 3 |
 
 Proprietary ECAD designs migrate through KiCad's importers (D-ECO-31).
 
@@ -228,10 +229,11 @@ MFG owns manufacturing semantics, ELX systems and robotics, COV materials.
 | Presetter readings | Per connector | R | Length, radius, runout as signed External inputs by tool serial | 2 | MFG |
 | QIF | QIF 3.0, ISO 23952:2020; DMSC Model-Based Characteristics 1.0 an ANSI standard since 24 June 2026 [QIF site] | R/W | Characteristics, plans, results | 2 (characteristics), 3 | MFG |
 | DMIS; MTConnect | DMIS [unverified]; MTConnect 2.5.0 [MTConnect 2.5.0] | W, R; R | Programs and results; machine state as External inputs | 3 | MFG |
-| OPC UA for Machine Tools | OPC 40501-1 release 1.02.0, published 1 November 2024, as MFG states [OPC 40501-1 v1.02] | R; jobs only by transfer Acts, never `Start` | Machine state | 3 | MFG |
+| OPC UA for Machine Tools | OPC 40501-1 release 1.02.0, published 1 November 2024, as MFG states [OPC 40501-1 v1.02] | R; jobs only by `store_machine_job` (`Store`), never `Start` | Machine state | 3 | MFG |
 | ReqIF; SysML v2 and the Systems Modeling API | ReqIF 1.2 [ReqIF]; SysML 2.0, KerML 1.0, API 1.0, adopted 21 July 2025 [OMG SysML v2] | R/W | Requirements; models mapped to `std::systems` | 4 | ELX |
 | URDF; SDFormat; MJCF | Per ELX [unverified versions] | W; R | Kinematic trees, inertials, sensors | 4 | ELX |
-| MatML | [unverified] | R/W | Property records with units and sources | 2 | COV |
+| MatML; ISO 10303-235 | [unverified]; ISO 10303-235:2019, as COV states | R/W | Property and test records with units and sources | 2 | COV |
+| GDSII; OASIS | [unverified versions] | R/W | Mask and package layer geometry (D-COV-9) | 5 | COV, MEC |
 
 All rows here are Build. Crucible never reverse-engineers a proprietary format or imports feature history (D-ECO-25).
 
@@ -339,7 +341,7 @@ Tool and connector Wasm components run locally on desktops and on the server for
 
 On iPadOS, registry packages appear only as dependencies of an opened design, since guideline 3.2.2(i) rejects store-like catalogs of extensions [App Review]. The registry meets guideline 4.7 for them with an index and universal links (4.7.4), reporting and blocking (4.7.1) and age ratings (4.7.5), and paid packages follow guideline 3.1. First-launch downloads show their size (4.2.3(ii)), and designs evaluate remotely if review rejects downloads.
 
-**Decision D-ECO-10:** The registry ships determinized core modules plus a data description of each Wasm component, never per-component JavaScript. Browsers instantiate them through one first-party, generic Wasm component runtime that lifts and lowers the Canonical ABI from that description. Third-party Wasm components run in a separate cross-origin, sandboxed worker with no OPFS, cookies or credentials, exchanging data by `postMessage`, and an oracle compares every browser result with the native one. *Why:* generated glue would run in the engine worker's origin, with access to every local repository, authenticated `fetch` and WebCrypto keys, so the glue, not Wasm, would be the boundary; a fixed runtime is reviewed once. *Rejected:* per-component ES modules as jco generates them [jco]; transpiling in the client (the same glue, more variance); Pulley compiled to Wasm (an interpreter inside an engine). (revised in round 2)
+**Decision D-ECO-10:** The registry ships determinized core modules plus a data description of each Wasm component, never per-component JavaScript. Browsers instantiate them through one first-party, generic Wasm component runtime that lifts and lowers the Canonical ABI from that description. Third-party Wasm components run in a separate opaque-origin sandboxed worker with no OPFS, cookies or credentials, exchanging data by `postMessage`, and an oracle compares every browser result with the native one. *Why:* generated glue would run in the engine worker's origin, with access to every local repository, authenticated `fetch` and WebCrypto keys, so the glue, not Wasm, would be the boundary; a fixed runtime is reviewed once. *Rejected:* per-component ES modules as jco generates them [jco]; transpiling in the client (the same glue, more variance); Pulley compiled to Wasm (an interpreter inside an engine). (revised in round 2)
 
 PLT owns the web app's integrity: an asset manifest in a transparency log, TUF checks in the service worker, and expiring apt and dnf metadata.
 
@@ -355,9 +357,9 @@ Each package is versioned with SemVer [WIT guide] and published in the registry.
 | `crucible:field`; `crucible:model` | `types`, `build`, `sample`; `types`, `build`, `read` | | FLX; MEC, KLN |
 | `crucible:host` | `diagnostics`, `progress` (write-only), `cas`, `parallel` | | KLN |
 | `crucible:io` | `types`, `read`, `write` | `importer`, `exporter` | ECO |
-| `crucible:physics`; `crucible:material` | `solve`; `constitutive` | `solver`; `constitutive-model` | COV, FLX |
+| `crucible:physics`; `crucible:material` | `solve`; `model` | `solver`; `constitutive` | COV, FLX |
 | `crucible:mfg` | `strategy`, `post` | `toolpath-strategy`, `post-processor` | MFG |
-| `crucible:ui` | `panel`, `canvas2d` | `panel`, `canvas2d` | UIX |
+| `crucible:ui` | `types`, `view`, `canvas-host`, `canvas` | `panel`, `canvas2d` | UIX |
 | `crucible:api` | One interface per method group | | AGT |
 | `crucible:tool` | `process`, `external` | `driver` | ECO, PLT |
 | `crucible:connect` | `types` (offers, quotes, orders), `secrets`, `partner`, `erp`, `mes`, `plm` | `connector`, `partner-connector`, `erp-connector`, `mes-connector`, `plm-connector` | ECO, MFG, KLN |
@@ -467,7 +469,7 @@ WASI 0.3.0 shipped on 11 June 2026 and 0.3.1 on 11 August 2026, with no date for
 | Process isolation | Third-party Wasm components in sandboxed workers; per (tenant, label scope) on servers | Worker loss is an Abort | ECO-O-8 | 1 |
 | Capability grants and flow rule | Scoped grants; at most one of labelled reads, egress and file writes | `CapabilityDenied { capability, package, fix }` | ECO-O-8 | 1 |
 | Determinized execution and limits | Contract section 7.4; seeds from inputs; limits above | Limit failures as cached `Failure`s | ECO-O-6, ECO-O-7 | 0 |
-| Browser Wasm component runtime | Generic runtime; third-party Wasm components cross-origin | Without isolation, third-party Wasm components run remotely | ECO-O-6, ECO-O-8 | 1 |
+| Browser Wasm component runtime | Generic runtime; third-party Wasm components in an opaque-origin worker | Without isolation, third-party Wasm components run remotely | ECO-O-6, ECO-O-8 | 1 |
 | Tablet execution | WebKit with bundled std; Android without Android API imports | Rejected downloads evaluate remotely | ECO-O-6 | 3 |
 | WIT versioning | Additive minors, deprecation window, adapters, retention | A removal in a minor is refused | ECO-O-10 | 0 |
 
@@ -638,7 +640,7 @@ The pipeline runs in order, and a failure at any step returns a typed error with
 
 **Decision D-ECO-16:** Every package version carries a Sigstore signature and SLSA provenance, and its signer must match its namespace's trusted-publisher policy, which the namespace owner signs offline as delegated TUF targets, in the model PEP 480 proposes. Policy changes are logged and notified to the owner, and the lockfile pins each package's signer. Packages under `std::` and `crucible::` and every translator are built by the hermetic builder at SLSA Build level 3 [unverified: level definitions in v1.2] and reproduced bit for bit. *Why:* with online keys alone, TUF does not protect projects from attackers who have compromised the registry, which PEP 458 states and leaves to developer signing in PEP 480 [PEP 458]; reproducible builds let anyone check the registry. *Rejected:* trusting the registry's own record of who may publish (round 1; a compromised registry authorizes itself); signatures without provenance; author-managed GPG keys. (revised in round 2)
 
-Every signature record carries an algorithm id. By phase 2, the TUF root and targets, log checkpoints and registry provenance are dual-signed. The second signature is ML-DSA-87, standardized in FIPS 204 on 13 August 2024 [FIPS 204], or LMS for offline keys.
+Every signature record carries an algorithm id. From phase 2, as contract section 7.8 requires, the TUF root and targets, log checkpoints and registry provenance are dual-signed: a classical signature plus ML-DSA-87, standardized in FIPS 204 on 13 August 2024 [FIPS 204], or LMS for release signing.
 
 Long-retention records are re-timestamped before an algorithm retires, and a CNSA 2.0 profile uses only those algorithms [unverified: NSA dates]. A key ceremony gives the TUF root and namespace-policy keys to keyholders at least half of whom are not company employees (D-ECO-22). Air-gapped registries run their own Fulcio and Rekor or organization keys [unverified: Sigstore key-based mode].
 
@@ -725,7 +727,7 @@ Quotes return as External inputs, and feedback such as "hole too close to bend" 
 | Third-party text as `ExternalText` | Every publisher's READMEs, docs, templates and definitions | None; text returned by handle | ECO-O-18 | 2 |
 | Paid packages, escrow and scanning | Offline entitlements; independent escrow; private scans | `EntitlementRequired`, never cached; listing refused on a finding | ECO-O-20, ECO-O-29 | 3 |
 | Supplier offers | One `offer` record as dated External inputs | Stale offers flagged in Proposals | ECO-O-16 | 2 |
-| Manufacturing partners | Quotes and orders inside Acts; certification suite | `partner-error` mapped to typed errors | ECO-O-28 | 3 |
+| Manufacturing partners | Quotes and orders inside Acts; certification suite | `partner-error` mapped to typed errors | ECO-O-28 | 2, 3 (certification) |
 
 ## Open-source governance and compliance
 
@@ -822,7 +824,7 @@ The community has a forum, chat, an issue tracker and monthly office hours per a
 | Part geometry, assembly structure, properties | `Body` with identity, `Assembly` of Instances, metadata | AP242, Parasolid or licensed readers | 1 (STEP), 2 (licensed) |
 | Semantic PMI; mates | GD&T on faces (presentation-only where the source has no semantics, flagged); mates where exposed, else fixed placements | AP242 or licensed readers [unverified per format] | 2; 3 |
 | Drawings; PDM history | PDF and DXF Assets; released revisions without feature history | Files; PLM connectors (D-ECO-30) | 1; 4 |
-| NC programs | Assets of kind `Program` linked to part revision and machine, verified by MFG's `verify_nc`, never converted to workingsteps, with the same approval and transfer path as generated programs | Bulk import | 2 |
+| NC programs | Items of kind `Program` with the NC text as an Asset, linked to part revision and machine, verified by MFG's `verify_nc`, never converted to workingsteps, with the same approval and transfer path as generated programs | Bulk import | 2 |
 | Tool libraries, posts, setup sheets | Tool Assemblies through the tool-data readers; posts and sheets as Assets | Bulk import | 2 |
 | ECAD designs and libraries | Schematics, boards, symbols, footprints and parameters; library parts become catalog parts with internal numbers (ELX) | Own EAGLE XML reader; KiCad for the rest (D-ECO-31) | 3 |
 | Boards without schematics | Layout, netlist and BOM | IPC-2581 and ODB++ read | 3 |
@@ -909,15 +911,15 @@ Deviations, with reasons:
 | From | Requirement |
 | --- | --- |
 | ANV | Builders with healing; certified mass properties; D-ANV-31, `import_map`, the normal form and `exchange_form`; tessellation |
-| MEC | The GD&T model and its AP242 mapping; `ShapeAspect`; joints; composites; design-time flags for semantic controls on facet faces |
-| FLX, COV | Field encodings for AP209, CGNS, Exodus, VTK, BDF, Abaqus and OpenFOAM; the FMI and SSP runtime (D-FLX-30); solver and constitutive world semantics |
-| ELX | The board, netlist and library models; IDX, IPC-2581, ODB++ and KiCad semantics; `CatalogSelection`; SysML v2 and ReqIF mappings |
-| MFG | The factory handoff; machine, tool and toolpath models; `verify_nc`; offer usage; partner flows |
-| ING | Module system, manifest language keys, lockfile `[language]`, editions, wrapper conventions, the SemVer row for entity-name changes |
-| KLN | Leaf inputs; Ops keyed by determinized hashes; event types and sequence numbers; data-package records; the system-of-record policy; the regulated cloud mode |
-| AGT | Catalog entries above; Act classes and the `release_data` family; `ExternalText` and instruction authority; render rules for untrusted Bodies; audit; MCP subscriptions |
-| PLT | The determinizer and overhead table; Wasmtime LTS and 7-day security releases; the OS sandbox for workers; the browser runtime host; offline bundles; NFC normalization |
-| UIX | Rendering of reports, grants, package pages and marketplace flows; panel chrome showing package identity |
+| MEC | The GD&T model and its AP242 mapping; `ShapeAspect`; joints; weld, hole and composite semantics; flat DXF conventions; design-time flags for semantic controls on facet faces |
+| FLX, COV | Field encodings for AP209, CGNS, Exodus, VTK, BDF, Abaqus and OpenFOAM; the FMI and SSP runtime (D-FLX-30); solver and constitutive world semantics; COV's domain acceptance checks |
+| ELX | The board, netlist and library models; IDX, IPC-2581, ODB++, KiCad, harness and robot description semantics; `CatalogSelection`; SysML v2 and ReqIF mappings |
+| MFG | The factory handoff and its choice of output packages; machine, tool and toolpath models; `verify_nc`; WIT worlds for strategies, posts, nesting, packing, slicers and recognizers; offer usage; partner flows |
+| ING | Module system, manifest language keys, lockfile `[language]`, editions, wrapper conventions, semantic-version rules with entity-name changes |
+| KLN | Leaf inputs; Ops keyed by determinized hashes; event types and sequence numbers; the records connectors map; data-package records; the system-of-record policy; the regulated cloud mode |
+| AGT | `std::agents` and `std::explore`; catalog entries above; Act classes and the `release_data` family; `ExternalText` and instruction authority; render rules for untrusted Bodies; audit; MCP subscriptions |
+| PLT | The determinizer and overhead table; Wasmtime LTS and 7-day security releases; world enforcement and the OS sandbox for workers; the browser runtime host; TUF and signature formats; offline bundles; NFC normalization |
+| UIX | The `crucible:ui` worlds `panel` and `canvas2d`; theme, keymap, template and tutorial schemas; rendering of reports, grants, package pages and marketplace flows; panel chrome showing package identity |
 
 ### What ECO provides
 
@@ -925,11 +927,15 @@ Deviations, with reasons:
 | --- | --- |
 | All tabs | The standards catalog and `TranslationReport`; `crucible:` WIT packages, contexts, capabilities and limits; the registry; event delivery (D-ECO-12) |
 | ANV, FLX | `crucible:ops`, generated from their catalogs |
-| KLN | Determinized hashes for keys; webhook delivery for its events; enterprise connectors; the watermark transform |
-| AGT | Signing for `std::agents` and `std::explore`; licence metadata; `release_data` members for archive, mirror, bundles, partners and connectors |
-| ELX, MFG | Board, manufacturing and tool-data readers and writers; `parts::` publishing and the offer schema; ECAD and NC migration |
-| FLX, COV | Hosting for solver and constitutive Wasm components; FMU packaging with FMI-LS-WASM |
-| UIX; PLT | Package metadata, capability descriptions and badges; worlds to enforce, declared memory limits, the browser Wasm component description, font packages for design text |
+| ING | Registry and signing; publish-time interface diffs (D-ECO-14); determinized Wasm components (D-ECO-10); the RFC process |
+| KLN | Determinized hashes for keys; the event envelope, signing and delivery; ERP, MES and PLM connectors; the software supply chain; connector feeds as External inputs; the watermark transform |
+| AGT | Signing for `std::agents` and `std::explore`; registry, event and archive behavior; importers returning `ExternalText`; licence metadata; partner connectors; `release_data` members for every exit path |
+| MEC | IDF and STEP board readers; AP242 and QIF translators; standards data packages |
+| ELX | Board readers and writers; EAGLE and KiCad-based migration; `parts::` publishing, the offer schema and offer connectors |
+| MFG | Every `io/` writer and its phase (3MF, IPC-2581, Gerber, ODB++, QIF, STEP-NC, USD); tool-data readers; the `erp-connector` world; NC migration |
+| FLX, COV | Hosting for solver and constitutive Wasm components; the publish pipeline and package metadata for the coverage map; FMU and SSP packaging with FMI-LS-WASM; codecs for Field formats, IFC 4.3, GDSII, OASIS, MatML and ISO 10303-235 |
+| UIX | The registry (a signed first-party index in phase 1); package metadata, capability descriptions and badges; licensed translators as external tools |
+| PLT | Worlds to enforce; declared memory limits; the browser Wasm component description; font packages for design text; export classification and CRA reporting |
 | Everyone outside | SDKs, C ABI, CLI, webhooks, and the archive and CAS encoding specifications |
 
 ## Oracles
@@ -1003,8 +1009,8 @@ ECO's oracles live in `oracles/eco/`, readable but not writable by agents; held-
 
 ## Contract change requests
 
-- **CCR-ECO-8. Third-party Wasm components out of process everywhere.** Section 7.4 sends third-party evaluation Wasm components out of process only where Wasmtime is below Tier 2. Replace it with: *only first-party Wasm components from the hermetic builder run in the engine process; every third-party Wasm component runs in a sandboxed worker on every target, per (tenant, label scope) on servers.* *Reason:* the engine process holds tokens, repositories and signing keys, and Wasmtime's 2026 advisories show the sandbox alone is not enough (D-ECO-26, R5-09).
-- **CCR-ECO-9. No per-component JavaScript in browsers.** Section 7.4 says browsers run "registry-built bundles". Replace it with: *browsers instantiate determinized core modules through one first-party Wasm component runtime, and third-party Wasm components run in a cross-origin sandboxed worker.* *Reason:* generated glue would run with the engine worker's authority (D-ECO-10, R5-12).
+- CCR-ECO-8: accepted in contract v5 (section 7.4).
+- CCR-ECO-9: accepted in contract v5 (section 7.4).
 
 ## Sources
 
