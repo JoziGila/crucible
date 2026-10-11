@@ -315,7 +315,7 @@ cover - vents - graded
 
 ### Direct edits
 
-Direct edits apply to any B-rep, imported geometry included, and are ordinary features in history. `push_pull(body, faces, by)` offsets faces through `anvil::offset_faces`, and `move_faces(body, faces, by, rules)` translates, rotates or offsets them. `replace_face`, `delete_face`, `edit_aspect` (a hole diameter, or a fillet radius through `anvil::edit_blend`) and `drive` (a 3D driving dimension) complete the set.
+Direct edits apply to any B-rep, imported geometry included, and are ordinary features in history. `push_pull(body, faces, by)` offsets faces through `anvil::offset_faces`, and `move_faces(body, faces, by, rules)` translates, rotates or offsets them. `replace_faces`, `delete_faces`, `edit_aspect` (a hole diameter, or a fillet radius through `anvil::edit_blend`) and `drive` (a 3D driving dimension) complete the set.
 
 Blends next to edited faces are removed, the edit applied and the blends rebuilt with the same parameters and ids (ANV). Otherwise the edit fails with `BlendRegrowFailed { blend, reason }` and the fixes "remove blend" and "reduce radius". Live rules from `anvil::recognize_relations` (coplanar, coaxial, tangent, symmetric, equal radius) are written into source as an editable list.
 
@@ -330,7 +330,7 @@ let edited = imported |> move_faces(imported.faces(near: p), by: offset(2mm),
 
 `emboss(body, curves, onto, height, mode)` raises, engraves or imprints sketch curves on planar and cylindrical faces. It uses the developable wrap, which is isometric and exact, so part numbers and logos work in phase 1. Embossed text may be a late-bound release field such as the revision label (Drawings).
 
-`wrap` also offers `Conformal` (Boundary First Flattening) and `Geodesic` methods, returning a distortion `Field<Faces, Real>` on non-developable faces. `deform(body, map)` takes `bend`, `twist`, `taper`, `stretch`, `cage` or `field(Field<Body, Displacement>)`; the Field variant lets a warpage or springback result pre-compensate an insert or die face, with the achieved bound returned.
+`wrap` also offers `Conformal` (Boundary First Flattening) and `Geodesic` methods, returning a distortion `Field<Faces, Real>` on non-developable faces. `deform(body, map)` takes `bend`, `twist`, `taper`, `stretch`, `cage` or `field(Field<Body, Displacement>)`; the Field variant lets a warpage result or, from phase 5 (contract 13.4), a springback result pre-compensate an insert or die face, with the achieved bound returned.
 
 ### Derived parts and families
 
@@ -369,7 +369,7 @@ Involute flanks are not rational, so gears use B-spline flanks within 0.1 µm (t
 
 ### Rebuild performance
 
-PLT owns contract 13.3's rows: a `SignOff` rebuild of a GP1-class benchmark in 2 s, `Interactive` p90 ≤ 10 s on the 200-feature corpus, recertification p90 ≤ 30 s, and the drag-preview rule. After an early edit every downstream input changes, so MEC's share is keeping features cheap. Cosmetic threads and geometry-mode patterns keep face counts low, tool bodies cache apart from Booleans, and each feature declares a cost estimate for Kiln's preview scheduler.
+PLT owns contract 13.3's rebuild, `SignOff` recertification and drag-preview rows. After an early edit every downstream input changes, so MEC's share is keeping features cheap. Cosmetic threads and geometry-mode patterns keep face counts low, tool bodies cache apart from Booleans, and each feature declares a cost estimate for Kiln's preview scheduler.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -458,7 +458,7 @@ Positions track the drivers by predictor-corrector continuation; velocities and 
 
 Motion studies sample adaptively, keeping each body's displacement between samples below a fraction of the clearance threshold. Sampled clearance is the interval [sampled minimum − maximum relative displacement, sampled minimum], so `min_clearance` checks decide three-valued, and near a singular position they are `Undecided`.
 
-`check::enclosure` runs clearance, keep-in and connector cut-out checks against boards from other ECAD tools. In phase 1 it reads boards imported as STEP assemblies; ECO's IDF and STEP board readers add reference designators and keep-outs.
+`check::enclosure` runs clearance, keep-in and connector cut-out checks against boards from other ECAD tools. In phase 1 it reads boards imported as STEP assemblies; ECO's IDF and STEP board readers, in phase 2 on an early 1.x train, add reference designators and keep-outs.
 
 ### Exploded views, subassemblies and interfaces
 
@@ -495,7 +495,7 @@ pub feature plate(m: MotorMount) -> Part {
 
 Opening loads structure, transforms and cached tessellations first; B-reps load only for Instances being edited, measured or checked. Mass properties always come from the full body's cached values, and named representation sets (`repr_set("simulation")`) serve Flux and drawings.
 
-Contract 13.3 sets capacity: 100,000 Instances at 60 fps on G1 (1,000,000 on the high band), 20,000 on G2, and a 1,000-part assembly opened from warm cache in 10 s. MEC adds one target: a 100,000-Instance assembly opens for viewing in under 15 s.
+Contract 13.3 sets scene capacity per device band and the warm-cache open time of a 1,000-part assembly. MEC adds one target: a 100,000-Instance assembly opens for viewing in under 15 s.
 
 ### Standard parts and fasteners
 
@@ -616,7 +616,7 @@ A `BendTable` interpolates linearly within its range of material, thickness, rad
 | `make_joint`, `make_rip` | Convert between bend and rip | 2 |
 | `lofted_bend`, `tab_slot` | Formed or brake transitions with stated deviation; tabs and slots for welded assemblies | 3 |
 
-`flat(sheet)` returns a `FlatPattern` with the outline, `BendLine`s (direction, angle, radius, rule, developed length), forming-tool footprints, grain, material and thickness. Shops mostly program lasers and punches in the machine builder's CAM. `export_flat_dxf(flat, convention)` therefore writes layer conventions as data (cut, bend up, bend down, etch, form marks) with the bend table on the sheet.
+`flat(sheet)` returns a `FlatPattern` with the outline, `BendLine`s (direction, angle, radius, rule, developed length), forming-tool footprints, grain, material and thickness. Shops mostly program lasers and punches in the machine builder's CAM. `export_flat_dxf(flat, convention)` therefore maps the flat pattern onto layer conventions held as data (cut, bend up, bend down, etch, form marks) for ECO's DXF writer, with the bend table on the sheet.
 
 Self-clinching nuts, studs and standoffs come with checks on hole size, edge distance, sheet thickness and hardness from the maker's data.
 
@@ -627,7 +627,7 @@ Self-clinching nuts, studs and standoffs come with checks on hole size, edge dis
 | Sheet model and bend rules | `SheetBody`; K factor, allowance, deduction and table rules | `OutsideBendTable { key, range }` | MEC-O-SM-1 | 2 |
 | Sheet features | Features tabled above, both states updated | `FlangeCollides { faces }`, `UnfoldFailed { bend, reason }` | MEC-O-SM-2 | 2, 3 |
 | Flat pattern | `flat(sheet)` through `anvil::unfold` | `NotDevelopable { faces, deviation }` | MEC-O-SM-2 | 2 |
-| Flat DXF export | Layer conventions as data | `UnmappedLayer { kind }` | MEC-O-SM-4 | 2 |
+| Flat DXF export | Layer conventions as data for ECO's DXF writer | `UnmappedLayer { kind }` | MEC-O-SM-4 | 2 |
 | Self-clinching hardware | Catalog data and installation checks | `ClinchRuleViolated { rule, value, limit }` | MEC-O-SM-4 | 2 |
 | Sheet checks | `check::sheet` | Findings with fixes | MEC-O-SM-3 | 2 |
 
@@ -875,7 +875,7 @@ Title-block fields, revision text, release dates and approvers are late-bound re
 
 `revision_markers(drawing, from: Release, to: Release, style: Delta | Cloud)` diffs annotations and views between releases, places a symbol beside each changed item and fills the revision block with change-order number, description and zone. Drafting packages carry ASME Y14.35-2025, which "defines the practices for revising drawings and associated documents", and ISO practice; release drawings are also written as PDF/A [unverified: ISO 19005 part].
 
-Characteristic balloons are an annotation kind that draws MFG's characteristic identities and labels (D-MFG-18, D-MFG-26), beside item balloons tied to BOM lines; IAQG's 9102 revision C added definitions for ballooned design characteristics and ballooned documents. Each release produces the ballooned PDF that inspection plans and first-article reports cite, and tabulated drawings document dash-number families from `family` rows.
+Characteristic balloons are an annotation kind that draws MFG's characteristic identities and labels (D-MFG-18, D-MFG-26), beside item balloons tied to BOM lines; IAQG's 9102 revision C added definitions for ballooned design characteristics and ballooned documents. Each release produces the ballooned PDF that inspection plans and first-article reports cite (D-MFG-26), and tabulated drawings document dash-number families from `family` rows.
 
 **Decision D-MEC-29:** Revision markers are computed from the release diff, never placed by hand, and characteristic balloons draw the labels MFG allocates per characteristic identity, never numbering on their own. *Why:* computed markers cannot miss a change, and one allocator keeps the balloon numbers that inspection reports and supplier records cite stable across revisions. *Rejected:* hand-placed revision clouds (miss changes); balloons numbered by sheet position (change with layout).
 
@@ -899,13 +899,13 @@ Targets: a drawing updates in under 1 s after its model rebuild completes; exact
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
-| Sheets, title blocks and standards | Formats; late-bound fields; ISO 128 and ASME Y14 packages [unverified editions except Y14.5-2018]; PDF, SVG, DXF, PDF/A; DWG only through a licensed translator | `UnfilledField { field }` at output | MEC-O-DR-4 | 1 |
+| Sheets, title blocks and standards | Formats; late-bound fields; ISO 128 and ASME Y14 packages [unverified editions except Y14.5-2018]; PDF, SVG and PDF/A, then DXF (phase 2) and DWG through a licensed translator (phase 3), by ECO's writers | `UnfilledField { field }` at output | MEC-O-DR-4 | 1 |
 | Views and hidden lines | Base, projected, auxiliary, full and half sections, details; exact `anvil::project_hlr` with GPU preview | `ResolveError` on a cut or detail anchor | MEC-O-DR-1 | 1 |
 | More views | Offset, aligned, removed, revolved and broken-out sections; broken and crop views; exploded, flat and ply views | As above | MEC-O-DR-1 | 2, 4 (ply views) |
 | Dimensions and references | All dimension kinds by `Query`; silhouettes and section edges | Dangling item with `ResolveError` | MEC-O-DR-2 | 1 |
 | Callouts, symbols and tables | Holes, threads, GD&T, welds; surface texture (ISO 21920-1, ASME Y14.36 [unverified editions]); item balloons; BOM from the EBOM view; hole and general-tolerance tables | Missing fields for the standard | MEC-O-DR-4 | 1, 2 (welds) |
 | Revision markers | `revision_markers` from release diffs | `NoBaseRelease` | MEC-O-DR-6 | 2 |
-| Characteristic balloons | Labels bound to D-MFG-18 identities; ballooned PDF per release | `UnmappedCharacteristic { id }` | MEC-O-DR-7 | 2 |
+| Characteristic balloons | Labels MFG allocates (D-MFG-26) to D-MFG-18 identities; ballooned PDF per release | `UnmappedCharacteristic { id }` | MEC-O-DR-7 | 2 |
 | Tabulated drawings and more tables | Family rows; bends, cut lists, plies | `RowFailed { key, error }` | MEC-O-DR-4 | 2 |
 | Automatic drawings | Deterministic `auto_drawing` | `UnplacedItems { items }` with reasons | MEC-O-DR-5 | 3 |
 | Saved views and AP242 PMI export | `model_view(…)` with a required default; CAx-IF PMI v4.1; eligibility per face | Facet targets exported as presentation, reported | MEC-O-DR-3, MEC-O-DR-8 | 1 |
@@ -986,7 +986,7 @@ Deviations, stated: homotopy continuation finds all solutions, but Crucible trac
 - **Numerics.** Residuals use `detmath`, and solver algebra uses `linalg` without FMA (contract 7.3), so sketches, mates and thickness Fields are bit-identical across the canonical class at any thread count.
 - **Browser.** Without cross-origin isolation the solver runs blocks sequentially, and the 16 ms browser drag target assumes one thread; heavy evaluations follow contract 9's browser memory rules.
 - **Fonts and tables.** Text and engraving use bundled fonts, never OS lookup. CSV import never uses the OS locale; a comma-decimal file needs `table(…, decimal: Comma)`.
-- **Output.** PDF, SVG, DXF and PDF/A writers are pure Rust in `io/`; printing goes through `apps/platform`.
+- **Output.** ECO's PDF, SVG, PDF/A and DXF writers are pure Rust in `io/`; printing goes through `apps/platform`.
 - **GPU paths.** Thickness candidates, zebra, hidden-line and control-vertex previews and interference culling have CPU paths; canonical values never come from the GPU.
 - **Offline and Tier 2.** Standards and catalog data are vendored into air-gapped installs with their licences. Tablets edit dimensions, parameters and mates, view every Field and drag sketches by touch through the same `api` stream.
 
@@ -998,15 +998,16 @@ MEC uses the operations that ANV's capability tables mark for it, with ANV's nam
 
 | Subsystem | MEC consumes | MEC provides |
 | --- | --- | --- |
-| ANV | Operations with roles and `Query` use; certified constraint solving; blend stages and targets; leaf-preserving joins; `member_axes`, `mid_surface`; control-vertex previews; attribute split policies | Role vocabularies and `FeatureRole` attributes; constraint semantics; glyph outlines |
-| ING | Builder blocks and `Expr<T>`; `#[interface]`, `#[configuration]`; `family`; keyed iteration; `Tol<T>` symbols; typed aspects. ING's `std::mech::fits` and `std::tol::default_distribution` are `std::standards::iso286` and `std::mech::tol::default_distribution` here | Sketch, GD&T and pattern semantics; the default distribution |
-| KLN and `repo` | Phase 1 item numbers, revision labels, `InWork` and `Released`, EBOM; phase 2 change orders; the definition digest without late-bound fields; approved-parts policy; cost-driven drag previews | Parts with item numbers, family rows, BOM-only items, cut lists, after-assembly operations for the MBOM |
-| FLX | Multibody and rod solvers; beams and laminated shells; calibrated estimates (D-FLX-24); influence coefficients; deformed-shape Fields | Typed joints, bounded mass properties, contact candidates, preload, member profiles, ABD matrices, drivers, skin-model samples |
-| COV | Materials with yield, locking angle and process windows; constitutive draping in phase 5 | Laminate and part data for envelopes |
-| MFG | Process profiles, tooling, process capability, cost models, characteristic identities (D-MFG-18), the harness package, process checks | `FlatPattern`, hole, thread and weld semantics with quality levels, ply flats, core and cavity, gears, PMI, balloons, harness geometry |
-| ELX | Harness connectivity and wire lists (phase 4); board outlines and connector frames; MEMS masks | Enclosure interfaces and checks, connector frames, routes, bundle geometry and lengths |
-| ECO | IDF and STEP board readers; AP242 and QIF translators; data packages | GD&T mapping for AP242; weld, hole and composite semantics; flat DXF conventions |
-| UIX, AGT and `api` | Painted Fields, freedom arrows, `Fix` buttons, drag streams that write seeds; Inspect and Edit methods | `SolveReport`, `ContinuityReport`, check Fields, `auto_drawing`, view-scoped references, revision markers |
+| ANV | Operations with roles and `Query` use; certified constraint solving; blend stages and targets; per-entity tolerances; leaf-preserving joins; `member_axes`, `mid_surface`; control-vertex previews; attribute split policies | Role vocabularies and `FeatureRole` attributes; constraint semantics; glyph outlines |
+| ING | Builder blocks and `Expr<T>`; `#[interface]`, `#[configuration]`; `family`; keyed iteration and `skip:` keys; `Tol<T>` symbols and `fit`; typed aspects | GD&T records and validators per dialect; std features with roles and keyed generators; `std::mech::refgeom`; `std::standards::iso286`; `std::mech::tol::default_distribution` |
+| KLN and `repo` | Phase 1 item numbers, revision labels, `InWork` and `Released`, EBOM; phase 2 change orders; the definition digest without late-bound fields; approved-parts policy; cost-driven drag previews | `part(…, item:)`, family rows, `bom_item` lines, revision markers, cut lists, after-assembly operations for the MBOM |
+| FLX | Multibody and rod solvers; beams and laminated shells; bolted-joint forms; calibrated estimates (D-FLX-24); influence coefficients; deformed-shape Fields | Typed joints, redundancy reports, bounded mass properties, contact candidates, preload, member profiles, laminates with ABD matrices, drivers, default distributions, skin-model samples |
+| COV | Materials with yield, locking angle and process windows, at the basis side each check needs; solid, contact, joint, fatigue and dynamics models with envelopes; constitutive draping in phase 5 | Which mechanical checks need calibrated classes (D-MEC-30); plies and kinematic draping; part data for envelopes |
+| MFG | Process profiles with Cp and Cpk, tooling minimums, cost models, DFM, DFA and DfAM checks; characteristic identities and labels (D-MFG-18, D-MFG-26) | Kinematic mates; `FlatPattern`, `HoleSpec`, `ThreadSpec`, `Weld` with quality level; `split_mold`; lattices; gears; plies; harness geometry; GD&T and characteristic balloons |
+| ELX | Bare and assembled boards, connector `CoordSys` values; harness connectivity and wire lists (phase 4); MEMS masks | Enclosure geometry, keep-ins and checks; joints and mates; gear records; routes, bundle geometry, lengths and formboard geometry; fastener selection under the parts policy |
+| ECO | IDF and STEP board readers (phase 2, early 1.x train); AP242 and QIF translators; PDF, SVG, PDF/A and DXF writers; data packages | The GD&T model and its AP242 mapping; `ShapeAspect`; joints; weld, hole and composite semantics; facet-face PMI flags; flat DXF conventions |
+| UIX, AGT and `api` | Painted Fields, freedom arrows, `Fix` buttons, the drawing sheet editor, drag streams that write seeds; Inspect and Edit methods | Assembly solver and motion; std features with doc metadata; tolerance stacks; `SolveReport`, `ContinuityReport`, check Fields, `auto_drawing`, view-scoped references, revision markers |
+| PLT | `linalg` for constraint solving; `detmath` | — |
 
 | Wasm component | Purpose | Phase |
 | --- | --- | --- |
@@ -1115,7 +1116,7 @@ Gate contributions follow contract 13; per-capability phases are in the capabili
 | 1 | GP1: named sketch helpers, profile features, holes and threads, stage 1 blends, shells, draft, keyed patterns, reference geometry, push-pull, basic mates and interference, GD&T with split policy, 1D stacks, drawings from release tags and the EBOM view, AP242 PMI. GP2: lattices joined leaf-preserving, text, emboss, hull, printed threads |
 | 2 | GP3: gears, shafts, fasteners with approved parts, kinematics, 3D variation and completeness. GP4: weldments with quality levels, sheet metal with flat DXF, compliant variation, revision markers and balloons. Also freeform surfaces to G2, direct edits, stage 2 blends |
 | 3 | GP5: molded part design, control-vertex editing with G3 surfaces, SubD, routing on declared diameters, automatic drawings, mate inference, tolerance allocation |
-| 4 | GP6: composite laminates (contract 13.4), harness bundles from ELX wire lists, formboard geometry, scan to CAD, skin model shapes, cast parts |
+| 4 | GP6: composite laminates, harness bundles from ELX wire lists, formboard geometry, scan to CAD, skin model shapes, cast parts |
 | 5 | GP7 MEMS layer stacks; GP8 steel structures through IFC 4.3; pipe and duct routing; human factors |
 | 7 | GP13 hull fairing and hydrostatics; GP14 timber members through IFC; GP16 soft-goods patterns |
 
@@ -1134,7 +1135,7 @@ Gate contributions follow contract 13; per-capability phases are in the capabili
     - R4-14: characteristic balloons follow MFG's characteristic extraction into phase 2; phase 1 drawings carry item balloons only.
     - R1-10, R1-36, R2-09, R2-36, R6-11: MEC applies its part (canonical solver algebra, grouped contributors, the drawing target after rebuild, fallback notes, contract capacity rows); ANV, PLT, FLX and UIX own the rest.
     - R3-30, R3-31: ING owns `Tol<T>` symbol keying and the `Scalar` flavors (D-ING-20); MEC states the consequences in Tolerancing and Sketching.
-    - R4-29: ELX phases IDF and STEP board import in phase 1, while ECO's revision puts the readers on an early 1.x train in phase 2. `check::enclosure` runs in phase 1 against boards imported as STEP assemblies either way; the consistency pass should settle the reader phase.
+    - R4-29: ECO's IDF and STEP board readers arrive in phase 2 on an early 1.x train; `check::enclosure` runs in phase 1 against boards imported as STEP assemblies.
     - R4-16, R1-37: the ISO 19005 part for PDF/A and the source of the Bender inflation factor are unverified.
 
 ## Contract change requests
