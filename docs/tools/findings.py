@@ -12,12 +12,12 @@ import re
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 REVIEW = ROOT / "review"
-HEAD = re.compile(r"^### (R\d-\d+) · (Critical|Major|Minor) · Targets: (.*)$", re.M)
+HEAD = re.compile(r"^### (R\d+-\d+) · (Critical|Major|Minor) · Targets: (.*)$", re.M)
 
 
 def main():
     out = []
-    for f in sorted(REVIEW.glob("R[0-9]-*.md")):
+    for f in sorted(REVIEW.glob("R[0-9]*-*.md"), key=lambda f: int(re.match(r"R(\d+)", f.name).group(1))):
         t = f.read_text()
         heads = list(HEAD.finditer(t))
         for i, m in enumerate(heads):

@@ -21,11 +21,16 @@ The spec has finished round 2: every subsystem tab was revised against the bindi
 - All twelve subsystem tabs are v2, consistent with each other, and pass the check. The Overview is v2, and the Adversarial review and Decisions log tabs are written. Every tab is published in the Claude Doc.
 - The repository is public at github.com/JoziGila/crucible (`origin`). Commit with the personal identity already configured.
 
-## Known work for the next round
+## Plan for round 3
 
-- Two contract change requests wait in tabs' Open questions: a machine gateway app in the crate map (MFG, PLT) and an Act for flashing firmware outside `unattended_safe` rigs (ELX).
-- Most drawn diagrams have no sentence that reads them (`docs/revision/publish.md` step 5); add one under each marker and republish.
-- Every subsystem tab still warns about long sentences and paragraphs, mostly inside decisions.
+Decided 2026-10-11: review the v2 text again first, then revise each tab once.
+
+1. **Second adversarial review.** Six reviewers, R7 to R12, on `docs/review/brief.md`, with round 1's angles: R7 physics (FLX, COV), R8 geometry (ANV, MEC), R9 architecture and taste (KLN, ING, the contract, coherence across tabs), R10 engineering practice (MFG, ELX, MEC, KLN's PLM), R11 security and legal (AGT, ECO, KLN), R12 feasibility (PLT, UIX, contract 13). Reports go to `docs/review/R<n>-<lens>.md`; `python3 docs/tools/findings.py` then rebuilds `findings.json`.
+2. **Packets.** One per tab in `docs/revision/packets/`: the new findings that target it, its open questions with the reviewers' proposed answers, its `[unverified]` claims with the reviewers' verified list, and its known items (MFG and PLT: the machine gateway app; ELX: the firmware-flashing Act; every tab with diagrams: one sentence that reads each).
+3. **Contract rulings** on findings that target CONTRACT, and on the two pending requests, before the tabs are revised; bump to v6.
+4. **Revise the twelve tabs** on a round 3 brief in `docs/revision/brief.md`, one agent per tab.
+5. **Rule on new change requests, then a consistency pass** as in round 2.
+6. **Summary tabs and publishing.** Extend the Adversarial review tab with the second review, regenerate the Decisions log, update the Overview, publish every changed tab, and tag `round-3`.
 
 ## Running revisions with subagents
 
