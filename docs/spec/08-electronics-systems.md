@@ -269,7 +269,7 @@ Symbols are generated from the pin table, the source, as KiCad 10's CSV pin tabl
 
 ### Creating and migrating catalog parts
 
-1. **From a datasheet.** An agent extracts values into a record Proposal, citing page and table for each. The datasheet is untrusted text, so the context is `instruction_tainted` and the values `data_untrusted` (contract sections 5 and 7.6); a human approves.
+1. **From a datasheet.** An agent extracts values into a record Proposal, citing page and table for each. AGT's quarantined `std::agents::extract` reads the datasheet, so the values are `data_untrusted` and the agent's context stays clean (D-AGT-25); a human approves.
 2. **From libraries.** KiCad libraries import into organization-private packages, or into public packages licensed CC-BY-SA-4.0 with attribution kept, because KiCad's licence binds redistributed collections [104]. EAGLE XML arrives through ECO's importer, and Altium, CADSTAR, EasyEDA, P-CAD and Fabmaster files through KiCad 9's importers [66] in a pinned container.
 3. **By hand.** The symbol and footprint editors write the same data modules.
 
@@ -281,9 +281,9 @@ Checks on every record: pins equal pads, the courtyard encloses the body, and pi
 | --- | --- | --- | --- | --- |
 | Electrical facets | Versioned record of the facets above | A missing facet blocks only the uses that need it | ELX-O-CAT-1 | 3 |
 | Consistency checks | Pins, pads, symbol, models and body agree | `CatalogError` blocks publication | ELX-O-CAT-1 | 3 |
-| `CatalogSelection` | Pure over pinned definitions and offers; re-resolves when arguments change; recorded as `resolved:` once the layout is released | `SelectionError::NoCatalogMatch` with nearest candidates; `SelectionChangesLandPattern` | ELX-O-CAT-3 | 3 |
+| `CatalogSelection` | Pure over pinned definitions and offers; re-resolves when arguments change; recorded as `resolved:` once the layout is released | `SelectionError::NoCatalogMatch` with nearest candidates; `SelectionChangesLandPattern` | ELX-O-CAT-3 | 2 (selection over pinned definitions), 3 (offers, land patterns, layout release) |
 | Offers | External inputs pinned in `ingot.lock`, dated in BOM views | An offer past its validity period is labelled with its age | ELX-O-CAT-3 | 3 |
-| Parts policy | Approved internal numbers first; open catalog only under a Waiver | `policy.unapproved_part` fails unless a Waiver names the part | ELX-O-CAT-4 | 3 |
+| Parts policy | Approved internal numbers first; open catalog only under a Waiver | KLN's parts-policy check fails unless a Waiver names the part | ELX-O-CAT-4 | 3 |
 | New-part requests | One Proposal creates the internal number, facets and approved manufacturers | Missing facets listed in review | ELX-O-CAT-4 | 3 |
 | Footprint generators | Toleranced package dimensions to `Footprint` under a pinned land-pattern package | Dimensions outside a family are a typed error; `CatalogError::PinPadMismatch` | ELX-O-CAT-2 | 3 |
 | Symbol generation | Pin table to symbol view | Unplaced pin listed; `CatalogError::SymbolPinMismatch` | ELX-O-CAT-1 | 3 |
@@ -634,13 +634,13 @@ Machine features build laminations, slots, star-of-slots windings and magnets fo
 
 **Decision D-ELX-16:** Efficiency and loss maps come from Flux magnetostatic solves per (id, iq) point, with motion through Flux's sliding interface or mortar coupling. Points solve in parallel and cache individually. *Why:* map points are independent, so Kiln reuses every point after an edit that changes only the control strategy. *Rejected:* analytic machine models only, which miss saturation and slot effects; one transient solve per operating point, far costlier than a map needs.
 
-Solenoids and voice coils use magnetostatic force maps; piezo stacks use Flux's piezoelectric model with a Butterworth-Van Dyke lumped equivalent.
+Solenoids and voice coils use magnetostatic force maps; piezo stacks use Flux's piezoelectric model with a Butterworth-Van Dyke lumped equivalent from phase 5.
 
 ### Sensors and drives
 
 A sensor has three layers: optional Flux transduction physics, a behavioral element (transfer, noise, drift, quantization) and a register interface. Register maps come from CMSIS-SVD or SystemRDL, and Renode generates peripheral stubs from SystemRDL and register tags from SVD [79]. The sensor's error budget is a check over the three layers, such as encoder angle error under 0.1°.
 
-Inverters range from averaged models to switching models with losses from catalog switching-energy curves. ELX's drivetrain elements let GP3's gearbox and a lumped motor form one drivetrain from phase 2.
+Inverters range from averaged models to switching models with losses from catalog switching-energy curves. ELX's drivetrain elements let GP3's gearbox and ideal sources form one drivetrain from phase 2, with a lumped motor from phase 3.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -648,10 +648,10 @@ Inverters range from averaged models to switching models with losses from catalo
 | Lumped machine model | dq element with saturation tables | Operation outside the tables is flagged, never extrapolated | ELX-O-MCH-1 | 4 |
 | Flux-linkage, torque and loss maps | Batched magnetostatic solves with interpolation error | Unconverged points marked in the map | ELX-O-MCH-1 | 4 |
 | Transient machine `SignOff` | Magnetodynamics with motion coupled to the drive Network | Divergence reported with time and region | ELX-O-MCH-1 | 4 |
-| Actuators | Force maps and lumped equivalents | As machine maps | ELX-O-MCH-2 | 4 |
+| Actuators | Force maps and lumped equivalents (4); piezo stacks (5) | As machine maps | ELX-O-MCH-2 | 4, 5 |
 | Sensor models | Three layers with an error budget as a check | A missing layer leaves the budget `Undecided` | ELX-O-MCH-2 | 4 |
 | Drive models | Averaged and switching inverters with losses | Missing switching curves listed | ELX-O-MCH-2 | 4 |
-| Drivetrain coupling | ELX's drivetrain elements with ideal sources or a lumped DC motor in one Network | Port domain mismatch is a compile error | ELX-O-NET-3 | 2 |
+| Drivetrain coupling | ELX's drivetrain elements with ideal sources (2) or a lumped DC motor (3) in one Network | Port domain mismatch is a compile error | ELX-O-NET-3 | 2, 3 |
 
 ## Controls and co-simulation
 
@@ -693,7 +693,7 @@ Renode models multi-node networks [28] and co-simulates RTL through Verilator [6
 
 ### Hardware-in-the-loop and flashing
 
-Real-time execution lies outside Kiln: plants export as FMUs or fixed-step C, and bench adapters are external programs talking to `api`. A run is an Evidence record signed with a TPM-held device key (contract section 7.1), never a cached result. An Evaluation reads the newest record valid at its measurement time, up to its evidence watermark (contract section 2).
+Real-time execution lies outside Kiln: plants export as FMUs or fixed-step C, and benches run as KLN's enrolled physical-test runners (D-KLN-35) talking to `api`. A run is an Evidence record signed with a TPM-held device key (contract section 7.1), never a cached result. An Evaluation reads the newest record valid at its measurement time, up to its evidence watermark (contract section 2).
 
 **Decision D-ELX-29:** Every client flashes a board only through the transfer Act `flash_device` (contract section 7.6). *Why:* firmware runs when the core leaves reset, so flashing a motor controller, ESC, heater driver or charger starts motion or energy (R10-06). *Rejected:* flashing outside Crucible's record; flashing as an ordinary write, which would start devices without an Approval.
 
@@ -1040,7 +1040,7 @@ Shared capabilities take their phase from contract section 13.4: conjugate heat 
 | --- | --- |
 | 0 | None |
 | 1 | No gate contribution. The circuit-simulation research track prototypes the modified-nodal-analysis engine, assembles the vendor-model corpus and settles the Verilog-A front end's scope |
-| 2 | GP3: the `network { … }` builder, rotational, translational and thermal ports, and drivetrain elements. ECO's IDF, STEP board and IDX baseline import serve enclosure design; ING measures ELX's layout fixture (D-ELX-27) |
+| 2 | GP3: the `network { … }` builder, rotational, translational and thermal ports, drivetrain elements and `CatalogSelection` over pinned definitions. ECO's IDF, STEP board and IDX baseline import serve enclosure design; ING measures ELX's layout fixture (D-ELX-27) |
 | 3 | GP5, its board fabricated and assembled from Crucible outputs alone, through the phase 3 rows above. Evidence: DRC and ERC clean; the fabricator's DFM with zero errors; coupon impedance within ±10% and hottest part within ±5 K of measurement (targets); board data identical on every Tier 1 platform |
 | 4 | GP6, through the phase 4 rows above. Evidence (targets): hover endurance ±10% of flight test; motor efficiency ±5 points; pack voltage under 30 mV RMS per cell; attitude-loop overshoot and settling ±20%; antenna resonance ±2% |
 | 5 | GP7: the MEMS reduced-order model as a Network element for readout simulation. The other phase 5 rows serve no gate |
@@ -1055,7 +1055,7 @@ Shared capabilities take their phase from contract section 13.4: conjugate heat 
 
 ## Contract change requests
 
-None. CCR-ELX-8, the battery swelling and abuse rows, was accepted in contract v5.
+None. CCR-ELX-8, the battery swelling and abuse rows, was accepted in contract v5 (section 13.4).
 
 ## Sources
 

@@ -394,7 +394,7 @@ A `Range` of quantities iterates only with an explicit step, `(0mm..=10mm).step(
 
 Inverted limits fail with `ING4001`, and a deviation of the wrong dimension with `ING4002`. A dimensionless deviation is relative only as a `%` or `ppm` literal.
 
-An untoleranced length is exact in Ingot arithmetic. MEC's Part-level `general_tolerance(standard, class)` record supplies limits for untoleranced sizes in stacks, inspection and cost, so the language needs no implicit tolerance.
+An untoleranced length is exact in Ingot arithmetic. MEC's Part-level `part.general_tolerance(spec)` record (D-MEC-35) supplies limits for untoleranced sizes in stacks, inspection and cost, so the language needs no implicit tolerance.
 
 **Decision D-ING-4:** A `Tol<T>` may fill any slot declared as `T`; the slot holds the nominal, and the realizing feature records the forwarded site as PMI on an anchored aspect query. *Why:* geometry stays nominal, and a split target fails a check instead of losing its tolerance behind a Note (R8-12). *Rejected:* a tolerance on every `Length` (cost on temporaries); `.nominal` at every use (PMI loses it); attributes copied through operations, the round 2 rule. (revised in round 3)
 
@@ -455,7 +455,7 @@ pub feature pin_joint(bore_d: Length = 10mm, gap_min: Length = 4um) -> Assembly 
 
 MEC owns the GD&T records and validators; Ingot owns attachment and the mistakes the type checker catches.
 
-1. **Typed aspects.** `Query<Aspect<K>>` selects shape aspects whose kind is static when the producing feature declares it: `hole(…)` gives `Aspect<OfSize>`, extrude caps `Aspect<Planar>`, recognized imports `Aspect<Any>`.
+1. **Typed aspects.** `Query<ShapeAspect<K>>` selects shape aspects whose kind is static when the producing feature declares it: `hole(…)` gives `ShapeAspect<OfSize>`, extrude caps `ShapeAspect<Planar>`, recognized imports `ShapeAspect<Any>`.
 2. **Controls are values.** `position(…)`, `flatness(…)` and the others return `GeometricTolerance` records whose signatures carry the standards' rules as trait bounds. A material condition modifier needs `K: OfSize`.
 3. **Typed attachment.** `part.tolerance(target, control)` records the control on an anchored aspect query, re-resolved on the final Part. Every PMI item, forwarded or explicit, has MEC's `Error`-severity check `pmi_target_resolved`. A split, merged or deleted target fails it, never degrading to a Note, and its fix inserts an explicit `part.tolerance(…)`.
 4. **Dialects are modules.** `std::mech::gdt::asme` implements ASME Y14.5-2018. `std::mech::gdt::iso` implements ISO 1101:2017, ISO 5459:2024, ISO 14405-1:2025, ISO 8015:2011, ISO 22081:2021, ISO 5458 and ISO 2692, whose editions MEC states. The manifest key `gdt-dialect` names the design's dialect, and importing the other fails with `ING4302`.
@@ -463,10 +463,10 @@ MEC owns the GD&T records and validators; Ingot owns attachment and the mistakes
 
 ```
 let a = datum("A", plate.face(role: start_cap))
-let holes = plate.aspects(created_by: mount_holes)          // Query<Aspect<OfSize>>
+let holes = plate.aspects(created_by: mount_holes)          // Query<ShapeAspect<OfSize>>
 plate.tolerance(holes, position(dia(0.1mm), mmc, datums: [a, b, c.at(mmb)]))
 // position(dia(0.1mm), mmc, …) on plate.face(role: start_cap)
-//   → error ING4201: maximum material condition needs a feature of size; start_cap is Aspect<Planar>
+//   → error ING4201: maximum material condition needs a feature of size; start_cap is ShapeAspect<Planar>
 ```
 
 Rules that need resolved geometry, such as datum degrees of freedom, run at build time and fail with MEC's `InvalidControl { rule, clause }`. ASME's page for Y14.5.1-2019 calls it consistent with Y14.5M-1994, so MEC defines the zone mathematics of each Y14.5-2018-only construct and marks it `CrucibleDefined` in reports.
@@ -512,9 +512,9 @@ Weaker bounds fail with `ING6403 EstimateAsInput`, whose fixes declare the param
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
-| `Tol<T>` forms and forwarding | Opaque affine form; nominal in slots; forwarded PMI on anchored aspect queries | `ING4001`, `ING4002`; `pmi_target_resolved` | ING-O-7, MEC-O-TL-1 | 1 |
+| `Tol<T>` forms and forwarding | Opaque affine form; nominal in slots; forwarded PMI on anchored aspect queries | `ING4001`, `ING4002`; `pmi_target_resolved` | ING-O-7, MEC-O-TL-6 | 1 |
 | Affine tolerance arithmetic | Exact linear stacks; guaranteed enclosures; Part-keyed symbols; condensation | `ING4101`, `ING4102`; `ING-L-SharedSymbol` | ING-O-7 | 1 |
-| Statistical combination | Explicit `rss(coverage:)` and `monte_carlo`; name-free symbol order | Assumptions printed | ING-O-7, ANV-O-LABEL-1 | 1 |
+| Statistical combination | Explicit `rss(coverage:)`, `monte_carlo` and `vary`; name-free symbol order | Assumptions printed | ING-O-7, ANV-O-LABEL-1 | 1 |
 | GD&T attachment and dialects | Typed aspects, dialect modules, tombstones | `ING42xx`, `ING4302`, `InvalidControl` | MEC-O-TL-1, ING-O-5 | 1 |
 | `Approx<T>` | Budgets in `Pointwise` and `Goal` norms; outward rounding; basis enclosures | `ING6104` | ING-O-8 | 1 |
 | Decision rule | Disjoint enclosures decide under `decides_on`; Kleene logic; confidence | `Undecided { reason, needed }` | ING-O-8 | 1 |
@@ -622,7 +622,7 @@ pub fn chord_ratio(a: Arc, k: Real) -> Length { a.chord_length - k * 2 * a.radiu
 
 SketchGraphs offers "15 million sketches extracted from real-world CAD models", and ING-O-23 converts a fixed sample into sketch blocks.
 
-Seeds are literals, and a build never warm-starts from an earlier solve (MEC). A released sketch drag rounds seeds to a quantum q, by default the larger of 1 µm and 2¹⁰ times the sketch's resolution ρ, in decimal millimetres. It writes only entities that moved by more than q.
+Seeds are literals, and a build never warm-starts from an earlier solve (MEC). A released sketch drag rounds seeds to MEC's quantum q (D-MEC-33), in decimal millimetres. It writes only entities that moved by more than q.
 
 Before writing, the edit re-solves from the rounded seeds and checks that branch qualifiers and solution agree within the certified bound; otherwise it writes more digits.
 
@@ -703,7 +703,7 @@ let graded = for i in 0..8 { vent_slot(length: 10mm + i * 2mm) |> move(x: i * 6m
 | Label invariance in the language | No order, numeric hash or printing of names; label-free seeds | Not expressible | ANV-O-LABEL-1 | 0 |
 | Copies and placements | Transforms keep names; colliding operands relabelled in program order | — | ANV-O-COPY-1 | 1 |
 | Queries | Canonical plans resolved by `anvil::resolve`; anchored ranks; extent-use acceptances; kinded roles | `ResolveError`; `ING4103`, `ING5001`, `ING5002` | ING-O-11, ANV-O-NAME-2 | 1 |
-| Builder blocks and sketches | `Builder<I, Ctx>`; symbolic entities; certified solved points; inline seeds | `ING1104`, `ING2301`, `ING2402` | ING-O-5, ING-O-10, ING-O-23, ANV-O-NAME-5 | 1 |
+| Builder blocks and sketches | `Builder<I, Ctx>`; symbolic entities; certified solved points; inline seeds | `ING1104`, `ING2301`, `ING2402` | ING-O-5, ING-O-10, ING-O-23, ANV-O-SOLVE-1 | 1 |
 | Variant regions | Instance existence from configuration parameters and constants only | `ING2601` | ING-O-30 | 1 |
 | Instance sets | Static existence; evaluated members keyed by anchors; `min: 0` | `ING2601`; `ING6203` | ING-O-30 | 2 |
 | Catalog selections | Pure over pinned data; re-resolve on argument change | `NoCatalogMatch` with candidates | ING-O-13 | 2 |
@@ -1277,8 +1277,8 @@ Figures are targets on contract section 13.3's reference laptop.
 | From | Requirement |
 | --- | --- |
 | KLN | Suspending scheduler; keys with `CallSite`, code hashes, limits and overrides; overridden results kept local; split outputs; Aborts and limit outcomes; `Pending` reporting; `Differentiable`; span integrity in labels; policy allowances and Waiver records; statement-order reconcile |
-| ANV | Operations catalog with tangent rules; `anvil::resolve` with `NearTie`, `Partial`, `Merged` and `FragileAnchor` notes and compiling fixes; sampled stability analysis (`RankSwap`); face, edge and vertex roles with surface or extent use; copy relabelling; equal decisions at every fidelity; certified sketch solves; canonical geometric order; `shape_velocity` from phase 2 |
-| FLX | Operations catalog; forms and `solve`; regularized reductions with `ErrorBudget`s; calibrated bounds with class envelopes and refinement confirmation; singular sets with default distances; tangent and adjoint rules; `away_from` over several sets; basis enclosures as input parts |
+| ANV | Operations catalog; `anvil::resolve` with `NearTie`, `Partial`, `Merged` and `FragileAnchor` notes and compiling fixes; sampled stability analysis (`RankSwap`); face, edge and vertex roles with surface or extent use; copy relabelling; equal decisions at every fidelity; certified sketch solves; canonical geometric order; `shape_velocity` from phase 2 |
+| FLX | Operations catalog; forms and `solve`; regularized reductions with `ErrorBudget`s; calibrated bounds with class envelopes and refinement confirmation; singular sets with default distances; tangent and adjoint rules; basis enclosures as input parts |
 | COV | `std::physics` and `std::materials`; property reads as basis enclosures (D-COV-13) |
 | ELX | `network { … }` semantics; `Schematic` and `Layout` data modules and a layout fixture for ING-O-37; `CatalogSelection` over pinned definitions and offers |
 | PLT | `detmath` and `det_sum`; Wasm executors, the determinizer and module verification; the `Interactive` pool lane; text normalization; the browser memory table |
@@ -1314,14 +1314,14 @@ All oracles live under `oracles/ingot/` (protected). The corpus is std, the gold
 | ING-O-20 | Metadata and examples | Every std feature has a dialog, docs and an evaluated example; this tab's examples evaluate |
 | ING-O-21 | Service latency on an edit-replay corpus, in-app and over stdio | Within the stated targets at p95 |
 | ING-O-22 | Debugger replay | Forward then backward steps give identical frames |
-| ING-O-23 | A fixed SketchGraphs sample converted to sketch blocks | Every constraint type expressible; at least 99% re-solve within tolerance (target) |
+| ING-O-23 | A fixed SketchGraphs sample converted to sketch blocks | Every constraint type expressible; re-solves meet MEC-O-SK-1's target |
 | ING-O-24 | `f(n) = f(n + 1)` on every Tier 1 target | Aborts with `DemandDepthExhausted`; no memo entry |
 | ING-O-25 | Golden products through Git export and re-import; appended, wrapped and inserted calls of other names; a prepended same-name call; renames with `#[was]` | Untouched `CallSite`s and `EntityId`s unchanged; the prepend raises `ING-L-RepeatedStage`, whose fix keeps later names |
 | ING-O-26 | One element inserted into or removed from geometry-driven patterns and query loops | Only that element's entities renamed |
 | ING-O-27 | Adding or removing any `require`; editing a check's limit | Every non-check node key unchanged; the edited check keeps its `CheckId` and Evidence records |
 | ING-O-28 | Evaluations under varied organization ceilings | One limit outcome per source and manifest; a lower ceiling aborts at admission |
 | ING-O-29 | Block-local parsing | Concatenated blocks reproduce the tree; a failing block keeps its kind and position |
-| ING-O-30 | Variant regions and Instance sets | Computed conditions rejected with `ING2601`; the 150% BOM equals enumeration on small fixtures; a new hole changes a quantity, not the BOM structure |
+| ING-O-30 | Variant regions and Instance sets | Computed conditions rejected with `ING2601`; a new hole changes a quantity, not the BOM structure |
 | ING-O-31 | Contract section 6's example | Compiles; its check decides at `SignOff`, never `Undecided { SingularPoint }`; `width + load` gives `ING3001` |
 | ING-O-32 | Free-text spans on a labelled corpus; hidden characters; strings evaluated from untrusted spans | Classification matches; hidden characters fail with `ING0003`; evaluated strings keep their span's integrity |
 | ING-O-33 | Interpreter speed | Within the stated targets; Ingot's rebuild share reported |

@@ -17,7 +17,7 @@
 
 **Decision D-MFG-2:** Manufacturing adds no geometry or result types: things are Bodies, Parts and Assemblies, paths are wire Bodies carrying Fields, and results are Fields. *Why:* the UI already paints, diffs, caches and queries these types. *Rejected:* separate stock, toolpath or result types (parallel abstractions).
 
-**Decision D-MFG-30:** A parameter of the material alone is a COV `Material` property, such as Cross–WLF rheology, Tait pvT, solidus, liquidus or cure kinetics. A parameter that depends on machine, mould, tooling or process window, such as melt-to-mould heat transfer, is MFG process data citing COV's model id. *Why:* no parameter may have two owners (R7-42, R10-40). *Rejected:* everything in COV (machine data are not material data); a split per process (melts and alloys straddle it).
+**Decision D-MFG-30:** A parameter of the material alone is a COV `Material` property, such as Cross–WLF rheology, Tait pvT, solidus, liquidus or cure kinetics. A property of the material in a stated condition stays COV's even when the condition names a process or machine; a parameter of material and equipment together, such as melt-to-mould heat transfer, is MFG process data citing COV's model id. *Why:* no parameter may have two owners (R7-42, R10-40). *Rejected:* everything in COV (machine data are not material data); a split per process (melts and alloys straddle it). (revised in round 3)
 
 Machines, fixtures, molds, nests and panels are Assemblies; cutting tools, holders and probes are catalog parts. An industry "operation" is a workingstep, after ISO 14649, and a "manufacturing feature" is a machining target found by a `Query`.
 
@@ -138,7 +138,7 @@ Read the flow top to bottom: shaded steps are a person's, red arrows return type
 | Change impact | A design change returns exactly the programs whose targets, setups or `verified_against` revisions changed to `Prototype` | None; the set is reported | MFG-O-SAFE-1 | 2 |
 | Transfer Acts and payload kinds | The Act table; typed `send_to_machine` payloads | Refused without an approved subject | MFG-O-SAFE-2 | 2 |
 | Restricted print start | `start_print` per contract 7.6 | Refused for other processes, profile-only declarations or remote confirmations | MFG-O-SAFE-2 | 2 |
-| Wire-level transfer verification | Manifest allowlists enforced in the gateway core; the OPC UA method allowlist | Other requests dropped and reported | MFG-O-SAFE-3 | 2 |
+| Wire-level transfer verification | Manifest allowlists enforced in the gateway core (2); the OPC UA method allowlist (3) | Other requests dropped and reported | MFG-O-SAFE-3 | 2, 3 |
 | Plan check and canonical hash | Full SHA-256 in a plan approved by the pinned set; canonical hash on transfer and read-back | `PlanUnapproved`; `HashMismatch` with the diff | MFG-O-SAFE-2 | 2 |
 | Program registry | One number per program Item and machine class; subprograms travel with it | `ProgramSlotOccupied` | MFG-O-SAFE-6 | 2 |
 | Transfer-time offset verification | Offsets read, D registers inside `wear_range`, collision re-simulated with actual gauge lengths | `OffsetMismatch` beyond setup-sheet tolerance | MFG-O-SAFE-4 | 2 |
@@ -288,7 +288,7 @@ GP4's guards need profile cutting, nesting and press-brake planning in phase 2, 
 
 Sparrow (MIT) runs guided local search on the jagua-rs collision engine (MPL-2.0) [Gardeyn et al. 2025; jagua-rs]. It matches or beats every best-known ESICUP density, most on SWIM (79.83% against 75.94%), under a 600 s default limit [sparrow].
 
-**Decision D-MFG-8:** Press-brake sequencing searches bend orders with collision checks between the partly bent part, tools and machine. Allowances come from MEC's sheet-metal model, springback from Flux or measurement. *Why:* one search handles every part, and the physics stays with its owners. *Rejected:* rule tables per part family (brittle).
+**Decision D-MFG-8:** Press-brake sequencing searches bend orders with collision checks between the partly bent part, tools and machine. Allowances come from MEC's sheet-metal model, springback from measurement, and from Flux once sheet forming lands (phase 5, contract 13.4). *Why:* one search handles every part, and the physics stays with its owners. *Rejected:* rule tables per part family (brittle). (revised in round 3)
 
 **Decision D-MFG-9:** The 2D nesting Wasm component adopts the sparrow approach on a jagua-rs-style collision engine, with work-unit budgets instead of wall-clock limits (D-MFG-3). *Why:* these are the leading open methods, both in Rust and both buildable for Wasm. *Rejected:* no-fit-polygon heuristics (lower density); closed vendor libraries (unauditable).
 
@@ -449,7 +449,7 @@ MFG supplies each step's data from coupons, such as cantilevers cut from the pla
 
 ## Printers, 3MF and print transfer
 
-Printer profiles are packages: printer Assembly, parameter sets with envelopes, material profiles and calibration prints such as OrcaSlicer's [OrcaSlicer]. The 3MF suite is ISO/IEC 25422:2025, and the Toolpath extension, updated on 17 September 2026, is still a draft [3MF specifications; 3MF Toolpath].
+Printer profiles are packages: printer Assembly, parameter sets with envelopes, material profiles and calibration prints such as OrcaSlicer's [OrcaSlicer]. The 3MF suite is ISO/IEC 25422:2025, and the Toolpath extension is at 1.0.0 in ECO's catalog [3MF specifications; 3MF Toolpath].
 
 Every printer is reached through the machine gateway, and status is a Read. The phase 2 gate's extrusion part goes to an open-firmware printer through `send_print_job` (contract 13.1).
 
@@ -458,7 +458,7 @@ Bambu Connect "removes slicing functions while enabling remote control and print
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
 | 3MF production write | Build items, object references, UUIDs, materials, beam lattices and thumbnails through ECO's writer | Unsupported constructs listed, never dropped | MFG-O-AM-10 | 1 |
-| Further 3MF extensions | Toolpath (2); Boolean, Volumetric and Secure Content (3), through ECO's writer | Written only where the target declares support | MFG-O-AM-10 | 2, 3 |
+| Further 3MF extensions | Boolean, Volumetric and Secure Content (3), and Toolpath once a machine partner accepts it (3), through ECO's writer | Written only where the target declares support | MFG-O-AM-10 | 3 |
 | Binary G-code | bgcode from the published description | Unsupported blocks listed | MFG-O-AM-11 | 2 |
 | Printer profiles and calibration | Profiles with envelopes; calibration prints and coupons | `OutsideEnvelope` outside the profile | MFG-O-AM-11 | 2 |
 | Print transfer and control | `send_print_job` to OctoPrint, Moonraker and PrusaLink with start parameters fixed false, and to Bambu by Developer Mode FTP or Bambu Connect; `start_print`; cancellation | Never retried without a person; starts refused without contract 7.6 conditions | MFG-O-SAFE-2 | 2 |
@@ -518,7 +518,7 @@ MEC owns sheet-metal design; MFG owns how sheet parts are made.
 
 MEC owns weld joints, symbols and laminate design; MFG owns procedures, sequences, paths, distortion and laminate manufacture. Records follow ISO 15609-1:2019, ISO 15614-1:2017 with Amd 1:2019 and ISO 9606-1:2012 [EVS welding], or AWS D1.1 and ASME IX. MEC's `Weld` quality level (ISO 5817 or AWS D1.1) drives inspection plans.
 
-Weldment Parts carry MEC's `execution_class` under EN 1090-2:2018+A1:2024 [EVS EN 1090-2] (R10-42). MFG derives the quality level, NDT extent and ISO 3834 part from it; phase 5 enforces it for GP8.
+Weldment Parts carry MEC's `execution_class` under EN 1090-2:2018+A1:2024 [EVS EN 1090-2] (R10-42). MFG derives the NDT extent and ISO 3834 part from it and checks each `Weld`'s quality level (MEC) against it. Phase 5 enforces it for GP8.
 
 **Decision D-MFG-32:** In frames Flux models as beams, weld shrinkage enters as joint loads from inherent strain on local joint models that `flux::mark_reduction` keeps solid. Phase 2 strains come from coupons per joint type, thickness, process and heat input. *Why:* inherent strain is an initial strain in an elastic analysis of the joint [Murakawa et al. 2010], which a beam lacks (R7-20). *Rejected:* inherent strain on beams (undefined); waiting for phase 4's transient model.
 
@@ -532,7 +532,7 @@ Weldment Parts carry MEC's `execution_class` under EN 1090-2:2018+A1:2024 [EVS E
 | Robot weld paths | Torch angles, weaving and seam tracking | `Collision`, `Unreachable` | MFG-O-ASM-4 | 3 |
 | Fastening specification | Method, target with scatter, sequence, tool and audit from MEC's preload range | `Infeasible` when scatter misses the range | MFG-O-JOIN-3 | 2 |
 | Riveting, clinching and bonding | Fastener, pitch, edge distance and access; bead paths, bondline, preparation and cure | Rule failures; `MissingData` without adhesive data | MFG-O-JOIN-3 | 3 |
-| Composite plates, plies and layup | Plate machining (3); MEC plies nested with grain; ordered plies with projector data (4) | Missing ply references | MFG-O-JOIN-4 | 3, 4 |
+| Composite plates, plies and layup | Plate machining (3); MEC plies nested with grain and ordered, with projector data (4) | Missing ply references | MFG-O-JOIN-4 | 3, 4 |
 | AFP, ATL and cure cycles | Courses within steering, gap and overlap limits; cure cycle on COV's model with spring-in | `Infeasible` beyond steering limits; `OutsideEnvelope` without kinetics | MFG-O-JOIN-4 | 5 |
 
 ## Surface and heat treatment
@@ -689,7 +689,7 @@ Regulation (EU) 2017/821 "will only apply directly to EU-based importers of tin,
 | Passport mapping and identifiers | Delegated-act elements mapped to queries; identifiers per model, batch or item; carriers; public, professional and authority views | Unmapped elements block publication | MFG-O-DPP-1 | 3 |
 | Registration and back-up copy | Registration through the Commission's API inside `publish_passport`, keeping the proof; each passport mirrored to the independent provider | Rejections typed; fails unless both copies succeed | MFG-O-DPP-2 | 3 |
 | Battery passport | Battery Regulation elements for GP6's pack, required from 18 February 2027 for LMT, industrial above 2 kWh and EV batteries [EU Battery Regulation] | As mapping | MFG-O-DPP-1 | 4 |
-| RoHS, REACH and SCIP | Ten RoHS substances at 0.1%, cadmium 0.01%, per homogeneous material [EU RoHS; EU 2015/863], from COV's declared substances (2); Candidate List, Annex XVII and SCIP data (3); IPC-1752C declarations [IPC store] | Unknown content reported as unknown, never compliant | MFG-O-REG-1 | 2, 3 |
+| RoHS, REACH and SCIP | Ten RoHS substances at 0.1%, cadmium 0.01%, per homogeneous material [EU RoHS; EU 2015/863], from COV's declared substances (3); Candidate List, Annex XVII and SCIP data (3); IPC-1752C declarations [IPC store] | Unknown content reported as unknown, never compliant | MFG-O-REG-1 | 3 |
 | 3TG sourcing data | Smelter lists and due-diligence evidence collected for reporting | Data-completeness check only | MFG-O-REG-2 | 3 |
 | Other regimes | Packaging, batteries, WEEE [EU WEEE], TSCA [EPA TSCA] and Proposition 65 as regulation packages | As RoHS | MFG-O-REG-1 | 4 |
 
@@ -745,7 +745,7 @@ All numeric goals in the last column are targets.
 | From | Canonical name or type | Used for |
 | --- | --- | --- |
 | Anvil | `section`, `offset_curve`, `medial_axis`, `tool_contact`, `swept_volume`, `distance`, `interference`, `deform`, `split`, `extend`, `visibility`, `draft_map`, `thickness`, `voxelize`, `correlate_grids`, `align`, `fit`, `boolean`; wire and `Implicit` Bodies | Every planning capability |
-| Flux | Modal analysis; `mark_reduction`; the inherent-strain sequence; thermo-elasto-plasticity; level-set flow and Hele-Shaw; shells, contact, sensitivities; topology optimization | Process physics |
+| Flux | Modal analysis; `mark_reduction`; the inherent-strain sequence; thermo-elasto-plasticity; level-set flow with wall resolution; shells, contact, sensitivities; topology optimization | Process physics |
 | COV | Material models and envelopes (D-MFG-30); strut-scale Materials; Hele-Shaw, strut and Weber regime variables; OOR-8; `EnvironmentalRecord`s; gear, bearing and shaft ratings | Envelope checks; LCA |
 | MEC | Kinematic mates; flat patterns; `HoleSpec`, `ThreadSpec`, `Weld` with quality level and execution class; general tolerances; gear records; `split_mold`; `lattice`; PMI and balloons; fallback regions; harness geometry | Planning, inspection |
 | ELX | Board model with classes, netlist, placements, `test_point` features, via classes and coating record; the DRC engine; harness data | Board and harness handoff |
@@ -760,7 +760,7 @@ All numeric goals in the last column are targets.
 | --- | --- | --- |
 | All tabs | `std::mfg` packages: `core`, `machining`, `am`, `molding`, `casting`, `forming`, `joining`, `treatment`, `electronics`, `assembly`, `inspection`, `cost`, `sourcing`, `factory`, `sustainability` | Ingot packages |
 | MEC | Process profiles (Cp, Cpk, accepted representations), press-brake allowance data, cost models, characteristic identities and labels, the harness package, DFM, DFA and DfAM checks | `Check`, `Field`, packages |
-| FLX and COV | Process profiles for manufacturing-constraint forms; coupon data for inherent strain, weld joints and as-built struts; process data under D-MFG-30 | `Field`, packages |
+| FLX and COV | Process profiles for manufacturing-constraint forms; coupon data for inherent strain, weld joints and as-built struts; process data under D-MFG-30; the Hele-Shaw solver (D-MFG-15) | `Field`, packages |
 | ELX | Rule packs by class; package choice; panels, stencils, test programs; DFX feedback | `Check`, packages |
 | KLN and `repo` | Program subjects and `ItemDefinition`s with simulation evidence; first-article records; MBOM and routings; setup sheets, instructions and inspection plans; as-built records | CAS objects |
 | AGT | Typed physical-effect payloads with the approval page's fields; `request_quote` and `publish_passport` payloads; `MfgError` fixes | Act plans |
@@ -916,7 +916,7 @@ MFG-O-GOLD-1 collects the gate evidence below. Shared capabilities take their ph
 3. **Findings applied in part in round 3.**
    - R8-44's "machining with mesh-capable CAM" is declined: STEP processes accept B-rep only, which shops' CAM and CMM read (R10-37).
    - R12-11's polymer branch lapses: contract 13.1 fixes GP2 as metal laser powder bed fusion. Its calibration build is the strut coupons in contract 13.2's chain B.
-   - R10-29's capture time in the reference-shop agreement is CCR-MFG-7.
+   - R10-29's capture time is in contract 13.2's reference-shop agreement (CCR-MFG-7).
    - R10-01's and R10-43's robot loading paths are machine-package data, so the tab names only the documented ones.
    - R7-09's GP5 cell count is an estimate over an assumed cavity area until GP5's design exists.
    - R10-18 and R10-25: ratings, gear data tables and board spacing are COV's, MEC's and ELX's; MFG applies their inspection and test-access consequences.
@@ -924,8 +924,8 @@ MFG-O-GOLD-1 collects the gate evidence below. Shared capabilities take their ph
 
 ## Contract change requests
 
-- CCR-MFG-7, controller capture: contract 13.2's reference-shop agreement adds time on each family's physical controls in program-test mode (R10-29). Without it no post family can qualify.
-- Earlier: CCR-MFG-5 and CCR-MFG-6 were accepted in contract v5, and the machine gateway request in v6 (contract 12).
+- CCR-MFG-7, controller capture: accepted in contract v6.1 (section 13.2).
+- Earlier: CCR-MFG-5 and CCR-MFG-6 were accepted in contract v5 (sections 2 and 7.6; 7.1), and the machine gateway request in v6 (section 12).
 
 ## Sources
 

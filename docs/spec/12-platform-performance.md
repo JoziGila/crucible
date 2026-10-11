@@ -18,7 +18,7 @@ PLT owns the mechanisms below the product. Contract 7.3 and 7.4 own the rules, K
 | `wasm-host` | `core/` | Determinizer, Wasmtime embedding, sandbox workers | Allowed |
 | `linalg` | `core/` | Canonical dense and sparse linear algebra, with FLX | Forbidden |
 | `platform` | `apps/` | The only crate that binds OS APIs | Allowed |
-| `desktop`, `web`, `mobile`, `server`, `cli`, `ci-runner`, `attestation` | `apps/` | Entry points and packaging metadata | Forbidden |
+| `desktop`, `web`, `mobile`, `server`, `cli`, `ci-runner`, `attestation`, `tool-runner` (with ECO) | `apps/` | Entry points and packaging metadata | Forbidden |
 
 `PlatformClass` lives in `base`, built from `IsaLevel` and `GpuClass`. `OpCx` in `base` wraps PLT's runtime handles, so operations see one context type (R3-27). PLT's combinators are free functions over it, and `OpCx` offers no second reduction API (R9-39).
 
@@ -50,7 +50,7 @@ pub enum WriteDurability { Buffered, Data }   // Data: fdatasync, FlushFileBuffe
 
 `Journal`, `WindowHost`, `FileWatcher`, `Clipboard`, `Dialogs`, `Notifications`, `CredentialStore`, `SystemSignals` and `WallClock`, which never reaches evaluation, follow the same pattern. `DeviceIo` opens serial and USB ports outside evaluation for MFG's machine gateway and ELX's bench adapters.
 
-`CryptoProvider` supplies TLS, hashes and signatures, and KLN's FIPS mode routes it through a FIPS 140-3 module. The candidate is AWS-LC through aws-lc-rs, whose FIPS 3.x build "has been submitted to NIST for certification" [certificate status unverified].
+`CryptoProvider` supplies TLS, hashes and signatures, and KLN's FIPS mode routes it through a FIPS 140-3 module. The candidate is AWS-LC through aws-lc-rs, whose AWS-LC 3 module holds FIPS 140-3 certificate 5314 [NIST CMVP certificate 5314].
 
 `Authenticator` opens the approval page of contract 7.6 for one request id and reports when the ceremony ends. It never handles a credential.
 
@@ -75,9 +75,9 @@ Enrollment uses the same session, and only UIX's approval flow may call `Authent
 | Layered crates | Only `apps/platform` binds OS APIs; contract 12's order | Layering check fails the build | PLT-O-DET-5 | 0 |
 | Windows and surfaces | `WindowHost` gives raw handles to the renderer | `PlatformError::Window { backend, reason, fix }` | PLT-O-OS-1 | 0 |
 | Pointer, pen and touch | One `PointerEvent` stream with pressure and tilt | Missing axes are `None` | PLT-O-OS-1 | 1 (desktop), 3 (tablets) |
-| Keyboard and IME | Physical key, logical key and text apart; preedit and commit | No IME: plain input, with a notice | PLT-O-OS-2 | 1 |
-| 6-DoF devices | `NavDeviceEvent` from HID; spacenavd on Linux | Device absent: no events | PLT-O-OS-1 | 2 |
-| Accessibility | AccessKit tree per window; web DOM mirror | `AccessibilityUnavailable` logged once | PLT-O-OS-3 | 1 (desktop, web), 3 (tablets) |
+| Keyboard and IME | Physical key, logical key and text apart; preedit and commit | No IME: plain input, with a notice | PLT-O-OS-2 | 0 (Windows, Chrome), 1 |
+| 6-DoF devices | `NavDeviceEvent` from HID on every desktop OS, WebHID in Chromium; spacenavd optional on Linux | Device absent: no events | PLT-O-OS-1 | 2 |
+| Accessibility | AccessKit tree per window; web DOM mirror | `AccessibilityUnavailable` logged once | PLT-O-OS-3 | 0 (Windows), 1 (desktop, web), 3 (tablets) |
 | Clipboard | Plain-text Ingot plus `application/x-crucible+cbor` | `ClipboardError::Unavailable { reason }` | PLT-O-OS-4 | 1 |
 | Drag and drop | Incoming through winit; outgoing per OS | "Export…" offered with the reason | PLT-O-OS-4 | 1 (incoming), 2 (outgoing) |
 | File dialogs | Async `open`, `save`, `pick_folder` | No portal on Linux: in-app browser | PLT-O-OS-4 | 1 |
@@ -86,7 +86,7 @@ Enrollment uses the same session, and only UIX's approval flow may call `Authent
 | File locking | Exclusive lock on `.crucible/lock` | `LockError::Held { holder_pid, since }` | PLT-O-OS-4 | 0 |
 | Credentials | `CredentialStore` per account | `CredentialError::Unavailable` | PLT-O-OS-4 | 1 |
 | WebAuthn | Approval and enrollment in a browser session (D-PLT-41) | No session: approval refused with the reason | PLT-O-OS-4 | 1 |
-| Serial and USB | `DeviceIo` on native targets, outside evaluation | `DeviceError::Unavailable { port, reason }` | PLT-O-OS-4 | 2 |
+| Serial and USB | `DeviceIo` on native targets, WebUSB and Web Serial in Chromium, outside evaluation | `DeviceError::Unavailable { port, reason }` | PLT-O-OS-4 | 2 |
 | FIPS-mode cryptography | `CryptoProvider` through a FIPS 140-3 module | Non-approved algorithm refused | KLN-O-SIG-2 | 2 |
 | System signals | Memory pressure, power, thermal state, scale, reachability | Unavailable signal: `Unknown` | PLT-O-OS-1 | 1 |
 | Portable paths | `RepoPath::parse`; OS paths only in `platform` | `PathError` with a portable name | PLT-O-OS-5 | 0 |
@@ -384,7 +384,7 @@ The dense target is within 2.5 times faer's `CpuIsa` time for n ≥ 1,000; spars
 | Non-finite detection | Integer inspection after readback | Typed numerical `Failure` naming the kernel | PLT-O-GPU-3 | 1 |
 | `f64` GPU server paths | Vulkan `SHADER_F64`, certified on the CPU | Missing feature: CPU path | PLT-O-GPU-1 | 3 |
 | Canonical dense linear algebra | Fixed blocking, no FMA, index-ordered pivot ties; versioned modules | Divergence fails the suite | PLT-O-LA-1 | 0 |
-| Canonical sparse factorization | FLX's supernodal elimination and block-triangular LU, thread-count independent | As above | PLT-O-LA-1 | 1 (sequential), 2 (parallel) |
+| Canonical sparse factorization | FLX's supernodal elimination and block-triangular LU, thread-count independent | As above | PLT-O-LA-1 | 1 (sequential supernodal), 2 (parallel; block-triangular LU) |
 | faer in `CpuIsa` | Pinned cache detection; never in `Portable` code | Lint rejects it | PLT-O-DET-5 | 1 |
 | Linear algebra speed | Dense within 2.5 times faer `CpuIsa` | Regression filed nightly | PLT-O-LA-2 | 1 |
 
@@ -551,7 +551,8 @@ Limit outcomes come from KLN's one catalog in `base` (R9-27):
 | Logical stack limit | `Failure`: `StackExhausted { limit }` | Yes |
 | `memory.grow` beyond the declared maximum | Returns −1; the Wasm component decides | As its outcome |
 | Host memory unavailable below the maximum | Abort: `ResourceExhausted` | Never |
-| Evaluation fuel or budget exhausted | Abort: `FuelCeilingExceeded` or `BudgetExhausted` | Never |
+| Evaluation fuel governor or work budget exhausted | Abort: `BudgetExhausted` | Never |
+| An organization ceiling below a source limit, at admission | Abort: `FuelCeilingExceeded` | Never |
 | Cancellation; sandbox worker lost | Abort | Never |
 
 Data beyond 4 GiB moves through chunked buffers, and data parallelism through `crucible:host/parallel`.
@@ -640,6 +641,8 @@ The gateway connects outbound only, and readings from one without a TPM carry `d
 | Timestamp | The snapshot's hash | 1 online key | 1 day |
 
 The updater checks timestamp metadata at startup and every 4 hours, rejects expired metadata and lower versions, and installs at the next start. A new version self-tests within 60 s and rolls back on failure or two crashes in 10 minutes. Stable releases roll out to 1%, 10%, 50% and 100% over at least 4 days and halt if crash rates rise 20% (target).
+
+Update servers refuse the countries of ECO's sector rule (D-ECO-29).
 
 **Decision D-PLT-37:** Every signature PLT produces or verifies (artifacts, TUF metadata, web manifests, provenance) is a detached record carrying an algorithm id. From phase 2, TUF root and targets metadata and provenance are dual-signed with a classical signature plus ML-DSA-87 (FIPS 204). LMS signs only the steward's software releases, under contract 7.8's rules. Long-retention records are re-timestamped before an algorithm retires. *Why:* releases must verify for decades, and a stateful scheme breaks if an HSM cluster replicates its one-time keys (R11-25). *Rejected:* classical signatures alone; switching algorithms at once (old verifiers break); LMS for metadata or provenance (high-volume signing from a finite tree). (revised in round 3)
 
@@ -890,11 +893,11 @@ Figures in the last column are targets on the reference laptop unless they cite 
 | FLX | `detmath`; combinators; `linalg` jointly; `gpu` with known-answer tests; the dispatch and agreement rules; FMA families; the class enum; the browser memory table | `GpuCompute`, `GpuPath`, `RanOn`, `PlatformClass` |
 | UIX | Windows, input and IME, accessibility hosting, clipboard, dialogs, surfaces, the approval session, hardware profile, workarounds, device loss, safe mode, crash monitor, rings, the `Interactive` lane, dispatch rule, memory caps, browser rows, telemetry pipeline, renderer image, dependency register | `WindowHost`, `AccessibilityHost`, `Authenticator` |
 | `repo` | Journal, atomic writes, locks, watching, portable paths, text normalization | `Journal`, `WatchEvent`, `RepoPath` |
-| ING | Executors, the determinizer, verification of generated modules, `detmath` and `det_sum` (Ingot's `sum`), text normalization, the browser memory table | `WasmComponentEngine`, `CallLimits` |
+| ING | Executors, the determinizer, verification of generated modules, `detmath` and `det_sum` (Ingot's `sum`), text normalization, the `Interactive` pool lane, the browser memory table | `WasmComponentEngine`, `CallLimits` |
 | ECO | The determinizer and overhead table, Wasmtime LTS, world enforcement, sandboxes with default-deny egress, the browser runtime and sandbox site, `crucible:host/parallel` and `crucible:tool/process`, offline bundles, TUF and signature formats, release lines and support periods | `WasmComponentEngine`, `CallLimits` |
-| AGT | `api` transport, `cli` exit codes, `CredentialStore`, the approval session, `Usage` measurement, the stdio sandbox for external MCP servers | `Guidance` errors, `Authenticator` |
-| MEC, COV | `linalg`; for COV also `f64` availability per class, with no emulated `f64` on WebGPU, and the browser memory table | `linalg`, `PlatformClass` |
-| ELX | `detmath`; the browser memory table; serial and USB access (FLX owns circuit LU) | `DeviceIo` |
+| AGT | `api` transport, `CredentialStore`, the approval session, `Usage` measurement, the stdio sandbox for external MCP servers, the `Interactive` pool lane | `Guidance` errors, `Authenticator` |
+| MEC, COV | `linalg`; for MEC also `detmath`, the `Interactive` pool lane and Parley shaping; for COV also `f64` availability per class, with no emulated `f64` on WebGPU, and the browser memory table | `linalg`, `PlatformClass` |
+| ELX | `detmath`; the `Interactive` pool lane; the browser memory table; serial and USB access; registry font packages (FLX owns circuit LU) | `DeviceIo` |
 | MFG | Packages for `apps/machine-gateway`; serial and USB access; the TPM-held gateway key; the browser memory table | `DeviceIo` |
 
 ### Consumed by PLT
@@ -905,7 +908,7 @@ Figures in the last column are targets on the reference laptop unless they cite 
 | ANV, FLX | Grades, GPU roles, agreement budgets and corpora per operation; the kernel IR, sparse factorization and no-FMA penalties; `anvil::text_outline` |
 | COV | Precision classes per model; External Op worker needs |
 | UIX | The AccessKit tree; render-quality levels; device-loss and safe-mode behavior; its rows; telemetry fields; a copy budget; the approval flow |
-| ECO | Worlds; browser Wasm component descriptions; declared memory limits; font packages; export classification and CRA reporting |
+| ECO | Worlds; browser Wasm component descriptions; declared memory limits; font packages; export classification, the sector rule for update servers and CRA reporting |
 | AGT | Message framing, error shape, `Usage`, `Budget` and the approval origin |
 | ING | The interpreter on every target; generated modules; the feature-call memory model |
 | MFG | The gateway's core and connectors to package |
@@ -989,7 +992,7 @@ Gate contributions only, consistent with contract 13.1 and 13.2; no capability i
 
 ## Open questions
 
-1. **FIPS module certificate.** AWS-LC-FIPS 3.x awaits NIST certification. A phase 2 check confirms a certificate before FIPS mode ships, or KLN names another validated module; NIST decides the date.
+1. **FIPS module certificate.** Closed: the AWS-LC 3 module holds FIPS 140-3 certificate 5314.
 
 Round 2's questions are closed. Decisions D-PLT-33 (1, 2), D-PLT-30 (3), D-PLT-18 (4), D-PLT-17 (5) and D-PLT-16 (6) settle the first six. D-PLT-46 (7), D-PLT-13 (8), D-PLT-47 (9), D-PLT-27 (10) and D-PLT-22 (11) settle the rest, and contract 12 settles 13.
 
@@ -1004,8 +1007,8 @@ Declined or partly applied findings:
 ## Contract change requests
 
 - CCR-PLT-5 to CCR-PLT-8: accepted in contract v5 (sections 7.4, 13.3, 7.8 and 12).
-- **CCR-PLT-9, tablet engine placement.** Contract 9 runs the engine as "threads on tablets", but 7.4 makes iPadOS's engine the web build's worker. Proposed: "threads on Android tablets, a worker on iPadOS".
-- **CCR-PLT-10, CRA support period.** Contract 7.7 sets LTS support but no five-year support period per release line, which the CRA requires (R11-28). Proposed: "Every release line has a five-year support period (D-PLT-27)."
+- CCR-PLT-9, tablet engine placement: accepted in contract v6.1 (section 9).
+- CCR-PLT-10, CRA support period: accepted with CCR-ECO-10 in contract v6.1 (section 7.7).
 
 ## Sources
 
@@ -1124,3 +1127,4 @@ Declined or partly applied findings:
 113. Remote execution overview, Bazel documentation. https://bazel.build/remote/rbe
 114. Wasmer runtime documentation. https://docs.wasmer.io/runtime
 115. Zarr core specification, version 3. https://zarr-specs.readthedocs.io/en/latest/v3/core/index.html
+116. NIST CMVP certificate 5314, AWS-LC 3 Cryptographic Module (static), FIPS 140-3. https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/5314

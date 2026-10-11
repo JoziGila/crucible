@@ -161,14 +161,14 @@ Levels are cumulative, and versions were checked in October 2026. A version "at 
 | AP242 edition 5 schema; domain model XML | Used in CAx-IF round 58J [CAx-IF 58J] | R/W | Semantics; structure | Build | 3 | MEC; KLN |
 | STEP AP203, AP214 | Edition 2; edition 3 [CAx-IF GVP] | R; W | Structure | Build | 1 (R), 2 (W) | ANV |
 | STEP AP209 | Extension of AP242 [ISO 10303 wiki] | R/W | Semantics: FE models, results as Fields | Build | 4 | FLX |
-| STEP AP238 and ISO 14649 | ISO 10303-238:2022, as MFG states | R/W | Semantics: workingsteps | Build | 3 | MFG |
+| STEP AP238 and ISO 14649 | ISO 10303-238:2022, as MFG states | R/W | Semantics: workingsteps | Build | 3; parts 13, 14 and 17 at 5 | MFG |
 | STEP AP239; AP233 | At phase 5 | R/W; R | Structure | Build | 5 | KLN; ELX |
 | IGES | 5.3 of 1996, the last [IGES wiki] | R/W | Geometry | Build | 2 | ANV |
 | JT | ISO 14306-1:2024 [ISO 14306] | R/W | Structure, B-rep, PMI | License [CAD Exchanger formats][HOOPS Exchange], then own reader | 2 (License), 4 (Build) | ANV |
 | Parasolid; ACIS | Vendor formats | R/W | Structure, exact geometry | License | 2 | ANV |
 | CATIA V5, NX, Creo, SOLIDWORKS, Inventor | Per translator | R | Structure, PMI | License | 2 | ANV, MEC |
 | Solid Edge; Rhino | Per translator | R (Rhino R/W) | Structure | License | 3 | ANV |
-| PDF; SVG; PDF/A | PDF 2.0; SVG 1.1 Second Edition [SVG 1.1]; PDF/A-4, ISO 19005-4:2020 [PDF/A wiki] | W | Visual: drawing sheets | Build | 1 | MEC |
+| PDF; SVG; PDF/A | PDF 2.0; SVG 1.1 Second Edition [SVG 1.1]; PDF/A-2u (ISO 19005-2:2011) for release drawings and PDF/A-4 (ISO 19005-4:2020) as MEC's option [PDF/A wiki] | W | Visual: drawing sheets | Build | 1 | MEC |
 | DXF; DWG | DXF at phase 2 | R/W | 2D geometry; flat patterns for brakes and cutters | Build; License | 2; 3 | MEC, MFG |
 
 Apart from DWG, Crucible never writes native proprietary CAD formats. Exchange back uses AP242 with persistent ids, which the CAx-IF tests for "ping-pong" iteration [CAx-IF 58J], or licensed Parasolid and JT.
@@ -201,11 +201,11 @@ ELX owns the board model, MFG the factory hand-off, and ECO the `io/` readers an
 | IPC-2581 | Revision C [IPC-2581C] | R/W | Semantics: stackup, netlist, BOM | Build | 3 |
 | ODB++ | ODB++Design 8.1 update 3 [ODB++ 8.1] | R/W | As IPC-2581 | Build; KiCad's writer [KiCad 9.0] as oracle, never linked | 3 |
 | Gerber X2 and X3, job file, XNC | Gerber 2026.05 of 19 May 2026; job 2020.08; XNC 2021.11 [Ucamco Gerber] | W; R to verify | Copper, mask, attributes | Build | 3 |
-| KiCad files | S-expression formats [KiCad formats] | R; W of libraries | Semantics | Build | 3 |
+| KiCad files | S-expression formats [KiCad formats] | R; W of libraries and netlists | Semantics | Build | 3 |
 | EDIF; IPC-D-356; Specctra DSN and SES; placements | EDIF 2 0 0, ANSI/EIA-548-1988 [EDIF wiki]; others per ELX | W (SES R) | Connectivity, routing, placement | Build | 3 |
 | Touchstone, IBIS; VEC | 2.1 and 8.0; VEC 2.2.0, per ELX | R/W | Catalog-part models; harnesses | Build | 3; 4 |
 | KBL | At phase 5, per ELX | R | Harnesses | Build | 5 |
-| SPICE netlists and models; Verilog-A | The ngspice, PSpice and LTspice dialects ELX reads | R | Circuits and device models (D-ELX-14) | Build | 3 |
+| SPICE netlists and models; Verilog-A | The ngspice, PSpice and LTspice dialects ELX reads | R; W of netlists | Circuits and device models (D-ELX-14) | Build | 3 |
 
 Proprietary ECAD designs migrate through KiCad's importers (D-ECO-31).
 
@@ -309,7 +309,7 @@ A licensed translator version is qualified on the NIST and held-out native files
 | --- | --- | --- | --- | --- |
 | CAx-IF participation | Every round; results become oracles | A regression blocks release | ECO-O-1, ECO-O-2 | 1 |
 | Validation properties | Written and checked | `Warning` Check beyond thresholds | ECO-O-1 | 1 |
-| Corpora by hash list | No vendored third-party data; per-item licence evidence | An item without evidence is not fetched | ECO-O-31 | 1 |
+| Corpora by hash list | No vendored third-party data; per-item licence evidence | An item without evidence is not fetched | ECO-O-31 | 0 |
 | Round trips in normal form | The three suites above | A self round-trip failure blocks release | ECO-O-24 | 1, 2 (external) |
 | Reader fuzzing | Continuous, per reader | A new crash blocks release | ECO-O-5 | 1 |
 | Licensed translator qualification | Signed record per version | Unqualified versions cannot be pinned | ECO-O-15 | 2 |
@@ -373,11 +373,11 @@ Each package follows SemVer [WIT guide], and its owner specifies it in a "WIT in
 | `crucible:host` | `diagnostics`, `progress` (write-only), `cas` (handle reads); `parallel` | KLN; PLT for `parallel` |
 | `crucible:io` | `types`, `read`, `write`; worlds `importer`, `exporter` | ECO |
 | `crucible:physics`; `crucible:material` | `solve`; `model`; worlds `solver`, `constitutive` | COV, FLX |
-| `crucible:mfg` | `strategy`, `post`; strategy, post, nesting, packing, slicer and recognizer worlds | MFG |
+| `crucible:mfg` | Worlds `toolpath-strategy`, `post-processor`, nesting, packing, slicer and recognizer | MFG |
 | `crucible:ui` | `types`, `view`, `canvas-host`, `canvas`; worlds `panel`, `canvas2d` | UIX |
 | `crucible:api` | One interface per method group | AGT |
 | `crucible:tool` | `process`, `external`; world `driver` | ECO, with PLT |
-| `crucible:connect` | `types`, `secrets`, `partner`, `erp`, `mes`, `plm`; one connector world each | ECO, with MFG and KLN |
+| `crucible:connect` | `types`, `secrets`, `partner`, `erp`, `mes`, `plm`; worlds `partner-connector`, `erp-connector`, `mes-connector`, `plm-connector` | ECO, with MFG and KLN |
 
 **Decision D-ECO-7:** Every first-party WIT package uses the `crucible:` namespace, one package per domain, in American spelling. Operations are reached only through `crucible:ops`, with one generated interface per catalog. `crucible:geom` and `crucible:field` hold types and builders, and product structure lives in `crucible:product`. *Why:* one namespace makes ownership obvious, and any other computing interface would bypass recorded Op dependencies. "Model" names a physics model elsewhere. *Rejected:* per-subsystem namespaces such as `flux:`. Operations inside `crucible:geom` (round 1). `measure` and `sample` host interfaces (round 2). The name `crucible:model`. (revised in round 3)
 
@@ -459,7 +459,7 @@ Contract section 7.4 states the rules, and PLT owns the determinizer and its ove
 
 **Decision D-ECO-9:** Evaluation worlds import no WASI and are deterministic. Their `crucible:ops` imports are Component Model async functions in the callback ABI (contract section 7.4). A host may then answer across a process or agent-cluster boundary. The host delivers completions in issue order, so timing never shows, and fuel never counts host time. Evaluation worlds use no `stream` or `future` types, while tool and connector worlds use WASI 0.3's [WASI 0.3][WIT guide]. *Why:* third-party components run out of process, and the callback ABI returns to an event loop without fibers [CM concurrency]. *Rejected:* synchronous evaluation worlds (round 2), which browsers cannot answer across agent clusters. The stackful ABI, which needs stack switching. Free completion order, which is nondeterministic. (revised in round 3)
 
-Limits apply per call. A manifest may request more, up to the organization's ceiling, and PLT reserves declared memory before instantiation.
+Limits apply per call. A manifest may request more, up to the organization's ceiling, and PLT's limiter reserves budget as memory grows.
 
 | Limit | Evaluation default (ceiling) | Tool and connector default | Outcome |
 | --- | --- | --- | --- |
@@ -520,7 +520,7 @@ SDK versions equal the catalog version. A method is deprecated for at least 12 m
 
 The C ABI passes canonical JSON through `crucible_call`, streams Evaluations through `crucible_call_stream` and maps CAS objects with `crucible_cas_map`. Handles are opaque, panics never cross it, and removing a symbol needs a new library name (`libcrucible2`).
 
-Every method is `<group>.<name>` in the contract's eight groups (section 7.6). Error codes take the separate form `<family>/<code>` (AGT). ECO asks AGT to add:
+Every method is `<group>.<name>` in the contract's eight groups (section 7.6). Error codes take the separate form `<family>/<code>` (AGT). AGT's catalog holds ECO's methods:
 
 | Method | Contract | Failure |
 | --- | --- | --- |
@@ -558,7 +558,7 @@ CloudEvents requires `id`, `source`, `specversion` and `type`, with `source` plu
 
 The archive format and the CAS encoding are open, so a third party can write an independent reader (ECO-O-12). On import, spans keep their integrity only if a device key of a principal in this organization signed the Change (KLN).
 
-**Decision D-ECO-28:** Every ECO surface that moves tenant bytes outside the tenant is an Act in AGT's `release_data` family. That covers archive export, mirror pushes, release bundles, quote requests, connector messages, passports and publishing. At commit each runs one set of checks: labels, screening, a `ControlAuthorization` (KLN) for controlled payloads, and audit. Watermark and expiry join in phase 3. Recurring channels, such as a Git mirror, run under AGT's `standing_release` class (D-AGT-30). Two humans approve it once, fixing recipients, channel, schema, confidentiality ceiling and an expiry of at most 12 months. *Why:* exit paths with different controls leave the weakest open. A standing class controls frequent flows without rubber-stamping. *Rejected:* plain API methods for export (round 1). Controls per exit path, which drift. One Approval per mirror push (round 2). (revised in round 3)
+**Decision D-ECO-28:** Every ECO surface that moves tenant bytes outside the tenant is an Act in AGT's `release_data` family. That covers archive export, mirror pushes, release bundles, quote requests, connector messages, passports and publishing. At commit each runs one set of checks: labels, screening, a `ControlAuthorization` (KLN) for controlled payloads, and audit. Watermark and expiry join in phase 3. Recurring channels, such as a Git mirror, run under AGT's `standing_release` class (D-AGT-33). Two humans approve it once, fixing recipients, channel, schema, confidentiality ceiling and an expiry of at most 12 months. *Why:* exit paths with different controls leave the weakest open. A standing class controls frequent flows without rubber-stamping. *Rejected:* plain API methods for export (round 1). Controls per exit path, which drift. One Approval per mirror push (round 2). (revised in round 3)
 
 ### Enterprise connectors
 
@@ -576,12 +576,12 @@ Outbound records are `ItemMaster`, `BillOfMaterials`, `Routing`, `WorkOrder` and
 
 KLN owns the system-of-record policy (D-KLN-39). Under `External(connector)`, numbers come through the PLM connector, and the release Act publishes into the external item revision.
 
-An external approval is evidence pinned in the release, never an Approval; where the external system is the only approver, the Act is `publish_to_system_of_record` (KLN). Reference connectors for two ERP and three PLM systems arrive in phase 2.
+An external approval is evidence pinned in the release, never an Approval. Where the external system is the only approver, the release Act's Approval covers only the publication, and the release record says "approved externally" (KLN). Reference connectors for two ERP and three PLM systems arrive in phase 2.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
 | SDKs and C ABI | Generated from one catalog; `crucible-sdk` on every index | AGT's error object in every language | ECO-O-11 | 0 (Rust), 1 (Python), 2 |
-| ECO's API methods and CLI | Methods above; aliases, exit codes, offline mode | Typed errors; exit codes 1 to 5 | ECO-O-11 | 1 |
+| ECO's API methods and CLI | Methods above; aliases, exit codes, offline mode | Typed errors; exit codes 1 to 5 | ECO-O-11 | 1, 2 (registry search and bundles) |
 | Events and webhooks | CloudEvents; Standard Webhooks; egress proxy; opaque references | Retries, then dead-letter queue | ECO-O-14 | 1 |
 | Repository archive and open encodings | Full history; independent readers | `archive/incomplete` | ECO-O-12 | 1 |
 | Outbound Acts | `release_data` checks for every exit path | `label/write_down`; screening failure | ECO-O-28 | 1, 2 (mirror, standing releases), 3 (watermark) |
@@ -621,7 +621,7 @@ context = "evaluation"
 fuel    = 2e11                           # must fit the organization ceiling
 
 [components.vendor_sync]
-world   = "crucible:connect/connector@0.1.0"
+world   = "crucible:connect/partner-connector@0.1.0"
 context = "connector"
 http    = ["api.acme.example"]           # the only reachable host
 secrets = ["acme_api_token"]
@@ -760,7 +760,7 @@ Contract section 7.7 fixes dependency licences, and ECO keeps the allowlist that
 | OS libraries (glibc, the C++ runtime under its runtime exception, platform frameworks) | Linked dynamically, never shipped | None beyond the platform's |
 | LGPL, GPL, AGPL otherwise | Never linked: external tool, External Op or test oracle | Container images ship their source offer |
 
-**Decision D-ECO-36:** std ships no transcribed standards tables; it computes values from the formulas the standards define, such as ISO 286 grades, citing clauses (MEC). Table-only values, such as fastener dimensions, ship in separate `standards::` Packages with a `DataLicence`, licensed from the standards body or supplied by the organization. Counsel reviews the formula approach before phase 1. *Why:* standards bodies hold copyright, and ISO allows its files only "in their original format without any modifications" [ISO 10303 portal]. Substantial extraction can also infringe the EU database right [Directive 96/9/EC]. *Rejected:* tables in Apache-2.0 std, a right Crucible cannot grant. No standards, which leaves `fit(10mm, H7)` unavailable.
+**Decision D-ECO-36:** std ships no transcribed standards tables; it computes values from the formulas the standards define, such as ISO 286 grades, citing clauses (MEC). Table-only values, such as fastener dimensions, ship in separate `crucible::standards::` Packages with a `DataLicence` (D-MEC-31), licensed from the standards body or supplied by the organization. Counsel reviews the formula approach before phase 1. *Why:* standards bodies hold copyright, and ISO allows its files only "in their original format without any modifications" [ISO 10303 portal]. Substantial extraction can also infringe the EU database right [Directive 96/9/EC]. *Rejected:* tables in Apache-2.0 std, a right Crucible cannot grant. No standards, which leaves `fit(10mm, H7)` unavailable.
 
 **Decision D-ECO-21:** Contributions come under the Developer Certificate of Origin 1.1, with no CLA. Agents never add `Signed-off-by`; agent-assisted commits carry `Assisted-by: <tool, model>`, and a human's sign-off certifies review. Every contribution's added code, declared tool use or not, runs a similarity scan against copyleft corpora, with thresholds per file and per contributor per week. A match blocks the merge until a maintainer clears or rewrites it. *Why:* the DCO certifies knowledge of the work's origin [DCO][LF generative AI], and undeclared or split snippets are what a scan exists for. *Rejected:* a CLA with assignment, which enables relicensing. Provenance trailers alone (round 1). Scanning only agent diffs over 50 lines (round 2). (revised in round 3)
 
@@ -932,16 +932,16 @@ Deviations, with reasons:
 
 | Tab | ECO requires | ECO provides |
 | --- | --- | --- |
-| ANV | Builders with healing; certified mass properties; D-ANV-31, `import_map`, normal form, `exchange_form`; `crucible:geom` and `anvil::measure_*` | `crucible:ops` bindings from its catalog |
-| MEC | GD&T, its AP242 mapping and PMI eligibility; `ShapeAspect`; joints; flat DXF conventions; characteristic balloons; formula-computed standards values; `crucible:product` with KLN | Board readers; AP242 and QIF translators; drawing writers; `standards::` Packages and their licence rule |
-| FLX, COV | Field encodings; the FMI and SSP runtime (D-FLX-30); `crucible:field` and `flux::sample`; solver and constitutive semantics; domain acceptance checks | `crucible:ops` bindings; hosting for solver and constitutive components; package metadata for the coverage map; FMU packaging; Field, IFC, GDSII, OASIS, MatML and ISO 10303-235 codecs |
+| ANV | Builders with healing; certified mass properties; D-ANV-31, `import_map`, normal form, `exchange_form`; `crucible:geom`; `anvil::mass_properties`, `distance` and `deviation` | `crucible:ops` bindings from its catalog; per-model licence evidence for the ABC subset (phase 0) |
+| MEC | GD&T, its AP242 mapping and PMI eligibility; `ShapeAspect`; joints; flat DXF conventions; characteristic balloons; formula-computed standards values; `crucible:product` with KLN | Board readers; AP242 and QIF translators; drawing writers; GDSII and OASIS writers (phase 5); `crucible::standards::` Packages and their licence rule |
+| FLX, COV | Field encodings; the FMI and SSP runtime (D-FLX-30); `crucible:field` and `flux::field_sample`; solver and constitutive semantics; domain acceptance checks | `crucible:ops` bindings; hosting for solver and constitutive components; package metadata for the coverage map; FMU packaging; Field, IFC, GDSII, OASIS, MatML and ISO 10303-235 codecs |
 | ELX | Board, netlist and library models; IDX, IPC-2581, ODB++, KiCad, harness and robot semantics; SPICE dialects; `CatalogSelection`; SysML v2 and ReqIF mappings | Board and harness readers and writers; ECAD migration; `parts::` publishing and its licence rule; the offer schema and connectors |
-| MFG | Output packages; machine, tool and toolpath models; `verify_nc` and macro libraries; the phase 1 inspection loop; strategy, post, nesting, slicer and recognizer worlds; routing and work-order mapping | Every `io/` writer and its phase; QIF Results and CSV import; tool-data readers; ERP and MES connector worlds; NC migration |
+| MFG | Output packages; machine, tool and toolpath models; `verify_nc` and macro libraries; the phase 1 inspection loop; `toolpath-strategy`, `post-processor`, nesting, packing, slicer and recognizer worlds; routing and work-order mapping | Every `io/` writer and its phase; QIF Results and CSV import; tool-data readers; ERP and MES connector worlds; NC migration |
 | ING | Module system, manifest keys, editions, `ingot_sdk::Cx`, wrapper conventions, version rules with entity-name changes | Registry and signing; interface diffs (D-ECO-14); determinized components; the RFC process |
-| KLN | Leaf inputs; the limit-outcome catalog; `crucible:host`; event types and sequence numbers; `release_data` commit records; the system-of-record policy; `ControlAuthorization`; span integrity on import; the two-person list (D-KLN-41); the regulated cloud mode | Determinized hashes for keys; event delivery; ERP, MES and PLM connectors; the software supply chain; feeds as External inputs; the watermark transform |
-| AGT | `std::agents` and `std::explore`; the `<family>/<code>` error form; Act classes, `release_data` and `standing_release` (D-AGT-30); `ExternalText`; render rules for untrusted Bodies; audit; MCP subscriptions | Catalog entries above; registry, event and archive behavior; importers returning `ExternalText`; licence metadata; partner connectors; `release_data` members for every exit path |
-| PLT | Determinizer, overhead and call-overhead tables; Wasmtime LTS and 7-day patches; sandbox, egress enforcement and microVM workers; the browser runtime and bridge (PLT-O-WASM-1); `crucible:host/parallel`; LMS release signing; cargo-vet audits; NFC normalization | Worlds to enforce; declared memory limits; component descriptions; font packages; the licence allowlist; export classification, the sector rule and CRA reporting |
-| UIX | The `panel` and `canvas2d` worlds; theme, keymap, template and tutorial schemas; rendering of reports, grants and package pages | The registry; package metadata, capability descriptions and badges; licensed translators as external tools |
+| KLN | Leaf inputs; the limit-outcome catalog; `crucible:host`; event types and sequence numbers; release-data records; the system-of-record policy; `ControlAuthorization`; span integrity on import; the two-person list (D-KLN-41); the regulated cloud mode | Determinized hashes for keys; event delivery; ERP, MES and PLM connectors; the software supply chain; feeds as External inputs; the watermark transform |
+| AGT | `std::agents` and `std::explore`; the `<family>/<code>` error form; Act classes, `release_data` and `standing_release` (D-AGT-30, D-AGT-33); `ExternalText`; render rules for untrusted Bodies; audit; MCP subscriptions | Catalog entries above; registry, event and archive behavior; importers returning `ExternalText`; licence metadata; partner connectors; `release_data` members for every exit path |
+| PLT | Determinizer, overhead and call-overhead tables; Wasmtime LTS and 7-day patches; sandbox, egress enforcement and microVM workers; the browser runtime and bridge (PLT-O-WASM-1); `crucible:host/parallel` and `crucible:tool/process`; LMS release signing; cargo-vet audits; NFC normalization | Worlds to enforce; declared memory limits; component descriptions; font packages; the licence allowlist; export classification, the sector rule and CRA reporting |
+| UIX | The `panel` and `canvas2d` worlds; theme, keymap, template and tutorial schemas; rendering of reports, grants and package pages | The registry; package metadata, capability descriptions and badges; `TranslationReport`s; font packages; licensed translators as external tools |
 
 Outside users get the SDKs, C ABI, CLI, webhooks, and the archive and CAS encoding specifications.
 
@@ -1018,16 +1018,16 @@ Corpus oracles (1 to 3, 15 to 17, 21, 23 to 26, 32) hold out files by a fixed ha
     - R11-29: applied, but its premise about the steward's size no longer holds (contract section 13.2); Articles 20 and 30 are adopted by choice.
     - R11-32: the permission request is due "before layer 1's first release" rather than by a calendar month, since milestones are ordered, not dated.
     - R11-49: CNA scope follows the public registry's opening, since the program has no human team (contract section 13.2).
-    - R11-45, R11-28, R9-47: applied here; the contract text they touch is CCR-ECO-12, CCR-ECO-10 and CCR-ECO-11.
+    - R11-45, R11-28, R9-47: applied here and in contract 13.1, 7.7 and 7.6 (CCR-ECO-12, CCR-ECO-10, CCR-ECO-11).
     - R9-26: ECO keeps a short table of its own four packages beside the index.
     - R8-23, R11-33: ECO applies its part (D-ECO-37); MEC, ANV and AGT own the rest.
 
 ## Contract change requests
 
 - CCR-ECO-8 and CCR-ECO-9: accepted in contract v5 (section 7.4).
-- **CCR-ECO-10 (R11-28).** Contract section 7.7 adds a CRA support period of at least five years per stable release line. Security fixes reach it by backport or by a free upgrade that raises no OS or hardware minimum, as separate patch releases. *Reason:* the 24-month LTS is below Article 13(8)'s floor (D-ECO-34).
-- **CCR-ECO-11 (R9-47).** Contract section 7.6 writes the write-down error as `label/write_down`, the `<family>/<code>` form that keeps errors out of the method namespace.
-- **CCR-ECO-12 (R11-45).** Contract section 13.1's phase 0 gate adds "and the SDK name reserved on crates.io, PyPI, npm, Maven Central and NuGet". *Reason:* the bare name is taken on PyPI and crates.io, and names enter lockfiles.
+- CCR-ECO-10, support period: accepted with CCR-PLT-10 in contract v6.1 (section 7.7).
+- CCR-ECO-11, error-code form: accepted with CCR-KLN-9 and CCR-AGT-12 in contract v6.1 (section 7.6).
+- CCR-ECO-12, SDK names: accepted in contract v6.1 (section 13.1).
 
 ## Sources
 

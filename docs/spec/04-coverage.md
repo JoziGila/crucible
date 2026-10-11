@@ -41,7 +41,7 @@ An E2 model's calibrated zone is the validation domain its cited literature docu
 
 ### Error budgets and model form
 
-Each `ErrorBudget` source has one producer (contract 5): Flux fills the numerical parts and `reduction or surrogate`, shell and beam reduction included (D-FLX-26). COV fills the input part from Material uncertainty and the model-form part from validation of the 3D physics and constitutive model.
+Each `ErrorBudget` source has one producer (contract 5): Flux fills the numerical parts and `reduction or surrogate`, shell and beam reduction included (D-FLX-26). COV supplies the Material uncertainty that Flux propagates into the input part, and fills the model-form part from validation of the 3D physics and constitutive model.
 
 | Evidence level, zone and quantity | Model-form part |
 | --- | --- |
@@ -61,14 +61,14 @@ Each `ErrorBudget` source has one producer (contract 5): Flux fills the numerica
 
 **Decision D-COV-17:** Every `PhysicsModel` names the calibration class of each `Estimated` estimator it uses, with the class's η99 entry and envelope pinned in `ingot.lock`. Membership is computed from features FLX lists (degree, cut fraction, distance to singular sets); a result outside the envelope, or without an entry, reports `Indicator`. *Why:* only the author knows which estimator a model needs (R1-07), but a label cannot show that a result belongs to the sampled population (R7-01). *Rejected:* one class per numerical method; author-assigned membership. (revised in round 3)
 
-Phase 1 needs three classes, each with 300 held-out samples from FLX's corpus (FLX "Calibrated estimates"). `elasticity/regularized_peak` covers immersed linear elasticity at p = 2 to 6 at both fidelities, for GP1 and GP2 stress. `lattice/strut_stress` and `lattice/buckling_factor` cover the beam lattice's strut stresses and its eigenvalue-DWR buckling factor.
+Phase 1 needs FLX's four classes (FLX "Calibrated estimates"), each with 300 held-out samples: `elasticity.peak` and `elasticity.eigen` for immersed linear elasticity at p = 2 to 6, and `lattice.strut_stress` and `lattice.buckling` for the beam lattice's strut stresses and buckling factors.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
 | Coverage map | Generated from package metadata by domain, scale, level and status; `api` Read methods | Unbacked cells show `Planned (phase n)` and the nearest packages, outside counts | COV-O-MAP-1 | 0 |
 | Model ladders | Adjacent rungs consistent inside the narrower envelope | Disagreement blocks the higher rung's level | COV-O-VER-2 | 1 |
 | Evidence levels | E0 to E4, raised only by CI-signed results; E3 per validated class | Unsigned or agent-set levels rejected | COV-O-VER-3 | 0 |
-| Solution-verification status | `Estimator`, calibrated `Gci` or `None` | `None` keeps discretization `Indicator` | COV-O-VER-4 | 1 |
+| Solution-verification status | `Estimator`, calibrated `Gci` or `None` | `None` keeps discretization `Indicator` | COV-O-VER-4 | 1, 3 (`Gci`) |
 | Model-form part | V&V 20 metric per validated class; u_num from Flux bounds; g(d) | `NotQuantified` with `NoValidationData` or `UnvalidatedQuantity` | COV-O-VAL-2 | 1 |
 | Input part | Material uncertainty through `std::uq` | `NotQuantified { MissingUncertainty }` | COV-O-ERR-1 | 2, 3 epistemic |
 | Calibration classes | Model-to-class map; pinned η99 entries and class envelopes | No entry, or outside the envelope: `Indicator` | COV-O-ERR-2 | 1 |
@@ -248,7 +248,7 @@ Scales: **N** below 100 nm, **µ** to 1 mm, **Me** to 100 mm, **P** to 10 m, **L
 
 | Domain (scales) | L0 · L1 · L2 | L3 method | Envelope defaults | Benchmark | Phase · delivery |
 | --- | --- | --- | --- | --- | --- |
-| Linear elasticity (µ Me P L) | Beam, plate and shell formulas · frame networks · static condensation | High-order FEM on the immersed octree; IGA on trimmed B-rep; finite cell for voxels | Strain ≤ 0.5% calibrated, ≤ 2% extrapolated; below the proportional limit; rotation ≤ 0.05 rad; feature ≥ 10 grains or a strut-scale Material | NAFEMS LE1 92.7 MPa, LE10 −5.38 MPa, LE11 −105 MPa [S3][S4]; GP1, GP2 | 1 · Nat |
+| Linear elasticity (µ Me P L) | Beam, plate and shell formulas · frame networks · static condensation | High-order FEM on the immersed octree; IGA on trimmed B-rep; finite cell for voxels | Strain ≤ 0.5% calibrated, ≤ 2% extrapolated; below the proportional limit; rotation ≤ 0.05 rad; feature ≥ 10 grains or a strut-scale Material | NAFEMS LE1 92.7 MPa, LE10 −5.38 MPa, LE11 −105 MPa [S3][S4]; GP1, GP2 | 1 (octree), 2 (IGA, finite cell, frame networks) · Nat |
 | Shells, beams and frames (Me P L) | Beam and plate formulas · frame networks · — | Reissner–Mindlin and IGA Kirchhoff–Love shells; Timoshenko and Vlasov beams; Nitsche couplings (D-FLX-12) | t/L_local ≤ 0.2, or ≤ 0.05 for Kirchhoff–Love; d/L_local ≤ 0.2; reduction error from 3D patches (D-FLX-26) | NAFEMS shell and beam cases | 1 lattices, 2 · Nat |
 | Geometric nonlinearity (µ Me P L) | — | Total Lagrangian FEM with arc-length continuation | Limit and bifurcation points reported, never stepped over | NAFEMS R0024 group [S5] | 2 · Nat |
 | Plasticity (µ Me P L) | Neuber and Glinka notch rules · — · — | Finite-strain J2, Hill48, Yld2000-2d, Chaboche; tangents through `local_solve` | Rate-independent below homologous T 0.3; past uniform elongation only with damage | NAFEMS R0024 panel [S5]; thick cylinder | 2 · Nat |
@@ -256,7 +256,7 @@ Scales: **N** below 100 nm, **µ** to 1 mm, **Me** to 100 mm, **P** to 10 m, **L
 | Viscoelasticity (µ Me P) | — · Prony networks · complex-modulus modal | Generalized Maxwell with WLF or Arrhenius shift; Bergström–Boyce | Temperature and frequency within the master curve | Analytic creep and relaxation | 3 · Nat |
 | Creep (Me P L) | Larson–Miller · — · — | Norton–Bailey, Garofalo, theta projection; Kachanov–Rabotnov damage | Time ≤ longest test calibrated, ≤ 3× extrapolated (OOR-5) | NAFEMS R0027 [S5] | 3 · Nat |
 | Contact and friction (µ Me P L) | Hertz, Boussinesq · — · — | Mortar contact on fitted tetrahedra (13.4); IPC from phase 5 (FLX) [S26] | Penetration below tolerance; friction only from a tested pair (OOR-19) | NAFEMS R0094 [S5]; Hertz | 2 · Nat |
-| Bolted and bonded joints (Me P L) | VDI 2230-1:2015 [S115] · joint springs · — | Preloaded bolts; cohesive zones with Benzeggagh–Kenane mixing | Joint parameters and damping from tests of the joint class (OOR-18) | DCB and ENF | 2 · Nat |
+| Bolted and bonded joints (Me P L) | VDI 2230-1:2015 [S115] · joint springs · — | Preloaded bolts; cohesive zones with Benzeggagh–Kenane mixing | Joint parameters and damping from tests of the joint class (OOR-18) | DCB and ENF | 2 (bolts), 3 (cohesive) · Nat |
 
 Snap fits and soft parts use mortar contact until FLX's IPC arrives in phase 5, reporting d̂ and ε_v under `regularization` [S111].
 
@@ -264,7 +264,7 @@ Snap fits and soft parts use mortar contact until FLX's IPC arrives in phase 5, 
 
 | Domain (scales) | L0 · L1 · L2 | L3 method | Envelope defaults | Benchmark | Phase · delivery |
 | --- | --- | --- | --- | --- | --- |
-| Modal analysis (µ Me P L) | Rayleigh, Dunkerley · lumped MDOF · Craig–Bampton | Lanczos and LOBPCG (13.4); eigenvalue DWR bound on the unsafe side (FLX) | Linear; damping from test (OOR-18) | NAFEMS free vibration [S2][S5] | 1 · Nat |
+| Modal analysis (µ Me P L) | Rayleigh, Dunkerley · lumped MDOF · Craig–Bampton | Lanczos and LOBPCG (13.4); eigenvalue DWR bound on the unsafe side (FLX) | Linear; damping from test (OOR-18) | NAFEMS free vibration [S2][S5] | 1, 2 (Craig–Bampton) · Nat |
 | Vibration and shock (Me P L) | SDOF, Miles, shock spectra · — · modal with residual vectors | Direct frequency response; PSD response; implicit generalized-α | Damping declared; PSD band and pulse within modal coverage | NAFEMS R0016 [S5]; half-sine SDOF | 2 · Nat |
 | Rotordynamics (Me P) | Jeffcott rotor · rotor beams · Campbell modal | Rotating-frame FEM; fluid-film bearings from the Reynolds equation | Bearings linearized at operating speed | Jeffcott critical speed | 2 · Nat |
 | Buckling (µ Me P L) | Euler, Johnson, Perry–Robertson · — · linear eigen-buckling (13.4) | Arc-length post-buckling with imperfections and plasticity; Koiter asymptotics (FLX) | Members and struts per D-COV-30; `Refuse` at `SignOff` on imperfection-sensitive shells | NAFEMS R0024 [S5]; Euler and Johnson columns | 1 linear, 2 nonlinear and Koiter · Nat |
@@ -302,11 +302,11 @@ A lattice part's critical region signs off on the beam-lattice model's localized
 
 | Domain (scales) | L0 · L1 · L2 | L3 method | Envelope defaults | Benchmark | Phase · delivery |
 | --- | --- | --- | --- | --- | --- |
-| Conduction (N µ Me P L) | Slab, fin and shape factors · RC networks · moment matching | High-order FEM, IGA, immersed methods | Fourier law `Refuse` above the declared mean-free-path share | NAFEMS T2 to T4 [S2][S5] | 1 · Nat |
+| Conduction (N µ Me P L) | Slab, fin and shape factors · RC networks · moment matching | High-order FEM, IGA, immersed methods | Fourier law `Refuse` above the declared mean-free-path share | NAFEMS T2 to T4 [S2][S5] | 1 (FEM), 2 (IGA, networks), 3 (moment matching) · Nat |
 | Convection (Me P L) | Nusselt correlations within published ranges · flow networks · — | Conjugate heat transfer on laminar, RANS or LES flow | Correlation ranges `Refuse`; conjugate analysis inherits the flow envelope; laminar walls Extrapolated below five cells across δ_T | NAFEMS T4 [S5]; Graetz | 2 correlations, 3 laminar and natural, 4 turbulent (13.4) · Nat |
 | Radiation (Me P L) | Two-surface enclosures · radiosity networks · — | Ray-traced view factors; Monte Carlo for specular and spectral surfaces; discrete ordinates | Gray-diffuse declared; spectral bands where emissivity varies | Analytic view factors; closure ΣF = 1 within 10⁻⁶ | 3, 4 discrete ordinates · Nat |
 | Solid–liquid phase change (µ Me P) | Stefan, Neumann · — · — | Enthalpy method with mushy zone | Freezing range declared; no undercooling | Stefan analytic | 3 · Nat |
-| Boiling, condensation, heat pipes (Me P) | Rohsenow, Nusselt film · heat-pipe and vapour-compression networks with CoolProp [S43] · — | VOF with phase change | Correlations `Refuse` outside range; heat-pipe limits reported; resolved boiling `Flag` | Nusselt film analytic | 4 · Nat |
+| Boiling, condensation, heat pipes (Me P) | Rohsenow, Nusselt film · heat-pipe and vapour-compression networks with CoolProp [S43] · — | VOF with phase change | Correlations `Refuse` outside range; heat-pipe limits reported; resolved boiling `Flag` | Nusselt film analytic | 4, 5 (VOF, 13.4) · Nat |
 | Moisture and hygro-mechanics (µ Me P L) | Equilibrium moisture tables · — · — | Fickian diffusion with sorption isotherms, hygro-expansion, mechano-sorptive creep | Humidity and temperature within sorption data; mechano-sorptive creep `Flag` | Fickian slab | 3 packages, 7 timber · Nat |
 | Ablation and pyrolysis (Me P) | Heat of ablation · 1D charring ablator · — | Surface energy balance with B′ tables and recession | `Flag` always | Ablation Workshop test cases [S74] | 6 · Wasm |
 | Joule heating and thermoelectrics (µ Me P) | Resistive and Peltier module formulas · — · — | Electro-thermal coupling with temperature-dependent resistivity; Seebeck–Peltier–Thomson FEM | Resistivity within data; linear thermoelectric coefficients | Wire heating; analytic module | 4 Joule (13.4), 5 thermoelectric · Nat |
@@ -325,7 +325,7 @@ A lattice part's critical region signs off on the beam-lattice model's localized
 | Dispersed multiphase (Me P L) | Settling and drag correlations · — · — | Euler–Lagrange with two-way coupling; Euler–Euler | Volume-fraction limit per model; breakup `Flag` (OOR-8) | Stokes settling | 5 (13.4) · Nat |
 | Cavitation (Me P) | Cavitation number · — · — | Mixture models with Schnerr–Sauer or Zwart transfer | `Flag` always; erosion out of reach (OOR-9) | Rayleigh collapse time [S95][S96] | 6 · Nat |
 | Non-Newtonian (µ Me P) | Power-law pipe flow · — · — | Carreau–Yasuda, Cross–WLF, Herschel–Bulkley; Oldroyd-B, Giesekus, PTT with log-conformation | Shear rate within rheometry; Weissenberg within the verified range | Poiseuille; 4:1 planar contraction [S79] | 3, 5 viscoelastic · Nat |
-| Porous media (µ Me P L) | Darcy, Ergun · — · — | Darcy–Brinkman–Forchheimer; permeability from pore-scale lattice Boltzmann | Pore Reynolds number within the law | Porous channel | 3 · Nat |
+| Porous media (µ Me P L) | Darcy, Ergun · — · — | Darcy–Brinkman–Forchheimer; permeability from pore-scale lattice Boltzmann | Pore Reynolds number within the law | Porous channel | 3, 4 (lattice Boltzmann) · Nat |
 | Rarefied gas (µ Me P) | Free-molecular formulas · — · — | Slip and temperature jump; DSMC with SPARTA (GPL) [S34] | Continuum below Kn 0.001, slip to 0.1, transitional to 10 | Microchannel slip | 5 · Nat slip, Ext DSMC |
 | Microfluidics (µ Me) | Stokes resistances · hydraulic networks · — | Stokes FEM with electro-osmotic slip and Nernst–Planck transport | Debye length much smaller than the channel | Electro-osmotic plug flow | 5 · Nat |
 | Combustion (Me P L) | Adiabatic flame temperature · reactor networks with Cantera (BSD-3) [S21][S22] · flamelet tables | Flamelet-progress-variable, FGM; finite-rate chemistry in LES | `Flag` always (OOR-7) | Flame speeds; Sandia piloted flames of the TNF Workshop [S80] | 6 · Wasm kinetics, Nat transport |
@@ -566,7 +566,7 @@ pub fn linear_elasticity() -> PhysicsModel {
         precision: Precision::F32Safe,
         requires: [Material.elastic_stiffness],
         form: elasticity_form,
-        calibration: ["elasticity/regularized_peak"],
+        calibration: ["elasticity.peak"],
         envelope: envelope {
             bound(equivalent_strain, max) { calibrated: 0.0..=0.005, extrapolated: 0.0..=0.02,
                 outside: refuse, escalate_to: [solid::finite_strain_plasticity] }
@@ -600,7 +600,7 @@ The syntax is illustrative; ING defines it.
 1. **Static checks.** The registry rejects models lacking envelope, inflation, classes or precision class, bounds lacking basis, transform or computable variable (D-COV-18), and `Refuse` bounds without escalation.
 2. **Oracle pass.** Registry CI runs the oracles in the canonical class and each targeted GPU class and assigns E0 to E2. E3 needs protected validation records the author's agents never see.
 3. **Domain review.** A std package needs two human domain reviewers with no authorship stake, who confirm E2 literature zones and catalogue entries (D-COV-24). Third-party packages publish at any shown level.
-4. **Use policy.** A design repository declares `min_evidence_level`; checks on models below it are `Undecided { reason: EvidenceBelowPolicy }`.
+4. **Use policy.** A design repository declares `min_evidence_level`; checks on models below it are `Undecided { reason: Flagged(EvidenceBelowPolicy) }`.
 5. **Domain tags.** Namespaced; review merges duplicates.
 
 Agents draft packages, oracles and envelope changes but never assign levels, merge widenings or approve reviews.
@@ -618,7 +618,7 @@ The top row assigns E0 to E2 by automated checks; the bottom row adds protected 
 | Solver Wasm components | `crucible:physics/solver` on `crucible:ops/flux` | Determinizer rejection | COV-O-BENCH-7 | 2 |
 | External Op solvers | D-COV-12 | Host failure is a `Failure`; worker loss an Abort; disagreeing runs `Unverified` | COV-O-PKG-1 | 3 |
 | Precision classes | `F32Safe` or `F64Required` (D-COV-23) | The plan places `F64Required` kernels on a CPU or `f64` class and says so | COV-O-PKG-3 | 1 |
-| Use policy | `min_evidence_level` per repository | `Undecided { reason: EvidenceBelowPolicy }` | COV-O-VER-3 | 1 |
+| Use policy | `min_evidence_level` per repository | `Undecided { reason: Flagged(EvidenceBelowPolicy) }` | COV-O-VER-3 | 1 |
 | Domain tags | Namespaced; duplicates merged | Duplicates rejected with the existing name | COV-O-PKG-2 | 1 |
 | Tool qualification kit | Requirements, evidence, known problems and impact notes (D-COV-29) | A requirement without passing evidence blocks the kit | COV-O-VAL-3 | 6 |
 
@@ -672,7 +672,7 @@ Rheology, pvT, solidus and liquidus, fraction-solid curves, and cure and crystal
 
 **Decision D-COV-22:** Material uncertainty is typed as `Aleatory { distribution, group }`, `Epistemic { interval }` or both, and correlation is declared only through named correlation groups across properties and Materials. Flux propagates intervals by nested sampling and reports probability boxes, never summed with distributions. *Why:* correlated inputs need groups for grouped Sobol indices and Shapley effects, and summing intervals with distributions overstates confidence (R1-36). *Rejected:* a free correlation matrix; one type for both kinds.
 
-`std::uq` propagates input error by first-order adjoint sensitivities, switching at `SignOff` to seeded quasi-Monte Carlo when second-order terms exceed 10% of first-order ones (target). A basis enclosure already covers its property's aleatory scatter, so propagation covers the other properties and epistemic parts.
+`std::uq` propagates input error by FLX's worst-case rule (D-FLX-35): adjoint-linearized bounds plus a Lanczos remainder, with `NonlinearResponse` above 20% asking for a statistical method. A basis enclosure already covers its property's aleatory scatter, so propagation covers the other properties and epistemic parts.
 
 ### Constitutive-model library
 
@@ -812,7 +812,7 @@ Targets run on contract 13.3's reference laptop or a named GPU; copyleft leaders
 | AGT and `api` | Coverage map; limit records; envelopes; `ValidityError`s with escalation | Read and Inspect methods |
 | UIX | Zone Fields with assumptions; model-form parts; basis citations; escalations | `Field<Body, ValidityZone>` |
 | MEC | Materials; solid, contact, joint, fatigue, buckling and dynamics models; gear, bearing and shaft ratings; constitutive draping (13.4) | `Material`, `PhysicsModel` |
-| MFG | Process models and envelopes; state Fields; strut-scale Materials from its calibration; environmental records | `Field`, `ValidityEnvelope`, `EnvironmentalRecord` |
+| MFG | Process models and envelopes; state Fields; strut-scale Materials from its calibration; environmental records; gear, bearing and shaft ratings | `Field`, `ValidityEnvelope`, `EnvironmentalRecord` |
 | ELX | Dielectric, copper, magnetic and cell Materials; electromagnetic, thermal and electrochemical models, including refit LFP hysteresis; precision classes | `PhysicsModel`, `Material` |
 | ECO | Domain acceptance checks; semantics of `crucible:physics`, `crucible:material`, MatML and OpenFOAM cases | Package |
 | PLT | Precision classes per model; External Op worker needs | Model metadata |
@@ -888,7 +888,7 @@ Shared phases follow contract 13.4, and each matrix row lists its phase. Golden 
 | Phase | COV's contribution to the gate |
 | --- | --- |
 | 0 | Envelope schema; regime variables with transforms; evidence levels; Material records and units; the coverage map; limit records |
-| 1 | GP1 and GP2: immersed linear elasticity and the beam-lattice model at E3 from the proof loads; three calibration classes; strut buckling envelopes and strut-scale Materials; basis enclosures; the allowance catalogue |
+| 1 | GP1 and GP2: immersed linear elasticity and the beam-lattice model at E3 from the proof loads; four calibration classes; strut buckling envelopes and strut-scale Materials; basis enclosures; the allowance catalogue |
 | 2 | GP3 and GP4: gear, bearing and shaft ratings; weld distortion from coupons at E3; inherent strain for metal powder bed fusion; environmental records with generic factors |
 | 3 | GP5: moulding with the Hele-Shaw envelope, laminar conjugate heat transfer and drop; warpage and drop models at E3 |
 | 4 | GP6: models validated by flight, dynamometer and thermal tests |
@@ -900,13 +900,13 @@ Shared phases follow contract 13.4, and each matrix row lists its phase. Golden 
 
 1. **Strut waviness threshold.** D-COV-30's `Flag` value comes from the first as-built calibration build (13.4) and cannot be set before that build is measured.
 2. **Sheet lattices in GP2.** If the phase 0 gate fixes GP2 with sheet cells, mid-surface shells for sheet lattices move to phase 1. The GP2 record in contract 13.1 decides it.
-3. **Gear and bearing envelope limits.** The lambda-ratio and temperature limits come from each standard's scope, which needs the licensed editions (MEC open question 2).
+3. **Gear and bearing envelope limits.** The lambda-ratio and temperature limits come from each standard's scope, which needs the licensed editions (MEC open question 1).
 4. **Findings applied in part.**
     - R7-01: class envelopes and α here; the adversarial corpus and refinement confirmation are FLX's and contract 7.1's.
     - R7-05, R7-11, R7-13, R7-15, R7-21, R7-24: one-line consequences; FLX owns the eigenvalue estimator, patch rule, GPU readback, smoothing radius, GCI calibration and surrogate bound.
     - R7-06, R7-20, R7-25: envelopes, Materials and phases here; FLX owns Koiter coefficients and joint loads, MFG the calibrations, ANV the implicit mid-surface.
     - R7-09, R7-29: regime variables here; FLX owns the plan rules, MFG GP5's cell count and the Hele-Shaw solver.
-    - R7-16: three phase 1 classes, not five, since one immersed treatment serves both fidelities (R7-17) and inherent strain left phase 1.
+    - R7-16: four phase 1 classes, not five, since one immersed treatment serves both fidelities (R7-17) and inherent strain left phase 1.
     - R7-19, R10-18: rating rows here; the accuracy grade and drawing data table are MEC's.
     - R7-26: COV's oracles; FLX's are FLX's.
     - R9-09, R9-15, R9-23, R9-28, R11-08: pointers to KLN, contract 2, contract 5, FLX's operation and contract 7.8.
@@ -914,7 +914,7 @@ Shared phases follow contract 13.4, and each matrix row lists its phase. Golden 
 
 ## Contract change requests
 
-None. CCR-COV-9 (model level and evidence level in the glossary) was accepted in contract v5.
+None. CCR-COV-9 (model level and evidence level in the glossary) was accepted in contract v5 (section 2).
 
 ## Sources
 

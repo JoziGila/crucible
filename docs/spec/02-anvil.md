@@ -51,7 +51,7 @@ A behavior version (`anvil::blend@2`) fixes an operation's output for every inpu
 
 **Decision D-ANV-18:** A released operation version freezes its source closure, recorded as a closure hash (contract 4). The closure is its own modules (such as `ssi@4`) plus the versioned modules of the result-affecting crates it calls: `linalg`, `kernels` back ends, `simd` reductions. *Why:* frozen source plus PLT's reproducible toolchain rebuilds old designs by construction, which no regression corpus can promise. *Rejected:* versioning only the public operation (a shared fix changes old versions); a corpus fingerprint alone (misses changes outside the corpus); keeping old binaries. (revised in round 3)
 
-Kiln refuses a released version whose closure hash changed; a security exception needs the founder's approval and identical corpus outputs. Per-merge CI reproduces golden hashes of `Current` and `Deprecated` versions pinned by a golden product or registry package. `Retired` versions run from archived Wasm builds, re-verified on toolchain, `detmath` and Wasmtime upgrades and weekly in shards.
+Kiln refuses a released version whose closure hash changed; a security fix ships as a new operation version (contract 4). Per-merge CI reproduces golden hashes of `Current` and `Deprecated` versions pinned by a golden product or registry package. `Retired` versions run from archived Wasm builds, re-verified on toolchain, `detmath` and Wasmtime upgrades and weekly in shards.
 
 A design pins versions in `ingot.lock` (`anvil.blend = 2`), and a call may override with `op: anvil::blend@1`. `crucible upgrade anvil::blend` produces a Proposal with a geometry overlay, metric deltas, changed checks and every `ResolveError`. Versions go from `Current` to `Deprecated` (native for at least five years) to `Retired` (archived Wasm build, identical bits).
 
@@ -83,7 +83,7 @@ Anvil owns the WIT package `crucible:geom` and the generated interface `crucible
 | Canonical outputs | decode(encode(v)) = v for every output | Internal error | ANV-O-ENC-1 | 0 |
 | Robustness under random use | Property-based operation sequences with near-degenerate placements | Failures minimized into the corpus | ANV-O-FUZZ-1 | 0 |
 | `crucible:geom/types` | `body` and `entity` handles, `geometry-id`, `error-bound`, `face-bound`, `edge-bound`, `heal-policy`, `history-record` | — | ANV-O-WIT-1 | 1 |
-| `crucible:geom/build`, `measure` | Builders validated by `anvil::build`; mass properties, distance, classification and deviation with bounds | `invalid(violations)`, `work-limit`, `not-separated` | ANV-O-WIT-1 | 1 |
+| `crucible:geom/build` | Builders validated by `anvil::build`; measures through `crucible:ops/anvil` (contract 4) | `invalid(violations)`, `work-limit` | ANV-O-WIT-1 | 1 |
 | `crucible:ops/anvil` | One generated function per operation version | That operation's `OpError` kinds | ANV-O-WIT-1 | 1 |
 
 ## Bodies, identities and encoding
@@ -332,7 +332,7 @@ Untouched and modified entities keep their ids, so dimension edits that keep top
 
 ### Role vocabulary
 
-Every entity-creating operation declares roles for the faces, edges and vertices it creates. ING's language service rejects a role filter on the wrong entity kind. Sweeps share one pattern, where `e` is a profile edge and `v` a profile vertex:
+Every entity-creating operation declares roles for the faces, edges and vertices it creates. ING's compiler rejects a role filter on the wrong entity kind (`ING5002`). Sweeps share one pattern, where `e` is a profile edge and `v` a profile vertex:
 
 | Operation | Faces | Edges | Vertices |
 | --- | --- | --- | --- |
@@ -347,7 +347,7 @@ The canonical example's `base.edge(role: end(outline.top))` is the end cap's edg
 
 ### Copies and placements
 
-Transforms always keep names. When two operands of a Boolean, `combine` or assembly feature carry the same `EntityId`, the operand from the later transform in `CallSite` order is relabeled. Its entities become EID(kind, that transform's site, `copy` or `mirror`, [source]), recorded as `Created { role: copy, from: [source] }`.
+Transforms always keep names. When two operands of a Boolean, `combine` or assembly feature share an `EntityId`, the operand from the later transform in ING's program order is relabeled. Its entities become EID(kind, that transform's site, `copy` or `mirror`, [source]), recorded as `Created { role: copy, from: [source] }`.
 
 An explicit `copy(x)` always derives such ids, and lineage follows copies only on request (`.copies()`). Reflections add the aspect `Mirrored` in place, and assembly-level features prefix ids with the Instance path.
 
@@ -391,7 +391,7 @@ Each `Query` parameter declares a use: a surface (sketch planes, up-to faces, ma
 | Anchor deleted | `ResolveError::Deleted { anchor, by, site, fixes }` | Same |
 | Too few or too many | `ResolveError::NoMatch { stage, found, closest, fixes }` or `TooMany { candidates, fixes }` | Same |
 
-Each fix is a typed source edit that compiles. A partial deletion offers "accept the survivors" and "anchor on the surviving pieces"; a fragile selection offers a role or `bounded_by` anchor. `query_stability` ranks the fixes (D-AGT-8).
+Each fix is a typed source edit that compiles. A partial deletion offers "accept the survivors" and "anchor on the surviving pieces"; a fragile selection offers a role or `bounded_by` anchor. `query_stability` ranks the fixes, as it ranks `inspect.suggest_query` candidates (D-AGT-8).
 
 `anvil::query_stability(query, ranges)` demands the query's Body through Kiln at a fixed, label-free sample set. The set holds each declared parameter at both endpoints, the current point ±10%, and 64 scrambled Sobol points seeded from argument values.
 
@@ -444,7 +444,7 @@ Tessellation face groups carry canonical numbers, SubD limit faces take cage-fac
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
 | `EntityId` and relabeling | Ids from `CallSite`, role, generating ids and discriminator | `Internal::EntityIdCollision` | ANV-O-SITE-1, ANV-O-LABEL-1 | 0 |
-| Role vocabularies | Face, edge and vertex roles for every entity-creating operation | A wrong-kind role filter is a compile error (ING) | ANV-O-ROLE-1 | 0 |
+| Role vocabularies | Face, edge and vertex roles for every entity-creating operation | A wrong-kind role filter fails to compile with `ING5002` (ING) | ANV-O-ROLE-1 | 0 |
 | History records and lineage | Five records with transient pieces; persistent ancestor sets; touched sets for merges | Internal error on a property violation | ANV-O-NAME-1 | 0 |
 | Copies and reflections | Relabeling at id collisions with role `copy` or `mirror`; aspect `Mirrored`; Instance-path prefixes | — | ANV-O-COPY-1 | 1 |
 | `anvil::resolve` | `QueryPlan`, Body, per-parameter use → entities with notes, or ranked compiling fixes | `ResolveError::{Split, Merged, Partial, Fragile, Deleted, NoMatch, TooMany, Ambiguous}` | ANV-O-NAME-2, ANV-O-NAME-3, ANV-O-NAME-5 | 0 |
@@ -830,7 +830,7 @@ Assembly interference culls Instance pairs with exact integer GPU tests and comp
 
 `anvil::thickness` proves the minimum by CPU branch-and-bound over the whole Body with certified lower bounds. GPU candidates only order the search and seed upper bounds that the CPU certifies, so a GPU changes speed, never the result. It reports the canonically first location within the decision band of the minimum: lowest face number, then (u, v) on a fixed dyadic grid.
 
-`anvil::classify_edges(body, angle_tol)` returns a `Field<Edges, EdgeClass>` of `Convex`, `Concave { interior_angle }`, `Smooth { order }` or `Ambiguous`, decided by the round rule on certified dihedral enclosures. An edge with a `Continuity` certificate or a certified G1 enclosure within `angle_tol` is `Smooth`, so tangent fillet edges of imports are not flagged. Flux sets the angle above which a concave edge is singular.
+`anvil::classify_edges(body, angle_tol)` returns a `Field<Edges, EdgeClass>` of `Convex`, `Concave { interior_angle }`, `Smooth { order }` or `Ambiguous`, decided by the round rule on certified dihedral enclosures. An edge with a `Continuity` certificate or a certified G1 enclosure within `angle_tol` is `Smooth`, so tangent fillet edges of imports are not flagged. Flux decides which concave edges are singular (D-FLX-39).
 
 ### Services for Flux
 
@@ -972,15 +972,15 @@ Figures in the last column are targets unless quoted, and ABC data means the lic
 | To | What | Types |
 | --- | --- | --- |
 | Ingot and std | Versioned operations with roles and `Query` uses; `resolve` and `query_stability`; constraint solves; `text_outline` | `Body`, `EntityId`, `HistoryRecord`, `ResolveError`, `OpError` |
-| Kiln | `OpImpl`s with grades, fidelity maps, cost estimates, closure hashes and two-stage keys; `Failure`s, never Aborts | `GeometryId`, `ObjectId` |
+| Kiln | `OpImpl`s with grades, fidelity maps, cost estimates, closure hashes and two-stage keys; deterministic outcomes as `Failure`s | `GeometryId`, `ObjectId` |
 | `repo` | Interference, touched sets and deviation for merges; `GeometryId`s and definition digests for `ItemDefinition`s | `Body`, `EntityId` |
-| Flux | `GeometryQuery`; `classify_edges`; mid-surfaces, member axes and strut graphs; meshing and adaptation by canonical number; `shape_velocity`; `implicit_from_field` | `Body`, `Field`, `FaceBound`, `EdgeBound` |
-| COV | Implicit and lattice Bodies; mid-surfaces and member axes; per-entity tolerances | `Body` |
+| Flux | `GeometryQuery`; `classify_edges`; mid-surfaces, member axes and strut graphs; meshing and adaptation by canonical number; `shape_velocity`; `implicit_from_field`; `common_refinement` (phase 4) | `Body`, `Field`, `FaceBound`, `EdgeBound` |
+| COV | Implicit and lattice Bodies; mid-surfaces and member axes; per-entity tolerances; curvature and thickness queries | `Body` |
 | MEC | The operations catalog with roles and phases; blend stages and targets; attribute classes; constraint solving; control-vertex previews | `Body`, `EntityId`, `Field` |
 | MFG | Sections, offset curves, medial axes, tool contact, swept volumes, interference, draft maps, thickness, voxels, fitting; toolpath wire Bodies | `Body`, `Field` |
-| ELX | `anvil::planar` with centre–radius arcs and conservative snapping; `fold`; `convex_decompose` | `Body` |
+| ELX | `anvil::planar` with centre–radius arcs and conservative snapping; `fold`; `convex_decompose`; `text_outline` | `Body` |
 | UIX | `DisplayPackage` pages and face table; `cluster_dag` from phase 2; measures, sections, ray casts; face edits; the WGSL tape interpreter | `DisplayPackage`, `Body` |
-| AGT and `api` | Entity inspection with provenance; resolution with ranked fixes; `query_stability` reports; measures and geometry diffs | `EntityId`, `ResolveError` |
+| AGT and `api` | Entity inspection with provenance; resolution with ranked fixes; `query_stability` reports; measures, sections and geometry diffs | `EntityId`, `ResolveError` |
 | ECO and `io/` | `crucible:geom`, `crucible:ops/anvil`; builders and healing; imported ids and `import_map`; `exchange_form`; 3MF meshes and beam lattices [3MF beam lattice repository; 3MF beam lattice spec] | `Body`, `ErrorBound` |
 | PLT | Per operation: grade, GPU paths and their roles, determinism-suite corpora | `DeterminismGrade` |
 
@@ -990,8 +990,8 @@ Figures in the last column are targets unless quoted, and ABC data means the lic
 | --- | --- |
 | PLT | `detmath`, canonical `simd` lanes, `det_sum`, `exact_sum`, `gpu` with CPU paths, `linalg`, toolchain archiving, Parley shaping (D-PLT-7) |
 | Kiln | The operation contract and limit catalog; two-stage keys; closure-hash registration; `rng` streams keyed without names |
-| Flux | `field` and `kernels`; `Sampler`s with error and gradient bounds; the shell and beam criterion; sizing and metric Fields; the singular concave angle |
-| Ingot | Text-derived `CallSite`s; `QueryPlan`s; wrong-kind role filters as compile errors; `InputSensitivity` records; the `Truth` rule |
+| Flux | `field` and `kernels`; `Sampler`s with error and gradient bounds; the shell and beam criterion; sizing and metric Fields; the concave-edge singularity rule (D-FLX-39) |
+| Ingot | Text-derived `CallSite`s; the program-order index; `QueryPlan`s; wrong-kind role filters as compile errors (`ING5002`); `InputSensitivity` records; the `Truth` rule |
 | MEC | Feature role aliases; constraint semantics; PMI as anchored aspect queries with `pmi_target_resolved`; the Assembly identity encoding |
 | ECO | Generation of `crucible:ops/anvil`; per-model licence evidence for the ABC subset |
 
@@ -1101,8 +1101,8 @@ Gate contributions follow contract 13, in milestone order. Shared capabilities t
 
 ## Contract change requests
 
-- CCR-ANV-7 and CCR-ANV-8: accepted in contract v4.1.
-- **CCR-ANV-9, `DisplayPackage` identity.** Contract 5 says "`EntityId` back-references". Request: "pages keyed by `GeometryId` with canonical-number back-references, plus a face table mapping them to `EntityId`s; a cluster DAG from phase 2". *Why:* R8-18; shared pages must carry no names, and contract 13.2 defers cluster-DAG streaming to phase 2.
+- CCR-ANV-7 and CCR-ANV-8: accepted in contract v4.1 (sections 13.3 and 5).
+- CCR-ANV-9, `DisplayPackage` identity: accepted with CCR-UIX-7 in contract v6.1 (section 5, `DisplayPackage`).
 
 ## Sources
 

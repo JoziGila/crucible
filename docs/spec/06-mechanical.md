@@ -36,13 +36,13 @@ MEC adds no geometry type. `Part`, `Assembly`, `Instance`, `Transform` and `Coor
 | `Profile`, `Path` | Closed sketch regions; a G0-connected edge chain | `Query`s over faces or edges |
 | `CoordSys` | A right-handed frame anchored to geometry | A `Transform` plus an anchor `Query` |
 | `Mate` | A typed constraint between frames on two Instances | Stored in the `Assembly` |
-| `HoleSpec`, `ThreadSpec`, `Weld`, `Ply` | Manufacturing intent | Definitional attributes keyed by `EntityId` |
+| `HoleSpec`, `ThreadSpec`, `Weld`, `Ply` | Manufacturing intent | Definitional attributes by canonical entity number |
 | `ShapeAspect` | A feature of size, face set, pattern or recognized aspect | A `Query` over faces, typed by kind (D-ING-6) |
 | `GeometricTolerance`, `Datum`, `GeneralTolerance` | GD&T controls, datums with targets, a Part's general tolerance | Definitional attributes |
 | `Drawing`, `Sheet`, `View` | 2D documentation | Linework is 2D `Body` geometry |
 | `Route` | A path with a specification and end ports | A `Path`, a `RouteSpec` and two `CoordSys` |
 
-Every MEC record that changes what is made is definitional (contract 5). That covers tolerances, datums and their targets, `HoleSpec`, `ThreadSpec`, `Weld` with its execution class, surface texture, edge callouts, plies and laminates. They enter the `ItemDefinition` by canonical entity number, so changing one marks the Item modified (KLN); `FeatureRole` aliases and display styles do not.
+Every MEC record that changes what is made is definitional (contract 5). That covers tolerances, datums and their targets, `HoleSpec`, `ThreadSpec`, `Weld` with its quality level, weldment `execution_class`, surface texture, edge callouts, plies and laminates. They enter the `ItemDefinition` by canonical entity number, so changing one marks the Item modified (KLN); `FeatureRole` aliases and display styles do not.
 
 ### Identity of Parts and Assemblies
 
@@ -56,7 +56,7 @@ For KLN's definition tolerance, MEC confirms the default: the smaller of 0.1 µm
 
 Every sweeping operation gives roles to the faces, edges and vertices it creates, and ANV owns the vocabulary (contract 6). For profile edges `e` and vertices `v`, `extrude` creates faces `start_cap`, `end_cap` and `side(e)`. It also creates edges `start(e)`, `end(e)` and `lateral(v)`, and vertices `start(v)` and `end(v)`. A role filter on the wrong entity kind fails to compile (ING).
 
-Feature roles such as `hole`'s `wall`, `floor` and `countersink` are `FeatureRole` aliases. Queries match them, while `EntityId`s hash the operation's role (contract 5). A std feature that changes its internal operations therefore takes a major version (ING).
+Feature roles such as `hole`'s `wall`, `floor` and `countersink` are `FeatureRole` aliases. Queries match them, while `EntityId`s hash the operation's role (contract 5). A std feature that changes its internal operations therefore releases as a labelled output-changing minor version (ING, D-ECO-14).
 
 ```
 let lid  = sketch(plane.xy) { rect(80mm, 50mm) } |> extrude(6mm)
@@ -373,7 +373,7 @@ PLT owns contract 13.3's rebuild rows. MEC keeps features cheap: cosmetic thread
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
 | Push-pull | `offset_faces` on any B-rep with blend regrowth | `NeighborCannotExtend { face }`, `BlendRegrowFailed` | MEC-O-PF-9 | 1 |
-| Move, replace and delete faces | Motions and live rules on the shared solver | `TopologyChange { faces }`; `RuleConflict { set }` | MEC-O-PF-9 | 2 |
+| Move, replace and delete faces | Motions and live rules on the shared solver | `TopologyChangeRejected`; `RuleConflict { set }` | MEC-O-PF-9 | 2 |
 | Recognized aspect edits | `edit_aspect` via `recognize_aspects` and `edit_blend` | `NotRecognized` with the best partial match | MEC-O-PF-9 | 2 |
 | Emboss and engrave | Developable wrap; region swept along the normal | `WrapOutsideFace` | MEC-O-PF-17 | 1 |
 | General wrap and deform | Conformal and geodesic wraps; maps with achieved bound | `FoldOver { region }`; `ToleranceNotMet { achieved }` | MEC-O-PF-10 | 3 |
@@ -449,7 +449,7 @@ Positions track the drivers by continuation and give `Field<(Instances, Time), T
 | `IntendedFit` | A touching cylindrical pair whose fit codes interfere | Interference from the `Tol` limits reported to tolerancing |
 | `Clearance` | Gap below a declared minimum | Error when declared |
 
-Geometry is built at nominal, so a 10 H7/p6 press fit touches, and only its fit codes make it `IntendedFit`. KLN's merge condition 5 reuses these classes. Contact explained by a mate, a `Weld`, a fastened joint or an `IntendedFit` never conflicts.
+Geometry is built at nominal, so a 10 H7/p6 press fit touches, and only its fit codes make it `IntendedFit`. KLN's merge condition 4 reuses these classes. Contact explained by a mate, a `Weld`, a fastened joint or an `IntendedFit` never conflicts.
 
 Motion studies sample adaptively. Between samples, a certified Taylor bound limits each body's displacement, from interval Newton on the differentiated constraints. Clearance is the interval [sampled minimum − that bound, sampled minimum], so `min_clearance` decides three-valued. Where the enclosure fails, the interval is `Estimated`, and a check that needs `Guaranteed` bounds returns `Undecided`.
 
@@ -501,11 +501,11 @@ Selection resolves over the organization's approved parts first (KLN). Reaching 
 
 `suggest_mates(a, b)` ranks candidates from interfaces, recognized aspects and an optional learned ranker. Suggestions become mates only when accepted. The ranker's benchmark comes from std assemblies and golden products (D-MEC-37); JoinABLe's reported 79.53% top-1 is literature only.
 
-An assembly-level cut or hole states its mode. `DerivedParts` creates derived Parts with new item numbers, while `AfterAssembly` is a manufacturing operation in the MBOM (D-ANV-30).
+An assembly-level cut or hole states its mode. `DerivedParts` creates derived Parts with new item numbers, while `AfterAssembly` is a manufacturing operation in the MBOM; created ids carry the Instance path (ANV).
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
-| Instances and structure | `instance`, `assembly`, Instance sets, `#[configuration]` existence | `ResolveError` on a mate frame; `ING2601` | MEC-O-AS-1 | 1 |
+| Instances and structure | `instance`, `assembly`, Instance sets, `#[configuration]` existence | `ResolveError` on a mate frame; `ING2601` | MEC-O-AS-1 | 1, 2 (Instance sets) |
 | BOM-only items | `bom_item` with the Item's unit | `UnitMismatch { item, unit }` | MEC-O-AS-9 | 1 |
 | Mate solve and diagnosis | Mates above on the shared solver | `Conflict`, `Redundant` (warning) | MEC-O-AS-1 | 1, 2, 3 (cam) |
 | Kinematics | `motion` → `Field<(Instances, Time), Transform>` | `Singular { t, mates }`, `LimitReached { mate, t }` | MEC-O-AS-2 | 2 |
@@ -609,7 +609,7 @@ pub feature base_frame() -> Part {
 
 Members record profile, anchor and rotation, so Flux models them as beams on `anvil::member_axes`. Welds carry semantics to MFG and Flux, and neither needs bead geometry.
 
-A `Weld` records type, size, length, pitch, process, contour, finish and the imperfection quality level. The level is ISO 5817 B, C or D or AWS D1.1 acceptance criteria, and it feeds inspection plans. A weldment Part records `execution_class: Exc1..Exc4` from EN 1090-2:2018+A1:2024. MFG derives quality levels, NDT extent and the ISO 3834 part from it, and enforces it for GP8 in phase 5.
+A `Weld` records type, size, length, pitch, process, contour, finish and the imperfection quality level. The level is ISO 5817 B, C or D or AWS D1.1 acceptance criteria, and it feeds inspection plans. A weldment Part records `execution_class: Exc1..Exc4` from EN 1090-2:2018+A1:2024. MFG derives NDT extent and the ISO 3834 part from it, checks each `Weld`'s quality level against it, and enforces it for GP8 in phase 5.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -739,9 +739,9 @@ A `Datum` may list `DatumTarget { kind: Point | Line | Area(shape), movable }` e
 
 A `Tol` forwarded into a feature becomes PMI as an anchored aspect query keyed by the feature's `CallSite`, re-resolved on the final Part (contract 5). For `extrude(4mm ± 0.1mm)` the query is `OfSize { faces: [start_cap, end_cap] }`.
 
-**Decision D-MEC-27:** Every PMI item, forwarded or explicit, has an `Error`-severity check `pmi_target_resolved`, and GD&T and PMI attributes use Anvil's split policy `Fail`. When a later operation splits, merges or deletes a target, the check fails with `ToleranceTargetSplit { control, pieces }` or the `ResolveError`. Its fixes re-target the pieces as one pattern, select one piece, or insert an explicit `part.tolerance(…)` for a forwarded item. *Why:* `Copy` would silently turn one zone into several, and a forwarded tolerance has no control statement to fail instead. *Rejected:* `Copy` (silent change of meaning); `Drop` (loses the requirement); `Divide` (meaningless for zones); a Note for forwarded items (the tolerance would vanish from the drawing). (revised in round 3)
+**Decision D-MEC-27:** Every PMI item, forwarded or explicit, has an `Error`-severity check `pmi_target_resolved`, and no GD&T or PMI item travels through operations as an attribute (D-ANV-32). When a later operation splits, merges or deletes a target, the check fails with `ToleranceTargetSplit { control, pieces }` or the `ResolveError`. Its fixes re-target the pieces as one pattern, select one piece, or insert an explicit `part.tolerance(…)` for a forwarded item. *Why:* `Copy` would silently turn one zone into several, and a forwarded tolerance has no control statement to fail instead. *Rejected:* `Copy` (silent change of meaning); `Drop` (loses the requirement); `Divide` (meaningless for zones); a Note for forwarded items (the tolerance would vanish from the drawing). (revised in round 3)
 
-ANV keeps `Note::AttributeSplit` on the operation, and MEC owns the failure.
+ANV writes the resolved targets into the definition part, and MEC owns the failure.
 
 **Decision D-MEC-35:** A Part declares its general tolerance with `part.general_tolerance(spec)`: an ISO 2768-1:1989 class, an ISO 22081:2021 general specification, or ASME title-block decimal rules. Stacks, characteristic extraction, inspection plans, cost and KLN's definition tolerance read it for every untoleranced size, location and angle. Reports label those contributors "general", and a Part without one fails `check::standards` before release. *Why:* most dimensions carry no explicit tolerance, and counting them as exact understates every stack. *Rejected:* a drawing-only note (stacks and inspection never see it); a silent default class (the requirement must be written).
 
@@ -830,7 +830,7 @@ Title-block fields, revision text, dates and approvers are late-bound release fi
 
 **Decision D-MEC-24:** Release drawings use certified hidden-line removal. Projected silhouettes and visibility transitions lie within a stated bound, by default 1 µm at model scale and below 0.01 mm at sheet scale. Lines, circles and conics project exactly, and editing uses a GPU preview that the certified result replaces. *Why:* silhouettes of NURBS and procedural faces have no exact NURBS form, so a drawing can promise a certified bound but not exactness. *Rejected:* "exact" hidden lines (an undeliverable claim); tessellated hidden lines for release (chordal error on the sheet). (revised in round 3)
 
-**Decision D-MEC-36:** Editing a driving dimension on a drawing writes model source through ING's edit plans. A dimension that traces by provenance to exactly one literal writes it directly, as an `api` Edit shown as a source diff; otherwise the UI offers ranked edit plans. Driven and reference dimensions refuse the edit and say why. *Why:* principle 2 makes every surface an editor of one program, and drawing items already reference the model by `Query`. *Rejected:* read-only drawings (users expect driving dimensions to edit); a separate drawing geometry editor (two truths).
+**Decision D-MEC-36:** Editing a driving dimension on a drawing writes model source through UIX's edit plans (D-UIX-15). A dimension that traces by provenance to exactly one literal writes it directly, as an `api` Edit shown as a source diff; otherwise the UI offers ranked edit plans. Driven and reference dimensions refuse the edit and say why. *Why:* principle 2 makes every surface an editor of one program, and drawing items already reference the model by `Query`. *Rejected:* read-only drawings (users expect driving dimensions to edit); a separate drawing geometry editor (two truths).
 
 ### Revisions, balloons and generated drawings
 
@@ -892,9 +892,9 @@ Design checks are `require` predicates packaged as libraries, each returning a `
 | Check family | `decides_on` | Calibration class (FLX) | Phase |
 | --- | --- | --- | --- |
 | Fits, clearance, interference, thickness, mass | `Guaranteed` | — | 1 |
-| Static stress on regularized peaks in solids (GP1) | `Estimated` | Elasticity regularized peak, aggregated CutFEM, p = 2 to 6 | 1 |
-| Strut stress in beam lattices (GP2) | `Estimated` | Beam-lattice localized strut stress | 1 |
-| Buckling load factors | `Estimated`, on the unsafe side | Linear buckling factor, eigenvalue DWR, beam lattice; an octree variant | 1 |
+| Static stress on regularized peaks in solids (GP1) | `Estimated` | `elasticity.peak` | 1 |
+| Strut stress in beam lattices (GP2) | `Estimated` | `lattice.strut_stress` | 1 |
+| Buckling load factors | `Estimated`, on the unsafe side | `lattice.buckling`; `elasticity.eigen` | 1 |
 | Bolted joints | `Estimated` plus a policy allowance | Bolted-joint forms | 2 |
 
 FLX owns these classes: 300 held-out samples each, at least 20% from `std::opt` runs that minimize the check margin, and references whose own error is below 10% of the bound. Each `Estimated` part carries its exceedance level α, which joins the union bound, so every `Pass` reports its confidence (contract 5). Peaks smooth over FLX's default radius from local curvature and thickness, so a 2 mm fillet is never averaged away.
@@ -908,7 +908,7 @@ GP1's and GP2's strain-gauged proof loads validate immersed elasticity and the b
 
 ## Human factors
 
-The validity envelope is geometric reach, fit and vision only; strength and musculoskeletal loading need Flux biomechanics models. Anthropometry follows ISO 7250-1:2017, and population datasets are licensed data packages.
+The validity envelope is geometric reach, fit and vision only; strength and musculoskeletal loading need COV's biomechanics models. Anthropometry follows ISO 7250-1:2017, and population datasets are licensed data packages.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -965,12 +965,12 @@ MEC uses ANV's operations with ANV's names and phases, and no MEC feature ships 
 
 | Subsystem | MEC consumes | MEC provides |
 | --- | --- | --- |
-| ANV | Operations with full role vocabularies; constraint solving; blend stages; copy relabeling; certified thickness; `mid_surface` (implicit path); `text_outline`; `draft` parting and step modes (phase 3); split policies | Constraint semantics; definitional attribute classes |
-| ING | Builder blocks, `Expr<T>`, `#[interface]`, `#[configuration]`, Instance sets, `family`; `Tol<T>` symbols in name-free order, `.rss(coverage:)`, `vary`, `fit`; edit plans; typed holes | GD&T records and validators; std features with roles and keyed generators; `std::standards::iso286`; `default_distribution`; general tolerances |
-| KLN and `repo` | Item numbers, revision labels, EBOM; change orders (phase 2); overrides kept out of the shared cache; approved parts; merge condition 5 | Part and Assembly `GeometryId` encodings; definitional attributes; the definition tolerance confirmation; interference classes for merge exemptions; `bom_item` lines, revision markers, cut lists |
+| ANV | Operations with full role vocabularies; constraint solving; blend stages; copy relabeling; certified thickness; `mid_surface` (implicit path); `text_outline`; `draft` parting and step modes (phase 3); split policies | Constraint semantics; definitional attribute classes; `FeatureRole` aliases; PMI as anchored aspect queries with `pmi_target_resolved`; the Assembly identity encoding |
+| ING | Builder blocks, `Expr<T>`, `#[interface]`, `#[configuration]`, Instance sets, `family`; `Tol<T>` symbols in name-free order, `.rss(coverage:)`, `vary`, `fit`; edit plans; typed holes | GD&T records and validators; std features with roles and keyed generators; `std::standards::iso286`; `default_distribution`; general tolerances; `pmi_target_resolved`; `std::mech::refgeom`; `fasten` returning an Instance set; name-free Part and Assembly encodings |
+| KLN and `repo` | Item numbers, revision labels, EBOM; change orders (phase 2); overrides kept out of the shared cache; approved parts; merge conditions 4 and 5 | Part and Assembly `GeometryId` encodings; definitional attributes; the definition tolerance confirmation; interference classes for merge exemptions; `bom_item` lines, revision markers, cut lists |
 | FLX | Multibody and rod solvers; beams and shells; bolted-joint forms; calibration classes with envelopes; eigenvalue budgets; smoothing radii; `std::uq::worst_case`; influence coefficients | Typed joints, redundancy reports, mass properties, preload, member profiles, laminates, default distributions, skin-model samples, the class each check needs |
 | COV | Materials; E3 validation of GP1 and GP2 models from proof loads; the policy-allowance catalogue; gear, bearing and shaft ratings and loaded tooth contact (phase 2); constitutive draping (phase 5) | Gear records with accuracy grades and load spectra; plies and kinematic draping; part data for envelopes |
-| MFG | Process profiles, tooling and press-brake data, hand-offs, cost models, DFM, DFA and DfAM checks; characteristic labels from phase 1 | `FlatPattern`, `HoleSpec`, `ThreadSpec`, `Weld` with execution class; edge callouts; general tolerances; `split_mold`; lattices; gear data tables; plies; harness geometry; balloons |
+| MFG | Process profiles, tooling and press-brake data, hand-offs, cost models, DFM, DFA and DfAM checks; characteristic labels from phase 1 | `FlatPattern`, `HoleSpec`, `ThreadSpec`, `Weld` with quality level; weldment `execution_class`; edge callouts; general tolerances; `split_mold`; lattices; gear data tables; plies; harness geometry; balloons |
 | ELX | Boards and connector `CoordSys` values; harness connectivity and wire lists (phase 4) | Enclosure geometry and checks; mates; gear records; routes, bundle and formboard geometry; fastener selection |
 | ECO | Board readers (phase 2); AP242 and QIF translators; PDF, SVG, PDF/A and DXF writers; GDSII and OASIS writers (phase 5); the standards licence rule | `crucible:product`; the GD&T model and its AP242 mapping; weld, hole and composite semantics; flat DXF conventions |
 | UIX, AGT and `api` | Painted Fields, freedom arrows, `Fix` buttons, the drawing sheet editor; `edit.stream`; Inspect and Edit methods | Solver and motion; std features with doc metadata; stacks; `SolveReport`, `ContinuityReport`, check Fields, `auto_drawing`, revision markers |
@@ -1010,7 +1010,7 @@ All oracles live in the protected `oracles/mech/` directory. Held-out subsets (2
 | MEC-O-PF-9 | Direct edits | Declared relations kept, adjacent blends regrown |
 | MEC-O-PF-10 | Deform and wrap | Deviation from analytic maps within the reported bound; developable wraps keep arc length |
 | MEC-O-PF-11 | Derived parts | Pinned and bumped sources give the expected diff Proposals |
-| MEC-O-PF-12 | Families and configurations | Rows type-check and report per row; `#[configuration]` gives the expected 150% BOM |
+| MEC-O-PF-12 | Families and configurations | Rows type-check and report per row; each `#[configuration]` variant builds as declared; KLN-O-PLM-5 checks the 150% BOM |
 | MEC-O-PF-13 | Lattices | Relative density matches analytic values; kept faces keep attributes; sheet-cell mid-surfaces lie on the field's zero set |
 | MEC-O-PF-14 | Rebuild budget | Golden-product rebuilds after first, middle and last edits meet contract 13.3 |
 | MEC-O-PF-15 | Gears | Flank points match ISO 21771-1; undercut and tip limits hold; gear data tables carry every record field |
@@ -1042,7 +1042,7 @@ All oracles live in the protected `oracles/mech/` directory. Held-out subsets (2
 | MEC-O-SM-4 | Flat DXF and clinch hardware | DXF re-imports with layers per convention; seeded clinch violations are found |
 | MEC-O-WD-1 | Member sections | Area and second moments equal catalog values within 0.5% |
 | MEC-O-WD-2 | Trims and cut lists | Mitered lengths and end angles equal closed forms |
-| MEC-O-WD-3 | Weld records | Rendered symbols parse back into identical records; each execution class reaches MFG's derived quality levels |
+| MEC-O-WD-3 | Weld records | Rendered symbols parse back into identical records; each execution class reaches MFG's quality-level check |
 | MEC-O-CP-1 | Draping | Hemisphere and cylinder drapes match analytic shear |
 | MEC-O-CP-2 | Laminates | ABD matrices equal hand calculations; symmetry and balance checks correct |
 | MEC-O-MD-1 | Thickness | Fields match analytic answers; bits are identical with the GPU off and with adversarial GPU candidates |
@@ -1104,7 +1104,7 @@ Round 3 closed the earlier questions in D-MEC-20, D-MEC-30, D-MEC-31, D-MEC-33, 
 
 ## Contract change requests
 
-- **CCR-MEC-1.** Contract 5's list of definitional attributes adds general tolerances (D-MEC-35) and edge callouts to ISO 13715. Both change what is made, so changing either must mark the Item modified, and the contract's list is explicit.
+- CCR-MEC-1, general tolerances and ISO 13715 edge callouts as definitional attributes: accepted in contract v6.1 (section 5).
 
 ## Sources
 

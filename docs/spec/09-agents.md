@@ -178,7 +178,7 @@ Every Evaluation ends in an `EvaluationReport`. A long one returns a task when t
 
 Direct manipulation needs results every frame without a Change per pointer move. `evaluate.subscribe { targets, overrides, ceiling }` opens a result stream under literal overrides keyed by ING's `LiteralSite`. `edit.stream` sends override updates to it and ends in exactly one `edit.apply` that writes the final literals, or in a discard.
 
-Kiln keys overridden nodes by their overrides, never shares those results (KLN, ING-O-12) and runs them on PLT's interactive pool lane. UIX's drag preview, MEC's sketch drag and ELX's router use this pair.
+Kiln keys overridden nodes by their overrides, never shares those results (KLN, ING-O-12) and runs them on PLT's `Interactive` pool lane. UIX's drag preview, MEC's sketch drag and ELX's router use this pair.
 
 ### Budgets, limits and admission
 
@@ -254,7 +254,7 @@ Diagnostics and `ResolveError`s arrive in `context` with their own fixes. A fix 
 
 Rust types in `core/api` are the single source of truth. A build step emits JSON Schema 2020-12 [S2] and generates the MCP tools, the WIT package and the SDKs. Rust ships in phase 0, Python in phase 1 and TypeScript in phase 2 (contract section 13.2), with byte-identical canonical JSON through each.
 
-`crucible:api` serves ECO's panel, tool and connector worlds, never evaluation worlds. It has one interface per group, each function returning `result<T, api-error>`, and stays at `@0.1.0` until it freezes after contract section 13.1's name clearance. Calls run under the session's grant narrowed by the component's (D-ECO-27), and strings follow D-AGT-18.
+`crucible:api` serves UIX's `panel` world and ECO's tool and connector worlds, never evaluation worlds. It has one interface per group, each function returning `result<T, api-error>`, and stays at `@0.1.0` until it freezes after contract section 13.1's name clearance. Calls run under the session's grant narrowed by the component's (D-ECO-27), and strings follow D-AGT-18.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -280,10 +280,13 @@ Methods marked † change state or spend budget, so they need an idempotency key
 
 Read and Inspect methods accept a `ChangeRef`, and every result carries its labels. Strings from nodes of untrusted integrity are `ExternalText` handles (D-AGT-18). Approvals are not methods: assigned humans give them on the approval page (D-AGT-20).
 
+Sessions emit the events `session.called` (method, status, audit entry, usage), `session.asked`, `session.answered`, `session.controlled` and `session.closed`. They carry ids and states only (D-KLN-34), and UIX's agent panel reads them.
+
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
 | `session.open` † | `SessionOpen` → `SessionOpened` | `auth/scope_denied`, `session/branch_protected`, `label/exceeds_clearance` | AGT-O-7 | 0 |
-| `session.status` | Handle → head, grant, context label, usage, open Evaluations | `session/expired` | AGT-O-1 | 0 |
+| `session.status` | Handle → head, grant, context label, usage, open Evaluations and questions | `session/expired` | AGT-O-1 | 0 |
+| `session.ask` † | A typed question with an answer schema → the delegating human's answer as typed data; one blocking question per session | `session/question_expired` | AGT-O-7 | 1 |
 | `session.close` † | Handle → final usage; unused budget returned | `session/unknown` | AGT-O-11 | 0 |
 | `session.reset_context` † | A human resets an external host's context label with WebAuthn after clearing its conversation; audited (D-AGT-24) | `auth/human_only` | AGT-O-17 | 1 |
 | `session.control` † | Pause, resume or steer a hosted-crew session; delegating human only | `auth/not_delegator` | AGT-O-7 | 2 |
@@ -294,11 +297,13 @@ Read and Inspect methods accept a `ChangeRef`, and every result carries its labe
 | `read.history` | Branch → Changes with provenance; messages as handles | `read/not_found` | AGT-O-10 | 0 |
 | `read.branches` | Repository → name, head, protection, owner | — | AGT-O-1 | 0 |
 | `read.symbols` | Query → path, kind, signature, doc URI | — | AGT-O-16 | 1 |
+| `read.language_service` | An LSP 3.17 request (completion, hover, inlay hints, semantic tokens, code actions) at a Change → ING's result | `read/request_unsupported` | AGT-O-1 | 1 |
 | `read.docs` | Symbol, error code or URI → `DocEntry`s pinned to the lockfile | `docs/not_found` with nearest matches | AGT-O-16 | 0 (errors), 1 (std) |
 | `read.external_text` | Handle → typed extract, or raw text where D-AGT-25 allows | `label/raw_external_forbidden` | AGT-O-8 | 0 (handles), 2 (extracts) |
 | `read.value` | `ValueRef` → typed value; marks the context `data_untrusted` | `read/unknown_handle` | AGT-O-17 | 1 |
 | `read.bom`, `read.where_used` | KLN's EBOM, then MBOM, service BOM and where-used | `read/not_found` | AGT-O-1 | 1 (EBOM), 2 |
 | `read.catalog` | Filters → catalog part summaries | `catalog/filter_invalid` | AGT-O-1 | 2 |
+| `read.coverage` | Domain, scale, level, status → COV's coverage map rows and limit records | Unbacked rows show `Planned (phase n)` (COV) | AGT-O-1 | 0 |
 | `read.packages`, `read.package`, `read.registry_bundle` | ECO registry search, package metadata and signed offline bundles | `package/not_found` with nearest names; `package/unavailable` (bundles) | AGT-O-1 | 1 (`read.package`), 2 |
 | `read.events` | Source, cursor → events in sequence order | `events/cursor_expired` | AGT-O-1 | 1 |
 | `read.subscribe`, `read.unsubscribe` | A webhook subscription with thin payloads (ECO); `maintainer` or `admin` people only | `events/url_refused` | AGT-O-22 | 1 |
@@ -323,7 +328,7 @@ Read and Inspect methods accept a `ChangeRef`, and every result carries its labe
 | `edit.grant_capability`, `edit.revoke_capability` † | A Wasm component capability grant or revocation in `ingot.lock` (ECO) | `policy/denied` naming the rule | AGT-O-7 | 1 |
 | `evaluate.build` † | Targets, `Fidelity`, `estimate_only` → `EvaluationReport` | `budget/exceeded`, `build/failed` | AGT-O-11 | 0 |
 | `evaluate.checks` † | Selection, `Fidelity` → `CheckOutcome`s | As above | AGT-O-1 | 0 |
-| `evaluate.subscribe` † | Targets, overrides, fidelity ceiling → a frame stream on the interactive lane | `budget/exceeded` | AGT-O-1 | 1 |
+| `evaluate.subscribe` † | Targets, overrides, fidelity ceiling → a frame stream on Kiln's drag lane | `budget/exceeded` | AGT-O-1 | 1 |
 | `evaluate.simulate` † | Study, `Fidelity` → Fields with `ErrorBudget`s and zones | `flux/study_invalid`; zones flag, never hide | AGT-O-1 | 1 |
 | `evaluate.manufacture` † | Setup → toolpaths, collisions, removal, cycle time | `mfg/setup_invalid` | AGT-O-1 | 2 |
 | `evaluate.cost` † | Quantity, process → cost lines with intervals and price sources | `cost/unpriced_lines` (partial report) | AGT-O-1 | 1 |
@@ -336,7 +341,7 @@ Read and Inspect methods accept a `ChangeRef`, and every result carries its labe
 | `compare.resolve` | Manifest, lockfile → a new lockfile and its diff, not applied (ECO) | `package/unsatisfiable` with the explanation | AGT-O-1 | 1 |
 | `propose.create`, `propose.update` † | Title, rationale, target, parent, draft, ready → `Proposal` | `propose/preconditions_failed`, `propose/closed` | AGT-O-14 | 1 |
 | `propose.get`, `propose.list` | Proposals, with free text as handles | — | AGT-O-8 | 1 |
-| `propose.review` † | Verdict, findings → `Review` | `propose/self_review_forbidden` | AGT-O-7 | 1 |
+| `propose.review` † | Verdict, findings → KLN's `ReviewVerdict` | `propose/self_review_forbidden` | AGT-O-7 | 1 |
 | `propose.comment` † | Anchor, body → `Comment`; @mentions of agents become inbox requests | — | AGT-O-7 | 1 |
 | `propose.merge`, `propose.withdraw` † | Expected head → merged Change; or a reason | `propose/policy_unsatisfied`, `propose/conflict` | AGT-O-14 | 1 |
 | `propose.endorse_text` † | Spans → a signed endorsement by a `maintainer` or `approver` outside their authoring chain (D-AGT-18) | `auth/human_only`, `auth/in_authoring_chain` | AGT-O-8 | 1 |
@@ -362,7 +367,7 @@ A `SceneNode` carries its instance path (`gearbox/input_shaft[1]`), kind, item, 
 
 ### Geometry queries
 
-- `inspect.query` evaluates a query such as `part.faces(normal: +z, area > 100mm2)` and returns entities with `Merged`, `Partial`, `FragileAnchor` or `NearTie` notes, or a `ResolveError`.
+- `inspect.query` evaluates a query such as `part.faces(normal: +z, area: 100mm2..)` and returns entities with `Merged`, `Partial`, `FragileAnchor` or `NearTie` notes, or a `ResolveError`.
 - `inspect.entity` returns type, size, adjacency and provenance from `HistoryRecord`s.
 - `inspect.measure` returns a `Quantity` with an `ErrorBound` and witness points.
 - `inspect.suggest_query` turns entities picked from a snapshot into queries that keep resolving to them.
@@ -378,7 +383,7 @@ pub struct RenderRequest {
     pub change: ChangeRef,
     pub targets: Option<Vec<InstancePath>>,
     pub views: Views,                    // Named(Iso | Front | Top | Right) | Grid4 | Custom(Camera)
-    pub style: Style,                    // Shaded | HiddenLine | Wire | XRay
+    pub style: DisplayStyle,             // UIX's: Shaded, HiddenLine, Wireframe, XRay …
     pub appearance: Appearance,          // Neutral (default for agents) | Imported
     pub overlay: Option<FieldOverlay>,   // Field, fixed range, colour map, isolines, extrema
     pub marks: Marks,                    // None | Entities { kinds, max ≤ 64 } | Explicit(Vec<EntityId>)
@@ -398,6 +403,8 @@ pub struct Rendered {
 }
 ```
 
+The server resolves each request to a UIX `ViewState`, so a Snapshot is a `ViewState` under a `RenderProfile` (contract 2).
+
 Marks follow Set-of-Mark prompting [S36], and each label maps to an `EntityId`, so "fillet the edges marked 3 and 7" resolves exactly. `Grid4` returns four views in one image, as Zookeeper's self-review uses [S11].
 
 **Decision D-AGT-9:** `inspect.render` dispatches to `apps/headless-render`, which links UIX's renderer, so `api` depends on neither. Snapshots key on a `RenderProfile`, return marks, legend and extrema as data, and stay `Unverified`, outside every `OpKey`, compared by ꟻLIP [S62]. *Why:* rasterizers generate code per host CPU [S61], so bytes differ across the class (R6-26); profiles change legends (R3-35); core crates never link apps (R9-25). *Rejected:* canonical CPU renders; images without structured side data; rendering inside `api`. (revised in round 3)
@@ -414,7 +421,7 @@ The scene graph, measurements and descriptions stay non-tainting, because every 
 
 `inspect.describe` renders typed facts through templates, without a model. It returns `text`, `facts` (each number with source and bound) and a `detail` level of `Brief` (80 words), `Standard` (400) or `Full`. The canonical bracket, brief:
 
-> Part `bracket` (item 100-0042), aluminium 6061-T6. Bounding box 60.0 × 40.0 × 24.0 mm; mass 39.2 g ± 0.1 g. Features: sketch, extrude 4 mm, rib 20 mm, fillet 2 mm on 2 edges. Checks: 1 of 1 `Pass` at `Interactive`. Regularized peak von Mises stress away from the clamp: 112 MPa ± 9 MPa (`Estimated`) against 165.6 MPa, margin 27% at the bound.
+> Part `bracket` (item 100-0042), aluminium 6061-T6. Bounding box 60.0 × 40.0 × 24.0 mm; mass 39.2 g ± 0.1 g. Features: sketch, extrude 4 mm, rib 20 mm, fillet 2 mm on 2 edges. Checks: 1 of 1 provisional `Pass` at `Interactive`, conditional on model form. Regularized peak von Mises stress away from the clamp and loaded face: 112 MPa ± 20 MPa (`Estimated`) against 144 MPa, margin 8% at the bound.
 
 **Decision D-AGT-10:** Canonical descriptions come from typed facts and templates, with no model text, and only the canonical form is stored, diffed and reviewed. Std and `crucible::` phrasing is trusted; a third-party template's phrasing is an `ExternalText` handle. *Why:* descriptions feed reviews and benchmarks, so every number must trace to a fact, and publisher verification establishes identity, not safe text (R5-13). *Rejected:* model-written canonical descriptions; trusting verified publishers' templates. (revised in round 2)
 
@@ -598,8 +605,8 @@ Kiln owns Op scheduling; this tab owns admission and accounting. Every Evaluatio
 
 | Class | Used by | Preemption |
 | --- | --- | --- |
-| `Interactive` | Sessions where a human is waiting, drag streams included | Never preempted |
-| `Agent` | Agent sessions | By `Interactive`, at Op boundaries |
+| `Interactive` | Sessions where a human is waiting, drag streams included | Only by drags, at node boundaries (KLN) |
+| `Agent` | Agent sessions | By `Interactive`, at node boundaries (KLN) |
 | `Ci` | Proposal CI and merge queues | By `Interactive` |
 | `Batch` | Explorations and benchmarks | By all; resumes from cached Ops |
 
@@ -612,7 +619,7 @@ Within a class, admission shares capacity by Dominant Resource Fairness, which e
 | Merge queue | Children merge in dependency order with CI per merge | Conflicts return to the worker as typed input | AGT-O-12 | 2 |
 | Exploration | `std::explore`: Sobol, NSGA-II and III, Bayesian optimization; deterministic in synchronous mode | `explore/no_feasible_point`; failures counted | AGT-O-13 | 2 |
 | Multi-fidelity exploration | Hypervolume knowledge gradient | Falls back to single-fidelity search, reported | AGT-O-13 | 3 |
-| Priority classes | Four classes with preemption at Op boundaries; Dominant Resource Fairness within a class | — | AGT-O-11 | 0 |
+| Priority classes | Four classes with preemption at node boundaries (KLN); Dominant Resource Fairness within a class | — | AGT-O-11 | 0 |
 ## Proposals and review
 
 A Proposal is a branch plus rationale plus CI report, stored by `repo`.
@@ -632,10 +639,10 @@ pub struct Proposal {
     pub parent: Option<ProposalId>,
     pub plan: Option<Plan>,
     pub ci: Option<CiReport>,            // written only by service:ci
-    pub snapshots: Vec<AssetId>,         // server-generated at head, review profile
+    pub snapshots: Vec<ObjectId>,        // server-generated at head, review profile
     pub risk: RiskAssessment,            // class and the diff items that set it
     pub labels: Labels,                  // join of every authoring context's label
-    pub reviews: Vec<Review>,
+    pub reviews: Vec<ReviewVerdict>,
     pub state: ProposalState,            // Draft | Open { ready } | Merged | Withdrawn | Superseded
     pub usage: Usage,
 }
@@ -671,7 +678,7 @@ Merged catalog and supplier parts raise nothing, because a merge clears integrit
 
 ### Human review and separation of duties
 
-For agent Proposals, UIX's review view adds provenance, the risk class and its reasons, integrity flags with sources, the verifier report and the canonical description. Findings anchor to `EntityId`s, feature paths or spans and return to the author as typed input.
+For agent Proposals, UIX's Proposal view adds provenance, the risk class and its reasons, integrity flags with sources, the verifier report and the canonical description. Findings anchor to `EntityId`s, feature paths or spans and return to the author as typed input.
 
 - No principal in the delegation chain may approve the Proposal, except the delegating human for R0 to R2.
 - R3 and R4 need a human outside the chain; repository policy can require more.
@@ -877,7 +884,7 @@ Every effect outside Crucible is a two-phase Act (contract section 2) whose clas
 | `publish_package` | Data release | A public registry version | Yankable | 2 |
 | `publish_passport` | Data release | A digital product passport (MFG) | Superseded | 3 |
 | `send_to_machine` | Physical effect | A program or recipe of an MFG kind, through the machine gateway | Irreversible once run | 2 |
-| `store_machine_job` | Physical effect | OPC UA job `Store` only | Revocable before start | 2 |
+| `store_machine_job` | Physical effect | OPC UA job `Store` only | Revocable before start | 3 |
 | `send_print_job`, `start_print` | Physical effect | A print job; a restricted start | Cancellable | 2 |
 | `send_robot_program` | Physical effect | A robot program file into the program store | Irreversible once run | 2 |
 | `flash_device` | Physical effect | A Software item image to a named board, read back, target held | Irreversible once released | 3 |
@@ -887,7 +894,7 @@ Every effect outside Crucible is a two-phase Act (contract section 2) whose clas
 
 The approval origin serves only server text under `default-src 'none'` with scripts by hash, and issues challenges only to itself (`SameSite=Strict`, no CORS). Its challenge hashes plan digest, request id and approver id.
 
-Native clients open it in a browser session bound to the request id (`ASWebAuthenticationSession` on Apple platforms, the default browser elsewhere), returning by a `crucible://` callback. Apps use passkeys only for associated domains [S68], so PLT's `Authenticator` serves only Crucible's own cloud.
+Native clients open it in a browser session bound to the request id (`ASWebAuthenticationSession` on Apple platforms, the default browser elsewhere), returning by a `crucible://` callback. Apps use passkeys only for associated domains [S68], so every client, Crucible's cloud included, approves in this browser session, which PLT's `Authenticator` opens (D-PLT-41).
 
 ```rust
 pub struct ActPlan {
@@ -909,7 +916,7 @@ The page shows contract section 7.6's contents, physical-effect section included
 
 A release plan's digest covers the `ApprovalSubject`'s `ObjectId`, the tag and the effectivity, never the `ChangeId` or CI report. The subject holds every affected Item's `ItemDefinition` digest (contract section 5), so swapped firmware, Material versions or documents void the approval. `act.commit` recomputes it and refuses a mismatch with `act/subject_mismatch`. A rebase that keeps the subject keeps its approvals, which are also the change order's (R3-16, R3-22).
 
-Every Approval of a release, data-release, physical-effect or standing release Act becomes a KLN signature record that verifies offline (R5-21, R11-38). AAL3 applies to physical-effect Acts and Acts with `controls`, since Acts have no risk class (CCR-AGT-11). The events `act.prepared`, `act.approved`, `act.denied` and `act.committed` carry ids and states only (D-KLN-34).
+Every Approval of a release, data-release, physical-effect or standing release Act becomes a KLN signature record that verifies offline (R5-21, R11-38). AAL3 applies to physical-effect Acts and Acts with `controls`, since Acts have no risk class (contract 7.6). The events `act.prepared`, `act.approved`, `act.denied` and `act.committed` carry ids and states only (D-KLN-34).
 
 [[DIAGRAM diagrams/09-agents-act-sequence.jsx: Act sequence · two-phase commit with the approval out of band]]
 
@@ -933,11 +940,11 @@ A channel is a connector, a shared branch or a mirror. Transfers are audited and
 **Decision D-AGT-31:** Physical-effect Acts follow contract section 7.6: no device starts except through the restricted `start_print`, only assigned humans approve, and no remote approval confirms on site. AGT adds plan schemas and AGT-O-21, which captures the wire against real servers and simulators. *Why:* OctoPrint, Moonraker and PrusaLink start prints from an upload flag (R10-01), so an interface without a start is not enough, and nothing may move where nobody stands (R4-01, R5-18). *Rejected:* remote starts through OPC UA job methods; agent-committed transfers; static interface review alone. (revised in round 3)
 
 - **Plans** name device class, serial, location, controller version, program number and what it replaces. The gateway checks the Approval against its pinned approver set (MFG).
-- **OPC UA.** Crucible calls `Store` only in `store_machine_job`, and `Cancel`, `Clear` and `RevokeStart` only on its own unstarted jobs. The other eight job methods are uncallable [S69].
+- **OPC UA.** Crucible calls `Store` only in `store_machine_job`, and `Cancel`, `Clear` and `RevokeStart` only on its own unstarted jobs. Every other job method is uncallable [S69].
 - **Restricted Acts** follow contract sections 7.6 and 7.1: `start_print` for material extrusion with a per-serial policy and a printer-side confirmation, `run_rig_test` for `unattended_safe` rigs.
 - **Firmware.** `flash_device` leaves the target held for a person at the bench, and client flashing through `apps/platform` or WebUSB is the same Act.
 
-These classes ship with MFG's transfers in phase 2, and `flash_device` with ELX's Software items in phase 3.
+These classes ship with MFG's transfers in phase 2, `store_machine_job` with the OPC UA path in phase 3, and `flash_device` with ELX's Software items in phase 3.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -1085,11 +1092,11 @@ Crucible publishes per-method and std references, an error catalog with examples
 | To | Provides | Types |
 | --- | --- | --- |
 | All tabs | The `api` catalog; sessions; boundary labels; budgets; idempotency; the error namespace; audit payloads | API method |
-| ING | `SourcePatch` application; drag streams under `LiteralSite` overrides; untrusted spans and strings as handles | API method |
+| ING | `SourcePatch` application; `evaluate.subscribe` and `edit.stream` under `LiteralSite` overrides; untrusted spans and strings as handles | API method |
 | KLN | Admission; `Budget` and `PriorityClass`; `release_data` and standing releases (D-AGT-30, D-AGT-33); context labels on writes; Proposals, risk classes, auto-merge; audit payloads; `act.*` events | `Budget`, `Proposal` |
-| UIX | `inspect.render`, `inspect.ask_render`; drag streams; Proposals with verifier reports and provenance; `ActPlan`s, approval requests and the approval origin's rules (D-AGT-20); `session.control` | `Proposal`, `ActPlan`, `ChangeProvenance` |
+| UIX | `inspect.render`, `inspect.ask_render`; `evaluate.subscribe` and `edit.stream`; `read.language_service`; `session.ask` and `session.*` events; Proposals with verifier reports and provenance; `ActPlan`s, approval requests and the approval origin's rules (D-AGT-20); `session.control` | `Proposal`, `ActPlan`, `ChangeProvenance` |
 | MFG | Physical-effect, `request_quote` and `publish_passport` Act classes and plan schemas; `read.machine_data`; the CAM programmer | Act class |
-| ELX | `flash_device`; datasheet extraction, labelled `data_untrusted`; budget caps for long tool runs | Act class, Proposal |
+| ELX | `flash_device`; `edit.stream` and `edit.apply`; datasheet extraction, labelled `data_untrusted`; budget caps for long tool runs | Act class, Proposal |
 | ECO | Catalog entries for ECO's methods; `crucible:api`; Act classes and `release_data`; `ExternalText` and instruction authority; image rules (D-AGT-26); `std::agents` and `std::explore` | Package, Act class |
 | PLT | Canonical JSON; the `ApiError` shape for `Guidance` errors; `Usage` as the resource record | `Usage`, `ApiError` |
 | Every tab that ships a model | The training-data rule (D-AGT-22) | — |
@@ -1098,17 +1105,17 @@ Crucible publishes per-method and std references, an error catalog with examples
 
 | From | Requirement |
 | --- | --- |
-| ING | Diagnostics with `SourcePatch` fixes; the formatter; tool-schema metadata; doc comments and templates; `ExternalText` and span integrity on evaluated strings; `LiteralSite`; `CheckOutcome` and the gate predicate; `#[was]` |
+| ING | Diagnostics with `SourcePatch` fixes; the formatter; the language service; tool-schema metadata; doc comments and templates; `ExternalText` and span integrity on evaluated strings; `LiteralSite`; `CheckOutcome` and the gate predicate; `#[was]` |
 | KLN | Evaluations with priority classes, work budgets and Aborts; unshared override keys; labels, write-down and integrity cleared by merge; Changes, semantic merge and diffs; span integrity; `RecipientRecord` clearances; the `release_data` stage (D-KLN-40); declassification, Waiver, `ControlAuthorization` and minimal signature records in phase 1; the audit log; the two-person list and break-glass (D-KLN-41); `retention_basis`; `evaluation.*` events; Cedar |
-| ANV | Entity provenance; `Query` resolution with fixes and `NearTie`; the stability analysis reporting `RankSwap`; measures, sections and geometry diffs |
+| ANV | Entity provenance; `Query` resolution with fixes and `NearTie`; `anvil::query_stability` reporting `RankSwap`; measures, sections and geometry diffs |
 | FLX | Studies; regularized goals; `ErrorBudget`s and zones; `SolvePlan` explanations; cost estimates; Field sampling; gradients and surrogates for `std::explore` |
 | COV | Validity envelopes; the coverage map and limit records; typed `ValidityError`s with escalation |
-| UIX | The renderer `apps/headless-render` links, with `RenderProfile`; the review view; the approval page; steering controls |
+| UIX | The renderer `apps/headless-render` links, with `RenderProfile`; the Proposal view; the approval page; steering controls |
 | MFG | Payload kinds; DFM rules; CAM; cost with intervals; `MfgError` fixes; `apps/machine-gateway` with connector allowlists, program registry and pinned approvers |
 | MEC | Std features with doc metadata; tolerance stacks; `SolveReport`s, `ContinuityReport`s and check Fields |
 | ELX | Electronics checks; Proposals from layout tools; datasheet record templates; board hazards for `flash_device` pages |
-| ECO | Signing for `std::agents` and `std::explore`; licence metadata and ABC evidence; registry, events and archives; importers emitting `ExternalText`; worlds importing `crucible:api`; `release_data` members |
-| PLT | Transport, `cli` exit codes, `Usage` measurement; keychain; the stdio MCP sandbox; the interactive pool lane; browser sessions and `Authenticator` |
+| ECO | Signing for `std::agents` and `std::explore`; licence metadata and ABC evidence; registry, events and archives; importers emitting `ExternalText`; worlds importing `crucible:api`; `release_data` members; CLI exit codes |
+| PLT | Transport, `Usage` measurement; `CredentialStore`; the stdio MCP sandbox; the `Interactive` pool lane; browser sessions and `Authenticator` |
 
 ## Oracles
 
@@ -1159,8 +1166,8 @@ No AGT capability is in contract section 13.4's table; each row follows its owne
 1. **R1 thresholds.** Are a 90% margin floor, 0.5 mm deviation and 1% cost increase right? They stay defaults until auto-merge ships in phase 2, whose review data can set them.
 2. **Findings declined in part.**
     - R11-12: an unattested verifier review shows as `Declared` and needs a human approval beside it. It still counts, so a solo phase 1 user can merge.
-    - R12-02: the work item maps onto `WorkItem`, but plans ship in phase 2, so the bootstrap is CCR-AGT-13.
-    - R11-19: standing-release transfers are effects of one approved plan; CCR-AGT-10 asks contract section 7.6 to say so.
+    - R12-02: the work item maps onto `WorkItem`, but plans ship in phase 2, so contract 13.2 runs the `WorkItem` record over Git until then (CCR-AGT-13).
+    - R11-19: standing-release transfers are effects of one approved plan; contract section 7.6 says so (CCR-AGT-10).
     - From round 2: R3-53 (title fixed); R4-01 (physical Acts in phase 2); R5-18 (contract names stand). R4-05 (MFG owns headers, offsets and drip feed); R6-02 item 6 (three phase 1 roles).
 
 ## Contract change requests
@@ -1168,10 +1175,10 @@ No AGT capability is in contract section 13.4's table; each row follows its owne
 - **CCR-AGT-7.** Passing every check: accepted in contract v5, section 7.6.
 - **CCR-AGT-8.** Rig tests as a restricted Act: accepted in contract v5, sections 2 and 7.6.
 - **CCR-AGT-9.** Owners of `Budget` and `PriorityClass`: accepted in contract v5, section 5.
-- **CCR-AGT-10.** Standing releases. Contract section 7.6 should name `standing_release` (D-AGT-33): two humans approve a plan fixing recipients, channel, schema, ceiling and expiry, and later transfers are its effects. *Reason:* contract section 2 requires an Approval per plan digest, and recurring flows need one bounded approval (R11-19).
-- **CCR-AGT-11.** AAL3 for Acts. Replace contract section 7.6's "Acts of the highest risk class" with "physical-effect Acts and Acts whose payload label has `controls`". *Reason:* risk classes belong to Proposals (R11-38).
-- **CCR-AGT-12.** Error codes. Write contract section 7.6's codes as `label/write_down` and `act/approval_pending`. *Reason:* codes take the form `<family>/<code>` (D-AGT-7, R9-47).
-- **CCR-AGT-13.** Build-program bootstrap. Contract section 13.2 runs work items through AGT's Plan machinery, which ships in phase 2, on `repo`, which holds design repositories. State that phases 0 and 1 run the `WorkItem` record over Git with the same oracle and verifier rules. *Reason:* one founder delegates every agent, so the verifier must run in an attested context (D-AGT-12).
+- **CCR-AGT-10.** Standing releases: accepted in contract v6.1, section 7.6.
+- **CCR-AGT-11.** AAL3 for Acts: accepted in contract v6.1, section 7.6.
+- **CCR-AGT-12.** Error codes: accepted with CCR-KLN-9 and CCR-ECO-11 in contract v6.1, section 7.6.
+- **CCR-AGT-13.** Build-program bootstrap: accepted in contract v6.1, section 13.2.
 
 ## Sources
 

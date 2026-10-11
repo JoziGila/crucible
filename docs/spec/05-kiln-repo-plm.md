@@ -46,7 +46,7 @@ Per-merge CI reproduces golden hashes only for `Current` and `Deprecated` versio
 
 ### WIT interfaces
 
-KLN owns `crucible:host`, which evaluation-world Wasm components import beside `crucible:ops`, at `@0.1.0` until the freeze in contract 13.1. Its `diagnostics` and `progress` interfaces are write-only and never keyed, and `parallel` offers deterministic map and reduce in input order (PLT).
+KLN owns `crucible:host`, which evaluation-world Wasm components import beside `crucible:ops`, at `@0.1.0` until the freeze in contract 13.1. Its `diagnostics` and `progress` interfaces are write-only and never keyed, and `parallel` offers `map-chunks`, a deterministic map with outputs in input order (PLT).
 
 `crucible:host/cas` reads only objects reachable from the call's input handles, failing otherwise with `unreachable-handle`, and records each read as a dependency whose label joins the node's. Measuring and sampling go through `crucible:ops` (contract 4). MEC owns `crucible:product`, formerly `crucible:model`, whose `read` interface returns this tab's Item and BOM records.
 
@@ -66,7 +66,7 @@ Kiln evaluates a demand-driven graph of input cells and derived nodes, as Adapto
 
 | Node kind | Key | Value |
 | --- | --- | --- |
-| Front-end stage | Source content hash, language behavior version, compiler release, imported interface hashes (ING) | The IIR, named by its module code hash, and diagnostics as separate outputs |
+| Front-end stage | Source content hash, language behavior version, imported interface hashes; diagnostics add the compiler release (ING) | The IIR, named by its module code hash, and diagnostics as separate outputs |
 | Feature call | Code hashes of modules used, argument identities, `CallSite`, overrides in its code | Parts, Bodies, Fields or plain values, with `HistoryRecord`s |
 | Op | `OpKey`; entity-naming Ops in two stages | Canonical outputs with `ErrorBudget`s, or a `Failure` |
 | Query resolution | Query, input identities, `CallSite` | Entities with Notes, or a `ResolveError` |
@@ -130,7 +130,7 @@ The demand-depth limit stops `f(n) = f(n + 1)`, and the fuel governor sums fuel 
 | Literal overrides | In keys of nodes holding the site; never shared | — | KLN-O-PROG-1 | 1 |
 | Multi-output memo entries | Value, accumulator, metadata, label | — | KLN-O-MIN-1 | 0 |
 | Canonical round trip | decode(encode(v)) = v | Non-canonical outputs fail registration | KLN-O-ROUNDTRIP-1 | 0 |
-| Label propagation | Join per node; hits return values only | `label.write_down` at `api` | KLN-O-LABEL-1 | 1 |
+| Label propagation | Join per node; hits return values only | `label/write_down` at `api` | KLN-O-LABEL-1 | 1 |
 | Failures and Aborts | `Failure` cached; Abort uncached | Abort reported with its cause | KLN-O-ABORT-1 | 0 |
 | Limit outcomes | One catalog; demand depth; fuel governor; ceilings | The catalog's outcomes | KLN-O-LIMIT-1 | 0 |
 
@@ -166,7 +166,7 @@ Kiln writes its memo table (edges and identities, not values) to the local CAS e
 | --- | --- | --- | --- |
 | `Preview` | Surrogates, looser tolerances | Reduced or surrogate solves, `Indicator` bounds | Never written |
 | `Interactive` | Filtered decisions, equal to `SignOff`'s wherever it decides; uncertified seeding and tracing | Calibrated `Estimated` bounds | Written; never used by `SignOff` checks or releases |
-| `SignOff` | Certified decisions, seeding and tracing | Converged; `Guaranteed` where proven | Used after two-builder agreement |
+| `SignOff` | Certified decisions, seeding and tracing | `Guaranteed` where proven, else calibrated `Estimated` | Used after two-builder agreement |
 
 A subscription names targets, a fidelity ceiling, overrides and a priority, and Kiln streams `ResultEvent`s with generation, fidelity, `ResultStatus`, value or `Failure`, budget and label. A published frame holds one generation; older results appear only as `Stale`.
 
@@ -178,7 +178,7 @@ A release demands every node at `SignOff`, geometry included.
 
 ### Cost and budgets
 
-Every node records CPU and GPU time, memory, bytes moved and remote price, attributed to principal, repository, branch and Proposal. Kiln returns a priced upper bound from per-operation cost models, counting confirming refinements, canonical recomputes and heavy-worker pool start-up. `api` reserves it against AGT's `Budget`, and an estimate above what remains returns `BudgetExceeded` with cheaper options.
+Every node records CPU and GPU time, memory, bytes moved and remote price, attributed to principal, repository, branch and Proposal. Kiln returns a priced upper bound from per-operation cost models, counting confirming refinements, canonical recomputes and heavy-worker pool start-up. `api` reserves it against AGT's `Budget`, and an estimate above what remains returns `budget/exceeded` with cheaper options.
 
 An Op estimated above 10 core-seconds gets a work budget from the reservation and reaches a safe point at least every 10 core-seconds. Exhausting it is the Abort `BudgetExhausted`, reported with the last checkpoint, and the budget never enters a key.
 
@@ -189,7 +189,7 @@ An Op estimated above 10 core-seconds gets a work budget from the reservation an
 | Cancellation | Safe points; fuel checks; disposable workers without shared memory | No memo entry or CAS write | KLN-O-CANCEL-1 | 0 |
 | Eviction | GreedyDual-Size | Reload or recompute | KLN-O-EVICT-1 | 1 |
 | Progressive results | `ResultEvent`; one generation per frame; ceiling-free `Undecided` | `Stale`; `Pending` while higher fidelity runs | KLN-O-PROG-1 | 1 |
-| Budgets | Priced bound reserved; safe points | `BudgetExceeded`; `BudgetExhausted` | KLN-O-BUDGET-1 | 1 |
+| Budgets | Priced bound reserved; safe points | `budget/exceeded`; `BudgetExhausted` | KLN-O-BUDGET-1 | 1 |
 
 ## Derivatives
 
@@ -383,7 +383,7 @@ Evaluation never reads time or authorship, and adding a signature or timestamp n
 
 **Decision D-KLN-19:** Edits become immutable Changes, as in Onshape's microversions: one per completed GUI action, per `edit.apply`, after 2 s without typing, at least every 60 s of editing, and whenever something references the current state. *Why:* anyone can inspect, diff or branch from any state without a manual step. *Rejected:* explicit commits only (loses states reviewers need); one Change per keystroke.
 
-Refs are branch heads (`branches/<name>`), immutable tags (`tags/<name>`), Proposal heads (`proposals/<id>`) and agent branches (`agents/<agent>/<branch>`).
+Refs are branch heads (`branches/<name>`), immutable tags (`tags/<name>`), Proposal heads (`proposals/<id>`) and agent branches (`agents/<agent>/<branch>`). Personal views and layouts live in a per-user store outside Changes (UIX).
 
 **Decision D-KLN-20:** Ref updates are recorded in a transaction log, as in Jujutsu: each `RefTransaction` names its predecessors and the full resulting view of refs. Concurrent transactions merge three ways, and a ref moved two ways becomes a conflicted ref. *Why:* full views give lock-free sync, make undoing any repository action one transaction, and double as the audit trail. *Rejected:* Git-style reflogs (per clone); server locks (break offline work).
 
@@ -526,13 +526,13 @@ A revision's `ItemDefinition` (contract 5) holds, per Item kind, what is made, l
 
 | Item kind | `ItemDefinition` |
 | --- | --- |
-| Part, Assembly | `GeometryId`s with definitional attributes by canonical entity number (GD&T, datums, `HoleSpec`, `ThreadSpec`, `Weld`, finish, plies, region materials), `Material` `ObjectId`s, properties, BOM by value |
+| Part, Assembly | `GeometryId`s with definitional attributes by canonical entity number (contract 5's definitional attributes), `Material` `ObjectId`s, properties, BOM by value |
 | Document | Semantic content: views, annotations, notes |
 | Software item | Binary hashes, software bill of materials digest, target bindings, toolchain digest |
 | `Program` | Posted program, simulation evidence ids, machine class, nominal tool assemblies (MFG) |
 | `Purchased` | Approved-manufacturer entries |
 
-The revision record adds the label, source `ChangeId`, release tag, classes of cited results and signatures. The definition digest hashes an `ItemDefinition` with late-bound fields as placeholders: MEC's title blocks and markings, and ELX's silkscreen revision, date and serial text.
+The revision record adds the label, source `ChangeId`, release tag, classes of cited results and signatures. The definition digest hashes an `ItemDefinition` with late-bound fields as placeholders: MEC's title-block fields, and ELX's silkscreen revision, date and serial text.
 
 **Decision D-KLN-26:** An Item is modified since release exactly when its `ItemDefinition` differs from every definition its revision records. An upgrade that keeps topology and definitional attributes and moves geometry within the definition tolerance adds its definition through the upgrade Proposal, and lifecycle-bound text is filled at output. *Why:* refactors change no `GeometryId` (R3-01), bit-level upgrades must not mark Items modified (R4-17), and a changed cosmetic thread moves no geometry (R8-01). *Rejected:* revision on any source change; `ObjectId` identity (renames would void releases). (revised in round 3)
 
@@ -592,7 +592,7 @@ The where-used index gains usage edges (parent revision, child Item, quantity, e
 | Record | Purpose and mechanism |
 | --- | --- |
 | Change request (ECR) | A problem or improvement with evidence, from nonconformances, complaints, CAPAs, field failures or agent findings |
-| Engineering change order (ECO) | A Proposal with lifecycle scope: affected Items with from and to revisions, effectivity, stock disposition, plan |
+| Engineering change order | A Proposal with lifecycle scope: affected Items with from and to revisions, effectivity, stock disposition, plan |
 | Manufacturing change order (MCO) | A Proposal under the MCO policy class (D-KLN-38) |
 | Change notice (ECN) | A signed record created by the release, with acknowledgements |
 | Deviation | A temporary departure for given serials or lots, with expiry, granted by the `grant_deviation` Act |
@@ -609,7 +609,7 @@ Read the upper row left to right and the lower row right to left; the dashed arr
 
 An order's author cannot be its only approver, and agents never sign; they attach analysis as evidence. Concurrent orders on one Item serialize at release.
 
-A policy allowance (contract 5) is a policy-package record changed only through `propose.policy` with two signers; phase 1 needs it, because GP1's checks are conditional on model form. Waivers are contract 2's signature records, and a `#[waive]` attribute in source is only a request that review shows.
+A policy allowance (contract 5) is a policy-package record changed only through `propose.policy` with two signers; phase 1 ships it with COV's catalogue (D-COV-24), though GP1's and GP2's proof loads supply their checks' model form. Waivers are contract 2's signature records, and a `#[waive]` attribute in source is only a request that review shows.
 
 **Decision D-KLN-38:** Manufacturing change orders are their own policy class, limited to MBOM, routings, programs, fixtures, work instructions and inspection plans, and rejected if they touch an EBOM definition. `Program` Items move `Prototype`, `Proven` (after a first-article record), `Released`, approved against a machine class and nominal tool assemblies (contract 7.6). *Why:* shops change feeds and tools daily without touching the part (R4-11), and a serial-bound subject needs an approval per sister machine (R10-08). *Rejected:* every shop edit as an engineering order. (revised in round 3)
 
@@ -642,7 +642,7 @@ Requirements are `std::systems` records in source or imported through ReqIF, OMG
 
 Compliance is a check over data, with substance rules (RoHS, REACH and SCIP, conflict minerals) from MFG. This tab owns compositions rolled up from `Material` versions, signed supplier declarations, regulation packages pinned as External inputs, exemptions signed by `quality`, and verdicts per revision (`Compliant`, `NonCompliant`, `Unknown`). Missing data is `Unknown` and blocks releases that require compliance, and a new regulation version re-evaluates released revisions and opens change requests through where-used.
 
-The EU Cyber Resilience Act's reporting duties for actively exploited vulnerabilities apply from 11 September 2026: an early warning within 24 hours and a notification within 72. `Software` Items carry a CycloneDX 1.7 software bill of materials per release, and where-used lists affected shipped serials within minutes (target).
+The EU Cyber Resilience Act's reporting duties for actively exploited vulnerabilities apply from 11 September 2026: an early warning within 24 hours and a notification within 72. `Software` Items carry a CycloneDX 1.7 or SPDX 3.0 software bill of materials per release (ELX), and where-used lists affected shipped serials within minutes (target).
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -713,7 +713,7 @@ An erasure request against a `ThirdCountryLaw` lock goes to the customer's priva
 
 Roles come from identity-provider groups (`viewer`, `commenter`, `editor`, `maintainer`, `approver`, `release_manager`, `export_officer`, `quality`, `admin`). Attributes describe principals (organization, location, training, licences, `ControlAuthorization`s) and resources (labels, Item state, repository, path). Actions are `read_source`, `read_derived`, `evaluate`, `edit`, `push`, `merge`, `approve`, `sign`, `release`, `purge` and `manage_policy`; deny overrides allow, the default is deny, and policy changes are `propose.policy` Proposals whose access changes Cedar lists before merge.
 
-**Decision D-KLN-41:** Two distinct people, one an `export_officer` for label items, approve: clearances of endpoints, clients and recipients for `confidential` or controlled data; declassification; `ControlAuthorization`s; widening Cedar changes; auto-merge policy; recipient records; Approvals covering several future transfers; oracle and protected-path changes; purges. *Why:* one phished administrator could otherwise export a whole ITAR program (R5-15), and one list serves every tab (R11-22). *Rejected:* single approvers with audit only. (revised in round 3)
+**Decision D-KLN-41:** Two distinct people, one an `export_officer` for label items, approve: clearances of endpoints, clients and recipients for `confidential` or controlled data; declassification; `ControlAuthorization`s; widening Cedar changes; auto-merge policy; recipient records; `standing_release` plans (D-AGT-33); AGT's `allow_raw_external` and training opt-in; oracle and protected-path changes; purges. *Why:* one phished administrator could otherwise export a whole ITAR program (R5-15), and one list serves every tab (R11-22). *Rejected:* single approvers with audit only. (revised in round 3)
 
 Break-glass access is invoked by one administrator with an AAL3 credential, lasts at most 4 hours and grants only reads within that administrator's clearances, agent freeze, ref revert, lock release and session termination. It never declassifies, clears an endpoint, client or recipient, changes Cedar policy, purges, approves or signs. Every action under it is audited with its id, and its review is a Proposal a second administrator closes within 72 hours.
 
@@ -753,7 +753,7 @@ Transport is TLS 1.3, mutual between servers, workers and runners, and release a
 | Pseudonymous records | Per-person keys; retention bases | Erasure refused, or routed for `ThirdCountryLaw` | KLN-O-AUDIT-2 | 2 |
 | Authorization and branch protection | Cedar on every request; rules per ref pattern | `AccessDenied` naming the permission | KLN-O-POLICY-1 | 1 |
 | Two-person rule and break-glass | One list; bounded break-glass | Change pending; forbidden actions refused | KLN-O-POLICY-1 | 1 |
-| Labels and declassification | Confidentiality lattice; integrity by provenance; module labels | `label.write_down` | KLN-O-LABEL-1 | 1 |
+| Labels and declassification | Confidentiality lattice; integrity by provenance; module labels | `label/write_down` | KLN-O-LABEL-1 | 1 |
 | Control authorizations | `ControlAuthorization` records; controlled placement | Uncovered access refused | KLN-O-LABEL-1 | 1 |
 | Residency | Region and operator constraints | `ResidencyDenied` | KLN-O-LABEL-1 | 2 |
 | End-to-end mode | Customer keys; customer-hosted cache domain | Key release to the ineligible refused | KLN-O-LABEL-2 | 3 |
@@ -824,9 +824,9 @@ AGT owns the method catalog; this tab supplies repository behavior within contra
 | `evaluate.*`, `evaluate.subscribe`, `evaluate.cancel` | Evaluate | Within budget |
 | `compare.diff`, `compare.merge_preview` | Compare | Allowed |
 | `propose.*`, including `change_request`, `change_order`, `policy`, `declassify`, `purge`, `endorse_text` | Propose | Under AGT's rules (D-AGT-17); policy only from clean contexts; the last three human-only |
-| Act classes `release`, `grant_deviation`, `release_data` and `run_rig_test` | Act | May prepare; never approve |
+| Act classes `release`, `grant_deviation` and `run_rig_test`, and the `release_data` family | Act | May prepare; never approve |
 
-**Decision D-KLN-34:** Events carry identifiers and states, never design content, and above `internal` per-subscription opaque ids (an HMAC of the `ObjectId` under the subscription's key). ECO owns the CloudEvents envelope and delivery (D-ECO-12); this tab defines event types and a per-repository `sequence` attribute. *Why:* thin events keep policy and audit in one place (R3-23), and a small record's `ObjectId` lets a receiver confirm a guessed value (R11-39). *Rejected:* full payloads (bypass policy). (revised in round 3)
+**Decision D-KLN-34:** Events carry identifiers and states, never design content, and above `internal` per-subscription opaque ids (an HMAC of the `ObjectId` under the subscription's key). ECO owns the CloudEvents envelope and delivery (D-ECO-12); this tab defines repository, lifecycle and evaluation event types (AGT the `act.*` and `session.*` types) and a per-repository `sequence` attribute. *Why:* thin events keep policy and audit in one place (R3-23), and a small record's `ObjectId` lets a receiver confirm a guessed value (R11-39). *Rejected:* full payloads (bypass policy). (revised in round 3)
 
 Event types: `change.created`, `ref.updated`, `ref.conflicted`, `tag.created`; `evaluation.completed`, `evaluation.aborted`; `proposal.opened`, `proposal.updated`, `proposal.merged`, `ci.completed`, `check.failed`, `evidence.recorded`; `change_request.created`, `change_order.submitted`, `change_order.approved`, `change_order.rejected`, `release.created`, `change_notice.issued`, `item.state_changed`, `deviation.granted`; `compliance.alert`, `vulnerability.affected`, `policy.changed`, `audit.anomaly`, `budget.threshold`.
 
@@ -872,7 +872,7 @@ Checks use the measurement uncertainty MFG and FLX define, and Evidence records 
 | Authorization | Cedar (OOPSLA 2024) | Open Policy Agent | Adopt (D-KLN-29) | p99 decision under 1 ms (target) |
 | Tamper-evident logs | RFC 6962 logs as C2SP tlog-tiles with witnesses | Certificate Transparency; Sigstore Rekor | Adopt (D-KLN-30) | Fork detection under fault injection |
 | Long-lived signatures | ML-DSA (FIPS 204) | Classical-only signing | Dual signatures from phase 2 (D-KLN-42) | Verification under each algorithm |
-| PLM change control | ECR, ECO and ECN workflows with effectivity | Windchill, Teamcenter, Arena, Fusion Manage | Orders as Proposals; approvals over subjects (D-KLN-28) | Scripted-order cycle time; phase 3 assessment |
+| PLM change control | Change request, order and notice workflows with effectivity | Windchill, Teamcenter, Arena, Fusion Manage | Orders as Proposals; approvals over subjects (D-KLN-28) | Scripted-order cycle time; phase 3 assessment |
 | Variant management | 150% BOM with variant conditions | Teamcenter Product Configurator | Abstract interpretation and SAT (D-KLN-27) | KLN-O-PLM-5; solver time on 200 parameters |
 | Browser persistence | OPFS sync access handles; `opfs-sahpool` | Per-tab engines | One engine per origin (D-KLN-44) | KLN-O-DEPLOY-1 |
 
@@ -899,9 +899,9 @@ Checks use the measurement uncertainty MFG and FLX define, and Evidence records 
 | ANV, FLX, Wasm components | Operation contract; two-stage keys; the limit catalog; name-free random streams; derivatives; two-builder agreement; `crucible:host` | `OpImpl`, `OpCx`, `OpKey`, `Differentiable` |
 | Every tab | Memoized, progressive evaluation with cost estimates; the CAS | `Kiln::demand`, `ResultEvent`, `ResultStatus`, `CasStore` |
 | ING | Keys with `CallSite`s, code hashes, overrides and limits; front-end stages; ceiling-free `Undecided`; span integrity in labels | `Abort`, `ResultStatus` |
-| COV | Evidence records by watermark; label joins; policy allowances; Waivers | `CheckOutcome`, `Labels` |
-| UIX, AGT, CI | Changes, merge, diffs, Proposals, `ReviewVerdict` and `Comment` records, live documents, locks, span provenance, where-used | `ChangeId`, `MergeDriver`, `Conflict` |
-| MEC, MFG, ELX | Items, per-kind definitions, effectivity, BOM views, variant semantics, orders, MCOs, first-article records, parts policy; the approver directory MFG's gateway pins | Item and revision records |
+| COV | Evidence records by watermark; label joins; policy allowances and `min_evidence_level`; Waivers | `CheckOutcome`, `Labels` |
+| UIX, AGT, CI | Changes, merge, diffs, Proposals, `ReviewVerdict` and `Comment` records, live documents, locks, span provenance, where-used, the per-user view store | `ChangeId`, `MergeDriver`, `Conflict` |
+| MEC, MFG, ELX | Items, per-kind definitions, effectivity, BOM views, variant semantics, orders, MCOs, the `Proven` gate on MFG's first-article records, parts policy; the approver directory MFG's gateway pins | Item and revision records |
 | AGT | Write-down at `repo`; recipient records; `ControlAuthorization`s; the two-person list; signature records; the audit log; the `release_data` stage; Cedar | `Labels`, signature records |
 | ECO | Leaf inputs; event types; release-data records; the system-of-record policy; `crucible:host` | Event types, Item records |
 | PLT | Grades and class acceptance; key composition; uncached Aborts; cost hints; what attestation signs | `DeterminismGrade`, `OpKey` |
@@ -1017,16 +1017,16 @@ Round 3 closes every earlier question: hashing (D-KLN-46), sibling order and des
 3. **R9-52, contact.** Condition 4 counts only positive-volume interference, as proposed; condition 5 keeps touching as a conflict unless designed contact explains it (R10-30), since an unexplained new contact with an edited face is a real interaction.
 4. **R11-13, Asset endorsement.** As contract 17 revised it: merging the import Proposal endorses typed values, with no separate record.
 5. **R11-18, external approvals.** Applied without a new Act name; the release record says "approved externally".
-6. **R11-19 and R11-38, standing releases.** Shared-branch pushes and federation sync run the stage; a standing-release class is AGT's to define (D-AGT-30), so this tab names only an Approval covering several future transfers.
-7. **R9-47, error codes.** Events added; the code form is AGT's, and contract 7.6 still writes `label.write_down` (CCR-KLN-9).
+6. **R11-19 and R11-38, standing releases.** Shared-branch pushes and federation sync run the stage; D-KLN-41 lists AGT's `standing_release` (D-AGT-33).
+7. **R9-47, error codes.** Events added; contract 7.6 now writes `label/write_down` (CCR-KLN-9).
 8. **R2-06, round 2.** Calls do not become CRDT blocks; contract 5 names calls by name and occurrence, and ING's lint covers prepends (R9-36).
 9. **R3-20, round 2.** Contract 7.8's attestation service replaces per-build signing keys.
 
 ## Contract change requests
 
-- CCR-KLN-6 to CCR-KLN-8 (Evidence records without geometry, Item, merge verdict order): accepted in contract v5.
-- CCR-KLN-9, error-code form (7.6). The write-down error `label.write_down` reads as an `api` method; if AGT adopts R9-47's `<family>/<code>` form, write `label/write_down`, so methods and errors never share a namespace.
-- CCR-KLN-10, catalog parts in `ItemDefinition` (5). The per-kind list omits `Purchased` Items, which contract 2 counts as Items; add "for a catalog part, its approved-manufacturer entries", so a changed approved manufacturer voids an approval as a firmware swap does.
+- CCR-KLN-6 to CCR-KLN-8 (Evidence records without geometry, Item, merge verdict order): accepted in contract v5 (sections 2, 2 and 7.1 `repo`).
+- CCR-KLN-9, error-code form: accepted with CCR-AGT-12 and CCR-ECO-11 in contract v6.1 (section 7.6).
+- CCR-KLN-10, catalog parts in `ItemDefinition`: accepted in contract v6.1 (section 5, `ItemDefinition`).
 
 ## Sources
 
