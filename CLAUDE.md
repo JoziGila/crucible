@@ -49,7 +49,7 @@ Founder directions for round 4 (2026-10-12): agents author designs and nobody mo
 ```
 python3 docs/tools/check.py docs/spec/06-mechanical.md --base round-3   # one tab, plus anything cut since round 3
 python3 docs/tools/check.py --all -q                                      # every tab, errors only
-python3 docs/tools/extract.py                                             # docs/build/extracts: decisions, requests, interfaces, open questions
+python3 docs/tools/extract.py                                             # docs/build/extracts: decisions, requests, requires, glossary, open questions
 git show round-1:docs/spec/06-mechanical.md                               # a tab's first draft
 git diff round-1 -- docs/spec/02-anvil.md                                 # what round 2 changed in a tab
 ```
