@@ -52,7 +52,7 @@ A finding can target several tabs, so the columns sum to more than the 295 and 2
 ## Layout
 
 ```
-contract.md              binding architecture contract (v7.1)
+contract.md              binding architecture contract (v7.2)
 spec/                    the doc's tabs, one file each; diagrams/ holds widget sources
 review/                  twelve adversarial reviews (two rounds of six), the current brief and findings.json
 revision/                round 2 brief, one findings packet per tab, publishing notes, work in progress
