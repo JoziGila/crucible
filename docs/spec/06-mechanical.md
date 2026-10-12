@@ -168,7 +168,7 @@ Each edit is one Change, one immutable edit in the design's history, and keeps t
 
 ### Reference images
 
-`canvas(image: Asset, on: CoordSys, calibrate: (Point, Point, Length), opacity:)` places a scaled image on a plane for tracing a concept sketch, a photo or a scanned legacy drawing, in phase 2. Two picked points and their known distance set the scale, as Fusion's calibrated canvas does [Fusion canvas]. A canvas is display-only and outside the Item's definition. An agent that reads it treats it as an instruction-capable image, which marks its context as untrusted ([AGT](09-agents.md)).
+`canvas(image: Asset, on: CoordSys, calibrate: (Point, Point, Length), opacity:)` places a scaled image on a plane for tracing a concept sketch, a photo or a scanned legacy drawing, in phase 2. Two picked points and their known distance set the scale, as Fusion's calibrated canvas does [Fusion canvas]. A canvas is display-only and outside the Item's definition. An agent that reads it treats it as an instruction-capable image, which sets its context `instruction_tainted` ([AGT](09-agents.md)).
 
 ### Solver
 
@@ -193,7 +193,7 @@ A Krawczyk test is an interval-arithmetic test that proves a system has exactly 
 
 Read the top row left to right, then follow each block down through its solve and certification to the result that features receive.
 
-During a drag, the moved entity gets a weighted soft target, and each frame re-solves only the blocks at or after the dragged entity's block in Dulmage–Mendelsohn order. Those frames are warm-started and uncertified, since a drag is `Interactive`; the build that follows certifies. The user interface streams literal overrides through AGT's `edit.stream` at PLT's `Drag` priority, and Kiln never writes an overridden result to the shared cache. Overrides follow `#[was]` renames, so a concurrent rename does not end the drag.
+During a drag, the moved entity gets a weighted soft target, and each frame re-solves only the blocks at or after the dragged entity's block in Dulmage–Mendelsohn order. Those frames are warm-started and uncertified, since a drag is `Interactive`; the build that follows certifies. The user interface streams literal overrides through AGT's `edit.stream` at the `Drag` priority class, on PLT's `Drag` lane, and Kiln never writes an overridden result to the shared cache. Overrides follow `#[was]` renames, so a concurrent rename does not end the drag.
 
 Builds never warm-start, so their results are bit-identical across the canonical platform class, the set of machines whose results must match bit for bit.
 
@@ -206,7 +206,7 @@ Builds never warm-start, so their results are bit-identical across the canonical
 If continuation cannot reach the targets, the solver returns `BranchFlip` or `NoConvergence` with the last reachable value, never a solution on another branch.
 
 **Decision D-MEC-33:** Seeds stay inline in source, rounded to a quantum q = 2¹⁰ρ of the sketch, where ρ is the sketch's resolution, the scale-relative length below which Anvil treats geometry as coincident; releasing a drag writes only entities that moved by more than q, with more digits wherever rounding would change the solution.
-*Why:* seeds decide under-determined parts, so they are intent and belong in the text that `crucible export git` carries; a scale-relative quantum keeps MEMS (micro-electromechanical systems) sketches at sub-micrometre seeds and ship sketches short.
+*Why:* seeds decide under-determined parts, so they are intent and belong in the text Git stores; a scale-relative quantum keeps MEMS (micro-electromechanical systems) sketches at sub-micrometre seeds and ship sketches short.
 *Rejected:* a layout section merged by last writer (it drops one of two concurrent drags); full-precision seeds (many literals per drag and a conflict on every concurrent drag); a fixed 1 µm floor (it would round away MEMS geometry).
 
 Seed literals merge as ordinary literals. Two sides that change the seeds of one under-determined block conflict for real, and ING states the merge rule.
@@ -343,7 +343,7 @@ The generators `linear`, `circular`, `along`, `at_points`, `fill` and `by_densit
 
 Transforms always keep names. When one operation receives two operands with the same entity names, as in `half + mirror(half, plane.yz)`, Anvil relabels the later transform's operand with role `copy` or `mirror`. An explicit `copy(x)` always copies, and a read-only use of the source renames nothing.
 
-A `mirror` and a complete `circular` pattern record their plane or axis as a declared symmetry. Flux may use it for symmetric, antisymmetric and cyclic-sector reductions, after checking that the loads respect it ([FLX](03-flux.md)).
+A `mirror` and a complete `circular` pattern record their plane or axis as a declared symmetry. Flux may use it for symmetric, antisymmetric and cyclic-sector reductions from phase 2 (contract 13.4), after checking that the loads respect it ([FLX](03-flux.md)).
 
 `hull` is exact on meshes and facet faces in phase 1 and bounded on B-rep operands in phase 2, with `minkowski`. `split` cuts by a plane, face set, sheet or sketch, and `combine` is an n-ary Boolean over any representation.
 
@@ -540,7 +540,7 @@ Positions track the drivers by continuation and give `Field<(Instances, Time), T
 
 Geometry is built at nominal by default, so a 10 H7/p6 press fit touches, and its fit codes make it `IntendedFit`. `interference(asm, realize: Mmc)` builds every toleranced size at its maximum-material limit (Tolerancing, "Geometry at a point of the zone"), so the same press fit reports its true overlap. Contact explained by a mate, a `Weld`, a fastened joint or an `IntendedFit` never conflicts.
 
-KLN's no-new-interference merge condition uses these classes ([KLN](05-kiln-repo-plm.md)). Flux's immersed tied interfaces start from the `Touching` pairs, each listed for confirmation as bonded or frictionless ([FLX](03-flux.md)).
+KLN's no-new-interference merge condition uses these classes ([KLN](05-kiln-repo-plm.md)). Flux's immersed tied interfaces start from the `Touching` pairs, each listed for confirmation as `Bonded` or `NoSeparation` ([FLX](03-flux.md)).
 
 Motion studies sample adaptively. Between samples, a certified Taylor bound limits each body's displacement, from interval Newton on the differentiated constraints. Clearance is the interval [sampled minimum − that bound, sampled minimum], so `min_clearance` decides three-valued. Where the enclosure fails, the interval is `Estimated`, and a check that needs `Guaranteed` bounds returns `Undecided`.
 
@@ -643,7 +643,7 @@ Drawings carry a gear data table with module, teeth, angles, profile shift, modi
 | Enclosure checks | Clearance, keep-ins and cut-outs against imported boards | Findings as check Fields | MEC-O-AS-11 | 1, 2 (board readers) |
 | Skeletons and interfaces | Skeleton features; `#[interface]` records; `mate_interface` | `Incompatible { field, provided, required }` | MEC-O-AS-8 | 1 (skeletons), 2 |
 | In-context design | `context(of, at: Pin, take)` pinned in `ingot.lock`; update as a Proposal | `ResolveError`; `Conflict::Lockfile` | MEC-O-AS-14 | 2 |
-| Exploded views | Ordered steps; automatic proposals | `CollidesDuringStep { step, pair }` (warning) | MEC-O-AS-5 | 2, 3 (automatic) |
+| Exploded views | Ordered steps; automatic proposals | `CollidesDuringStep { step, pair }` (warning) | MEC-O-AS-5 | 1, 3 (automatic) |
 | Flexible subassemblies | `flexible: true` | Conflicts list inner mates by path | MEC-O-AS-1 | 2 |
 | Large-assembly detail levels | `InstanceDetail`; 100,000-Instance open | `DetailUnavailable { instance, detail }` | MEC-O-AS-4 | 2, 4 (100,000-Instance open) |
 | Fasteners | Instance sets keyed by holes; grip, engagement, length, preload; manufacturer packages first | `NoStandardLength { needed, nearest }`, `EngagementTooShort` | MEC-O-AS-6 | 2 |
@@ -662,7 +662,7 @@ Consumer products, castings and hulls need surfaces controlled beyond what profi
 
 `Continuity` is `G0` to `G3`: shared position, then tangent plane, then normal curvature, then its derivative. Surfacing features take target continuities per edge and return a `ContinuityReport` from `anvil::analyze_continuity`, and Anvil's continuity certificates use the same enum. A feature that misses its targets returns `ContinuityNotMet { edge, achieved }` and never relabels the result.
 
-Default thresholds: G0 within the edge's own tolerance, G1 within 10⁻⁶ rad, G2 within 10⁻⁴ relative curvature difference and G3 within 10⁻³ relative difference. Only G0 has a length threshold, since an angle and a curvature ratio do not scale with size, and each check may override them.
+The default threshold per order is ANV's, and each check may override it.
 
 | Feature | Contract | Phase |
 | --- | --- | --- |
@@ -702,7 +702,7 @@ A SubD body may join a B-rep part during design, and release converts it where t
 | Surface-quality checks | Analysis Fields as checks | `Error(Failure)` on a missing analysis input | MEC-O-SF-1 | 2, 3 (highlight lines, control net) |
 | Control-vertex editing | `edit_cv` with the 16 ms fast path; G3 matches | Fast path falls back to the rebuild | MEC-O-SF-5 | 3 |
 | SubD modelling and conversion | Cage edits with stable names; `to_nurbs`. Requires: ANV `anvil::subd_edit` | `NonManifoldResult`; `ConversionDeviation { max }` | MEC-O-SF-3 | 3 |
-| Scan to CAD | Registration to sewn solid | `FitRejected { region, rms }` | MEC-O-SF-4 | 4 |
+| Scan to CAD | Registration to sewn solid | `FitFailed { residual }`; `NotConverged { rms }` | MEC-O-SF-4 | 4 |
 
 ## Sheet metal
 
@@ -803,7 +803,7 @@ Laminate rules are checks on the laminate: symmetry and balance, drop-off spacin
 | --- | --- | --- | --- | --- |
 | Plies, sequences and zones | Plies with boundary, splice and dart; zones; symmetry and balance | `UnbalancedLaminate { zone }` (warning) | MEC-O-CP-2 | 4 |
 | Rosettes and cores | Translation, radial, cylindrical or Field rosettes; honeycomb and foam cores | `ResolveError` on the rosette frame | MEC-O-CP-1 | 4 |
-| Kinematic drape | Fibre directions and shear as Fields per ply. Requires: ANV `anvil::drape_kinematic` | `ShearLimitExceeded { ply, region, max }` with "add dart" | MEC-O-CP-1 | 4 |
+| Kinematic drape | Fibre directions and shear as Fields per ply. Requires: ANV `anvil::drape_kinematic` | `ExcessiveShear { region, angle }` with "add dart" | MEC-O-CP-1 | 4 |
 | Solids and ply flats | Tool surface offset by ply thickness with drop-offs; flat ply outlines | `SelfIntersecting` | MEC-O-CP-1 | 4 |
 | Laminate properties | Per-zone ABD matrices (the laminate's in-plane, coupling and bending stiffness) for Flux shells | `UndefinedZone { region }` | MEC-O-CP-2 | 4 |
 | Laminate rules | Drop-off spacing, consecutive plies, symmetry and balance as checks read by ply optimization | Findings with the offending plies | MEC-O-CP-2 | 4 |
@@ -1030,7 +1030,7 @@ Skin model shapes [Anwer et al. 2014] handle form deviations, and Flux consumes 
 | Shape aspect kinds | One closed list with the `OfSize` marker | A control on the wrong kind fails to compile | MEC-O-TL-1 | 1 |
 | PMI target check | `pmi_target_resolved` on forwarded and explicit PMI | `ToleranceTargetSplit { control, pieces }`; `ResolveError` | MEC-O-TL-6 | 1 |
 | General tolerances and edge callouts | `general_tolerance`; ISO 13715 callouts | `check::standards` finding | MEC-O-TL-3, MEC-O-TL-7 | 1 |
-| Geometry at a tolerance point | `realize:` on Evaluations, exports, `interference` and `min_clearance` | `NotOfSize { site }` for `Mmc` or `Lmc` on a site without a size | MEC-O-AS-3 | 1 |
+| Geometry at a tolerance point | `realize:` on Evaluations, exports, `interference` and `min_clearance` | Non-size sites keep their nominal under `Mmc` and `Lmc` and are listed in the report (ING) | MEC-O-AS-3 | 1 |
 | Dialect conversion | Exact equivalents; typed holes elsewhere; `CrucibleDefined` zones | `ing/6001` per untranslated control | MEC-O-TL-1 | 2 |
 | Completeness | Degrees of freedom plus coverage rules | Free directions and uncovered aspects listed | MEC-O-TL-2, MEC-O-TL-7 | 2 |
 | 1D stacks | Worst case, RSS at a stated coverage, 1D sampling; GD&T zones and MMC bonus as contributors | `ChainOpen` | MEC-O-TL-3, MEC-O-TL-9 | 1 |
@@ -1069,7 +1069,7 @@ drawing(standard: Standard::iso(), title: "Bracket") {
 
 Every drawing item references model entities by `Query`, as an extent use. An item that cannot re-resolve dangles with a `ResolveError` and never re-attaches elsewhere, and a release check forbids dangling items. `view.silhouette` and `view.section_edge` resolve view-dependent curves through the view's projection and fail when the silhouette disappears.
 
-Title-block fields, revision text, dates and approvers are late-bound release fields, excluded from the Item's definition digest ([KLN](05-kiln-repo-plm.md)). Phase 1 reads item numbers and revision labels from release tags and the engineering BOM.
+Title-block fields, revision text, dates and approvers are late-bound release fields, which enter the Item's definition digest only as placeholders ([KLN](05-kiln-repo-plm.md)). Phase 1 reads item numbers and revision labels from release tags and the engineering BOM.
 
 **Drafting conventions.** Every machined-part drawing carries the same conventions, and GP1's shop works from them. From phase 1, std generates:
 
@@ -1173,15 +1173,15 @@ Here η is the calibrated error bound Flux reports with an eigenvalue λ.
 | Check family | `decides_on` | Calibration class (FLX) | Phase |
 | --- | --- | --- | --- |
 | Fits, clearance, interference, thickness, mass | `Guaranteed` | None needed | 1 |
-| Static stress on regularized peaks in solids (GP1) | `Estimated` | `elasticity.peak` | 1 |
+| Static stress on regularized peaks in solids (GP1) | `Estimated` | `elasticity.peak`; `elasticity.peak.interactive` at `Interactive` | 1 |
 | Strut strength in beam lattices (GP2) | `Estimated` | `lattice.strut_stress` | 1 |
-| Buckling factors where elastic buckling governs | `Estimated`, two-sided, prestress error included | `lattice.buckling`; `elasticity.eigen` for buckling factors | 1 |
-| Natural frequencies and avoidance bands | `Estimated`, two-sided | `elasticity.eigen` for frequencies | 1 |
+| Buckling factors where elastic buckling governs | `Estimated`, two-sided, prestress error included | `lattice.buckling`; `elasticity.buckling` | 1 |
+| Natural frequencies and avoidance bands | `Estimated`, two-sided | `elasticity.frequency` | 1 |
 | Bolted joints | `Estimated` plus a policy allowance | Bolted-joint forms | 2 |
 
 FLX owns these classes ([FLX](03-flux.md)). Each has 300 held-out samples, at least 20% from `std::opt` runs that minimize the check margin. Its references come from an independent code on fitted, curved high-order meshes ([contract 13.2](../contract.md)). Each `Estimated` part carries its exceedance level α, which joins the union bound, so every `Pass` reports its confidence. Peaks smooth over FLX's default radius from local curvature and thickness, so a 2 mm fillet is never averaged away.
 
-A buckling factor depends on the prestress from the static solution. FLX therefore estimates it as a coupled goal, adding the static solve's error through the geometric stiffness with one extra adjoint solve. Frequencies, whose operator is fixed, are a separate entry of the eigen class.
+A buckling factor depends on the prestress from the static solution. FLX therefore estimates it as a coupled goal, adding the static solve's error through the geometric stiffness with one extra adjoint solve. Frequencies, whose operator is fixed, use their own class, `elasticity.frequency`.
 
 **Strut strength.** GP2's struts are stocky. A strut about 1 mm across and four diameters long has a slenderness λ near 16. For an aluminium alloy with E ≈ 70 GPa, its elastic buckling stress π²E/λ² is then near 2,700 MPa, far above any proportional limit. Compressive yield and plastic collapse govern, and an elastic eigenvalue decides almost nothing.
 
@@ -1254,7 +1254,7 @@ MEC adds no geometry type. `Part`, `Assembly`, `Instance`, `Transform` and `Coor
 
 A placement is a unit quaternion plus a translation, in canonical f64 bits. The quaternion's first nonzero component in (w, x, y, z) order is positive, and −0.0 is written as +0.0, so a half-turn has one encoding. A mate encodes its kind, limits and both frames as (member index, anchor's canonical entity number). An Instance set contributes one member per key, a flexible subassembly its placements as solved in the parent, and `InstanceDetail` nothing.
 
-KLN's definition tolerance is the geometry change below which an Item keeps its revision. It is the smaller of 0.1 µm and 1% of the Item's tightest tolerance (or of its general tolerance when nothing is tighter), and never below 10ρ, where ρ is the Body's resolution ([ANV](02-anvil.md)).
+KLN's definition tolerance, the geometry change below which an Item keeps its revision, reads the Part's tightest or general tolerance and its resolution ρ ([KLN](05-kiln-repo-plm.md)).
 
 ### WIT interface
 
@@ -1378,17 +1378,17 @@ MEC uses ANV's operations with ANV's names and phases, and no MEC feature ships 
 
 | To | What | Types | Phase |
 | --- | --- | --- | --- |
-| ANV | Constraint systems and their semantics for `solve_constraints`; definitional attribute classes; `FeatureRole` aliases; feature-level failure kinds; the Assembly `GeometryId` encoding | `FeatureError`, `HoleSpec`, `ThreadSpec`, `CoordSys` | 1 |
+| ANV | Constraint systems and their semantics for `solve_constraints`; definitional attribute classes; `FeatureRole` aliases; feature-level failure kinds; the Assembly `GeometryId` encoding; the `Continuity` enum | `FeatureError`, `HoleSpec`, `ThreadSpec`, `CoordSys`, `Continuity` | 1 |
 | ING | GD&T records and dialect validators; the closed `ShapeAspect` kinds; std features with roles, `#[realizes]` markings and keyed generators; `std::standards::iso286`; the default distribution; general tolerances; the sketch-seed quantum | `GeometricTolerance`, `ShapeAspect<K>`, `Tol<T>` | 1 |
 | KLN | Part and Assembly `GeometryId` encodings; identity attributes evaluated from source; definitional attributes; interference classes for the no-new-interference merge condition; `bom_item` lines; revision markers; cut lists | `ItemDefinition` inputs, `GeometryId` | 1 |
 | KLN | Context pins recorded in `ingot.lock` and moved by Proposal | `Context`, lockfile entries | 2 |
 | FLX | Typed joints, redundancy reports and drivers; bounded mass properties with declared masses; preload and fastener Instance sets for connectors; member profiles and axes; `Touching` pairs for tied interfaces; declared symmetries; the calibration class each check needs | `Assembly`, `Field`, `Mate` | 1, 2 |
 | FLX | ABD matrices and laminate rules for shells and ply optimization; default distributions and skin-model samples | `Ply`, `Field` | 2, 4 |
 | COV | Gear records with accuracy grade and load spectrum; plies and kinematic drape; part data for validity envelopes | `Field`, `Ply` | 2, 4 |
-| MFG | `FlatPattern`, `HoleSpec`, `ThreadSpec`, `Weld` with quality level, `execution_class`, edge callouts, general tolerances, `split_mold`, lattices, gear data tables, plies, harness geometry, balloons; the drawing library for in-process drawings; the `realize` point of each export | `Body`, `Drawing`, definitional attributes | 1, 2, 3 |
-| ELX | Enclosure geometry and checks; mates; interface records for board outlines and keep-outs; routes, bundle and formboard geometry; fastener selection | `Assembly`, `Route`, `CoordSys` | 1, 3 |
+| MFG | `FlatPattern`, `HoleSpec`, `ThreadSpec`, `Weld` with quality level, `execution_class`, edge callouts, general tolerances, `split_mold`, lattices, gear data tables, plies, harness geometry, balloons, `BendRule` and `BendTable`, preload ranges, mates for machine, robot and fixture Assemblies; the drawing library for in-process drawings; the `realize` point of each export | `Body`, `Drawing`, definitional attributes | 1, 2, 3 |
+| ELX | Enclosure geometry and checks; mates; gear records for drivetrain elements; interface records for board outlines and keep-outs; routes, bundle and formboard geometry; fastener selection | `Assembly`, `Route`, `CoordSys` | 1, 2 (gear records), 3, 4 (formboard) |
 | ECO | `crucible:product`; the GD&T model with its AP242 modifier mapping; weld, hole and composite semantics; flat DXF layer conventions; drawing sheets for the DXF and DWG writers; the `export_resolution` check | WIT records, `Drawing` | 1, 2 |
-| UIX | Solver and motion streams; `SolveReport`, `ContinuityReport` and check Fields; sketch-edit rewrites; metadata for Insert Instance and Add mate; `generate` outcomes as variants; context queries for Edit in context; `auto_drawing`; revision markers | `Field`, `Sketch`, `Context` | 1, 2 |
+| UIX | Solver and motion streams; `SolveReport`, `ContinuityReport` and check Fields; sketch-edit rewrites; metadata for Insert Instance and Add mate; `generate` outcomes as variants; context queries for Edit in context; exploded-view steps; `auto_drawing`; revision markers | `Field`, `Sketch`, `Context` | 1, 2 |
 | AGT | Every std feature with its doc metadata as an agent tool; typed failures with compiling fixes | `FeatureError` | 1 |
 
 ## Oracles
@@ -1503,7 +1503,7 @@ Gate contributions follow contract 13; per-capability phases are in the capabili
 | Phase | MEC's contribution to the gate |
 | --- | --- |
 | 0 | Certified solver core and modular-rank diagnosis on `linalg`; role conventions; data-package format; MEC corpus in the determinism suite |
-| 1 | GP1: sketches and sketch edits, extrusions, revolutions and circular sweeps with full role vocabularies, holes and threads from formulas with no licensed table, stage 1 blends, shells, draft, patterns, push-pull, basic mates, GD&T with closed modifier lists and PMI target checks, general tolerances, geometry at tolerance points, 1D stacks with GD&T contributors and fastener assemblability, drawings with drafting conventions and characteristic balloons, DXF write of sheets, AP242 PMI with export resolution, identities, declared mass properties, `crucible:product`. GP2: strut lattices, generative design for additive and unrestricted methods, text, emboss, hull, printed threads on the mesh path, lattice zones on drawings, strut-strength and buckling checks on their classes with gauge functionals |
+| 1 | GP1: sketches and sketch edits, extrusions, revolutions and circular sweeps with full role vocabularies, holes and threads from formulas with no licensed table, stage 1 blends, shells, draft, patterns, push-pull, basic mates, explode steps, GD&T with closed modifier lists and PMI target checks, general tolerances, geometry at tolerance points, 1D stacks with GD&T contributors and fastener assemblability, drawings with drafting conventions and characteristic balloons, DXF write of sheets, AP242 PMI with export resolution, identities, declared mass properties, `crucible:product`. GP2: strut lattices, generative design for additive and unrestricted methods, text, emboss, hull, printed threads on the mesh path, lattice zones on drawings, strut-strength and buckling checks on their classes with gauge functionals |
 | 2 | GP3: gear records with exact flanks and data tables for COV's ratings, shafts, fastener Instance sets, kinematics and motion studies, path mates, in-context design through context pins, completeness, 3D variation. GP4: weldments with execution classes, sheet metal with shop styles, compliant variation, revision markers. Also lofts and general sweeps, freeform surfaces, moving, replacing and deleting faces, stage 2 blends, exact threads, sheet-cell lattices, datum targets, dialect conversion, generative design for milling, two-axis cutting and casting, reference images, 2D-only sheets with DXF and DWG, DXF import to sketches |
 | 3 | GP5: moulded part design, control-vertex editing with G3 surfaces, SubD, routing, automatic drawings, mate inference, tolerance allocation; belt and chain couplings |
 | 4 | GP6: composite laminates with laminate rules, harness bundles from ELX wire lists, formboards, scan to CAD, skin model shapes, cast parts; the 100,000-Instance open target |

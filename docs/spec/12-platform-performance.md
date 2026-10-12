@@ -210,7 +210,7 @@ Rules that keep code on the combinators are lints, and each lint names the tool 
 | Mechanism | Choice | Failure behavior |
 | --- | --- | --- |
 | Allocator | mimalloc v3 natively; Rust's wasm32 allocator in browsers | `try_reserve` failure: `ResourceExhausted` Abort |
-| Budgets | A `MemoryBudget` tree for CAS residency, GPU staging and Op scratch | Waits 2 s for eviction, then `ResourceExhausted { requested, available, fix }` |
+| Budgets | A `MemoryBudget` tree for CAS residency, GPU staging and Op scratch | Waits 2 s for eviction, then the `ResourceExhausted` Abort |
 | Scratch | A `bumpalo` arena per Op execution | Counts against the reservation |
 | Mapped CAS objects | Read-only maps for objects of 1 MiB or more, local file systems only | Network or cloud-synced file system: buffered reads |
 | Out-of-core buffers | `ChunkedBuffer<T>`: 1 MiB CAS chunks, CLOCK eviction | Hash mismatch: `CasError::Corrupt`, recomputed |
@@ -305,7 +305,7 @@ The dense target is within 2.5 times faer's `CpuIsa` time for n ≥ 1,000; spars
 | GPU dispatch rule | 4, 16 and 100 ms; display work on the UI device | Overlong dispatch split; repeated resets disable GPU compute | PLT-O-GPU-4 | 1 |
 | `f64` GPU server paths | Vulkan `SHADER_F64`, certified on the CPU | Missing feature: CPU path | PLT-O-GPU-1 | 3 |
 | Canonical dense linear algebra | Fixed blocking, no FMA, index-ordered pivot ties; frozen versions | Divergence fails the suite | PLT-O-LA-1 | 0 |
-| Canonical sparse factorization | FLX's supernodal elimination and block-triangular LU, thread-count independent | Divergence fails the suite | PLT-O-LA-1 | 1 (sequential supernodal), 2 (parallel; block-triangular LU) |
+| Canonical sparse factorization | FLX's supernodal elimination and block-triangular LU, thread-count independent | Divergence fails the suite. Requires: FLX Canonical direct solvers | PLT-O-LA-1 | 1 (sequential supernodal), 2 (parallel; block-triangular LU) |
 | faer in `CpuIsa` | Pinned cache detection; never in a `Portable` dependency closure | cargo-deny rejects the dependency | PLT-O-DET-5 | 1 |
 | Linear algebra speed | Dense within 2.5 times faer `CpuIsa` | Regression filed nightly | PLT-O-LA-2 | 1 |
 
@@ -381,7 +381,7 @@ The engine process holds every open repository, token and device key. Wasmtime's
 
 Until PLT-O-WASM-6 passes in a browser engine, including its WebRTC, DNS-prefetch and preconnect cases, that engine evaluates third-party components remotely.
 
-**Decision D-PLT-43:** Every process running untrusted code starts with no network: Wasm workers, translator hosts, External Op hosts, tool processes and stdio MCP servers; Windows uses AppContainers without network capabilities, macOS the App Sandbox without network entitlements, Linux empty network namespaces and servers microVMs without a network device, and endpoints that a manifest names and an administrator grants (contract 7.8) go through a host relay that connects only to the addresses the grant pins.
+**Decision D-PLT-43:** Every process running untrusted code starts with no network: Wasm workers, translator hosts, External Op hosts, tool processes and stdio MCP (Model Context Protocol) servers; Windows uses AppContainers without network capabilities, macOS the App Sandbox without network entitlements, Linux empty network namespaces and servers microVMs without a network device, and endpoints that a manifest names and an administrator grants (contract 7.8) go through a host relay that connects only to the addresses the grant pins.
 *Why:* untrusted native code with labelled inputs and a socket would bypass every audited exit, and Landlock filters by port, not by address [Landlock].
 *Rejected:* egress rules by DNS name; per-OS firewall rules; no egress at all (licence servers need it).
 
@@ -391,16 +391,16 @@ A desktop may also run an External Op locally, such as ngspice with a vendor's S
 
 ### Worlds, calls and failures
 
-ECO defines the worlds and PLT enforces them. Tool and connector worlds use WASI 0.3, and an import a world does not grant fails at install with `ForbiddenImport { import, fix }`. Evaluation worlds import no WASI, their `crucible:ops` imports are callback-ABI async functions, results never depend on completion order, and host time never counts as fuel. A batched call carries many operation calls in one round trip and returns results in call order.
+ECO defines the worlds ([ECO, Determinism and limits](11-interop-ecosystem.md#determinism-and-limits)) and PLT enforces them: an import a world does not grant fails at install with `ForbiddenImport { import, fix }`. A batched call carries many operation calls in one round trip and returns results in call order.
 
 Limits end a call in one of two ways, from KLN's one catalog in `base-op`. A limit the call itself declared is part of its inputs, so hitting it is a deterministic `Failure`; a limit the environment imposed is an Abort.
 
 | Event | Outcome | Cached |
 | --- | --- | --- |
 | Trap in Wasm component code | `Failure`: `Trap { code, function, fix }` | Yes |
-| The call's own fuel limit | `Failure`: `FuelExhausted { used, limit }` | Yes |
-| Logical stack limit | `Failure`: `StackExhausted { limit }` | Yes |
-| `memory.grow` beyond the declared maximum | Returns −1; the component decides | As its outcome |
+| The call's own fuel limit | `Failure`: `kiln/fuel_exhausted { used, limit }` | Yes |
+| Logical stack limit | `Failure`: `kiln/stack_exhausted { limit }` | Yes |
+| `memory.grow` beyond the declared maximum | `Failure`: `kiln/memory_limit { limit }` (contract 7.2) | Yes |
 | Host memory unavailable below the maximum | Abort: `ResourceExhausted` | Never |
 | Evaluation fuel governor or work budget exhausted | Abort: `BudgetExhausted` | Never |
 | An organization ceiling below a source limit, at admission | Abort: `FuelCeilingExceeded` | Never |
@@ -449,7 +449,7 @@ Each row depends only on rows below it; the `apps/platform-*` crates at the side
 
 ### OS services
 
-Every PLT error implements `Guidance` (`why`, `fix`), which maps into the `api` error shape. The services are `Storage`, `Journal`, `WindowHost`, `FileWatcher`, `Clipboard`, `Dialogs`, `Notifications`, `CredentialStore`, `SystemSignals`, `WallClock`, `Monotonic`, `Spawner`, `SharedRing`, `DeviceIo`, `CryptoProvider` and `Authenticator` (signatures in Reference).
+Every PLT error implements `Guidance` (`why`, `fix`), which maps into the `api` error shape. The services are `Storage`, `Journal`, `WindowHost`, `FileWatcher`, `Clipboard`, `Dialogs`, `Notifications`, `CredentialStore`, `SystemSignals`, `WallClock`, `Monotonic`, `Spawner`, `SharedRing`, `DeviceIo`, `CryptoProvider`, `AccessibilityHost` and `Authenticator` (signatures in Reference).
 
 - `Monotonic` is a monotonic clock for watchdogs and safe-point cadences, never visible to evaluation; `WallClock` never reaches evaluation either. `Spawner` runs async tasks on the IO runtime. Both exist because `std::time::Instant::now()` "will simply panic" on `wasm32-unknown-unknown` [web-time].
 - `DeviceIo` opens serial and USB ports outside evaluation for MFG's machine gateway and ELX's bench adapters.
@@ -465,11 +465,10 @@ Approvals are the one place a person's intent must not be forged by a process ac
 
 `Authenticator` opens that page for one request id and reports when the ceremony ends. It never handles a credential.
 
-Three rules from contract 7.6 land here:
+Two rules from contract 7.6 land here:
 
-- **Local credentials.** `CredentialStore` holds the device credential, which authenticates as `agent:<org>/local/<device>` with `Declared` assurance, never as the person. A human-only method (merge, text endorsement, waiver, declassification, a local write above `public`) first calls `Authenticator` for a WebAuthn assertion bound to the call's argument digest and valid for one call. An agent with a shell tool running the CLI therefore never merges or exports as the person.
+- **Local credentials.** `CredentialStore` holds the device credential, which authenticates as `agent:<org>/local/<device>` with `Declared` assurance, never as the person. A human-only method (contract 7.6's list, a local write above `public` included) first calls `Authenticator` for a WebAuthn assertion bound to the call's argument digest and valid for one call. An agent with a shell tool running the CLI therefore never merges or exports as the person.
 - **Enrolment.** Enrolling an approval credential uses the same session and is itself approved on the approval origin under the signature table (contract 5.4). Platform passkeys on macOS, iPadOS and Android are backup-eligible, so those devices approve with a roaming security key.
-- **Cookies.** The approval origin sets only `__Host-` cookies, which the browser keeps host-only [MDN Set-Cookie], and rejects any request carrying another cookie, so the main origin cannot toss a session onto it. Hosted deployments serve it from a separate registrable domain, and it publishes no WebAuthn related-origins file.
 
 ### Paths, text, fonts and accessibility
 
@@ -479,7 +478,7 @@ Three rules from contract 7.6 land here:
 *Why:* a name valid only on Linux, or two names differing only in case, splits a team across operating systems.
 *Rejected:* OS-native paths; silent normalization at checkout (two names map to one file).
 
-**Decision D-PLT-6:** Repository text is UTF-8 with LF line endings and no byte-order mark, and readers normalize CRLF, CR and a BOM on input.
+**Decision D-PLT-6:** Repository text is UTF-8 with LF line endings and no byte-order mark, and readers normalize CRLF, CR and a byte-order mark on input.
 *Why:* content hashes must not depend on the OS that wrote the file.
 *Rejected:* per-OS line endings converted at checkout (hashes depend on settings).
 
@@ -512,7 +511,7 @@ Three rules from contract 7.6 land here:
 | FIPS-mode cryptography | `CryptoProvider` through a FIPS 140-3 module natively; WebCrypto in browsers | Non-approved algorithm refused | KLN-O-SIG-2 | 2 |
 | System signals | Memory pressure, power, thermal state, scale, reachability | Unavailable signal: `Unknown` | PLT-O-OS-1 | 1 |
 | Portable paths | `RepoPath::parse`; OS paths only in `apps/platform-*` | `PathError` with a portable name | PLT-O-OS-5 | 0 |
-| Text normalization | UTF-8, LF, no BOM | `TextError::InvalidUtf8 { offset }` | PLT-O-OS-6 | 0 |
+| Text normalization | UTF-8, LF, no byte-order mark | `TextError::InvalidUtf8 { offset }` | PLT-O-OS-6 | 0 |
 | Design fonts | Registry fonts pinned by hash | `FontError::MissingGlyph { char, font }`, never a substitution | PLT-O-OS-6 | 1 |
 
 ## Targets
@@ -695,7 +694,7 @@ Each deployment mode, from one laptop to an air-gapped site, runs the same featu
 | Regulated cloud | Contract 7.7's regulated mode; classified information is out of scope in every mode | FoundationDB | 3 |
 | On-premises and air-gapped | The cloud stack on Kubernetes, or a team server; air-gapped adds no external network and an offline licence | PostgreSQL or FoundationDB | 2, 3 |
 
-A desktop is a full peer under KLN's local-first rule: without a team server it designs, simulates, evaluates, presents and exports locally, while Proposals, releases and every Act need one (contract 13.2). Tenant onboarding applies ECO's sector rule. KLN owns what runs inside these modes: offline work, mirrors, federation, air-gapped bundles, the restore verifier and the scale targets ([KLN, Live sessions and offline work](05-kiln-repo-plm.md#live-sessions-and-offline-work)).
+A desktop is a full peer under KLN's local-first rule: without a team server it designs, simulates, evaluates, presents and exports locally, while Proposals, releases and every Act need one (contract 13.2). Tenant onboarding applies ECO's restricted-jurisdiction rule. KLN owns what runs inside these modes: offline work, mirrors, federation, air-gapped bundles, the restore verifier and the scale targets ([KLN, Live sessions and offline work](05-kiln-repo-plm.md#live-sessions-and-offline-work)).
 
 ### The team server
 
@@ -704,6 +703,8 @@ A desktop is a full peer under KLN's local-first rule: without a team server it 
 *Rejected:* one container (no KVM, and one boundary for both pools); requiring bare metal.
 
 The installer reports the active sandbox back end. The trusted builder has no access to the sandbox's sockets or images. In single-host mode External Ops are not offered, and every release records "single host" (contract 7.8).
+
+A team server either hosts a repository's Git home itself, over smart HTTP and SSH with an LFS endpoint for large Assets, or works beside an existing Git host as a required status check on protected branches (contract 7.1).
 
 On-premises sites run the cloud stack from one Helm chart on Kubernetes, or a team server. Air-gapped sites add no external network, an offline licence and the offline bundles of the next section.
 
@@ -751,7 +752,7 @@ The gateway connects outbound only, and readings from one without a TPM carry `d
 | Snapshot | Versions of all targets metadata | 1 online key | 7 days |
 | Timestamp | The snapshot's hash | 1 online key | 1 day |
 
-The updater checks timestamp metadata at start-up and every 4 hours, rejects expired metadata and lower versions, and installs at the next start. A new version self-tests within 60 s and rolls back on failure or after two crashes in 10 minutes. Stable releases roll out to 1%, 10%, 50% and 100% over at least 4 days and halt if crash rates rise 20% (target). Update servers refuse the countries of ECO's sector rule.
+The updater checks timestamp metadata at start-up and every 4 hours, rejects expired metadata and lower versions, and installs at the next start. A new version self-tests within 60 s and rolls back on failure or after two crashes in 10 minutes. Stable releases roll out to 1%, 10%, 50% and 100% over at least 4 days and halt if crash rates rise 20% (target). Update servers refuse the jurisdictions of ECO's restricted-jurisdiction dataset.
 
 **Decision D-PLT-37:** Every signature PLT produces or verifies (artifacts, TUF metadata, web manifests, provenance) is a detached record carrying an algorithm id; from phase 2, TUF root and targets metadata and provenance are dual-signed with a classical signature plus ML-DSA-87 (FIPS 204), LMS signs only the steward's software releases under contract 7.8's rules, and long-retention records are re-timestamped before an algorithm retires.
 *Why:* releases must verify for decades [FIPS 204], and a stateful scheme breaks if an HSM cluster replicates its one-time keys.
@@ -767,7 +768,7 @@ From phase 2 one policy schema applies on every OS through ADMX, configuration p
 | --- | --- | --- | --- | --- |
 | Phase 1 app packages | MSIX, notarized DMG, deb and rpm, OCI images, web assets | An unsigned artifact blocks the release | PLT-O-PKG-2 | 1 |
 | Further formats | MSI wrapper, `.pkg`, Flatpak, AppImage | An unsigned artifact blocks the release | PLT-O-PKG-2 | 2 |
-| Machine gateway packages | `apps/machine-gateway` for Windows 11 x86-64 and Linux; TPM-held key | No TPM: readings `data_untrusted` | PLT-O-PKG-2 | 2 |
+| Machine gateway packages | `apps/machine-gateway` for Windows 11 x86-64 and Linux; TPM-held key | No TPM: readings `data_untrusted`. Requires: MFG Gateway | PLT-O-PKG-2 | 2 |
 | TUF-verified updates | Full signed packages; expiry, rollback and freeze checks | The installed version stays, with a report | PLT-O-PKG-1 | 1 |
 | Delta updates | Block maps, Zucchini and generic patches | Failed patch hash: full file | PLT-O-PKG-1 | 2 |
 | Self-test and rollback | 60 s self-test; rollback on failure or two early crashes | Rollback and a filed report | PLT-O-PKG-1 | 1 |
@@ -844,7 +845,7 @@ Telemetry collects timings, memory, band, ISA, `GpuClass`, OS, version, command 
 | Storage placement | CAS, journal and caches outside synced folders and backups | `StorageError::CloudSynced { path, fix }` | PLT-O-PRIV-1 | 1 |
 | Clipboard exclusion | History and cloud exclusion; policy can deny | A denied copy explains the policy | PLT-O-PRIV-1 | 1 |
 | Telemetry pipeline | One schema; opt-in; rotating id; thresholds; retention; EU region | Schema violation: upload rejected | PLT-O-PRIV-2 | 2 |
-| Egress allowlist | Policy-listed hosts only | Blocked host logged locally | PLT-O-PRIV-2 | 2 |
+| Egress allowlist and webhook proxy | Policy-listed hosts only; webhook deliveries through a proxy that checks each resolved address against ECO's address rules at connect time | Blocked host or refused address logged | PLT-O-PRIV-2, ECO-O-14 | 1 (webhook proxy), 2 |
 
 ## Build, release and CI
 
@@ -858,7 +859,7 @@ Agents build Crucible against oracles, so the toolchain, the supply chain and th
 *Why:* the engine links hundreds of crates while holding every key, `safe-to-deploy` means a crate "will not introduce a serious security vulnerability to production software exposed to untrusted input" [cargo-vet criteria], and a crate's own comments and docs can instruct an agent that audits it.
 *Rejected:* licence and advisory checks alone; agent-written `safe-to-deploy` audits; avoiding young crates.
 
-cargo-vet supports custom criteria and implication chains between them [cargo-vet audit criteria]. `deps/approved.toml` records each core dependency's risk class, cadence and fork plan.
+cargo-vet supports custom criteria and implication chains between them [cargo-vet audit criteria]. `deps/approved.toml` records each core dependency's risk tier, cadence and fork plan.
 
 A new version of a dependency waits 14 days. A hijacked maintainer account can publish an advisory and a "fix" together, so a version skips the wait only when all three of these hold:
 
@@ -984,7 +985,7 @@ Many agents merging in parallel would each pass a per-merge gate while the total
 | `gpu` | `core/` | Devices, pipelines, known-answer tests, integer reductions, recovery | Allowed |
 | `wasm-host` | `core/` | Determinizer, `WasmComponentEngine` trait, Wasmtime implementation and sandbox workers (not on wasm32) | Allowed |
 | `linalg`, with frozen versions `linalg-v<n>` | `core/` | Canonical dense and sparse linear algebra, with FLX | Forbidden |
-| `platform-windows`, `platform-apple`, `platform-linux`, `platform-web`, `platform-android` | `apps/` | The only crates that bind OS APIs; `platform-web` holds the browser `WasmComponentEngine` and WebCrypto | Allowed |
+| `platform-windows`, `platform-apple`, `platform-linux`, `platform-web`, `platform-android` | `apps/` | The only crates that bind OS APIs; `platform-web` holds the browser `WasmComponentEngine` and WebCrypto; ELX's flashing service and bench adapters live here | Allowed |
 | `desktop`, `web`, `mobile`, `server`, `cli`, `ci-runner`, `tool-runner` (with ECO) | `apps/` | Entry points and packaging metadata | Forbidden |
 | `attestation` | `apps/` | KLN's attestation service, packaged by PLT | Forbidden |
 | `core-math` | `bridges/` | CORE-MATH's C build behind safe functions | Allowed |
@@ -1051,6 +1052,10 @@ pub trait SharedRing: Send + Sync {
     fn publish(&self, slot: u32, bytes: &[u8]) -> Result<(), RingError>;   // writer side
     fn read(&self, slot: u32) -> Result<Vec<u8>, RingError>;               // seqlock copy-out, owned bytes
 }
+pub trait AccessibilityHost: Send + Sync {   // AccessKit adapter per window; DOM mirror on the web
+    fn push(&self, window: WindowKey, update: accesskit::TreeUpdate) -> Result<(), AccessibilityUnavailable>;
+    fn take_actions(&self, window: WindowKey) -> Vec<accesskit::ActionRequest>;   // focus and actions routed back
+}
 pub trait Authenticator: Send + Sync {
     async fn approve(&self, request: ApprovalRequestId) -> Result<CeremonyOutcome, AuthError>;
     async fn assert_call(&self, method: &str, args_digest: [u8; 32]) -> Result<CallAssertion, AuthError>;
@@ -1082,7 +1087,7 @@ pub enum RanOn { Gpu(GpuClass), Cpu { reason: CpuReason } }
 ```
 
 ```rust
-// base-op, owned by PLT
+// base-op (KLN's crate); this type is PLT's
 pub enum PlatformClass {
     CpuCanonical { epoch: u16 },
     CpuIsa { isa: IsaLevel, epoch: u16 },          // X86_64V2..V4, Arm64Neon, Wasm32Simd128
@@ -1097,7 +1102,7 @@ pub trait WasmComponentEngine: Send + Sync {   // Wasmtime, sandbox worker, brow
     fn install(&self, determinized: &[u8], world: &WorldSpec) -> Result<InstalledWasmComponent, WasmComponentError>;
     fn instantiate(&self, c: &InstalledWasmComponent, limits: CallLimits) -> Result<Box<dyn WasmInstance>, WasmComponentError>;
 }
-pub struct CallLimits { pub fuel: u64, pub stack_frames: u32, pub max_memory_bytes: u64 }
+pub struct CallLimits { pub fuel: u64, pub logical_stack_bytes: u32, pub max_memory_bytes: u64 }
 ```
 
 ### WIT interfaces
@@ -1115,7 +1120,7 @@ interface chunk-worker {
 }
 ```
 
-A world that imports `parallel` must export `chunk-worker`. `map-chunks` calls the exported `chunk` once per index on fresh instances, on any thread count, and returns outputs in index order or the lowest failing index. Each chunk runs with the caller's remaining fuel as its limit and the sum is charged afterwards, so `FuelExhausted` never depends on thread count.
+A world that imports `parallel` must export `chunk-worker`. `map-chunks` calls the exported `chunk` once per index on fresh instances, on any thread count, and returns outputs in index order or the lowest failing index. Each chunk runs with the caller's remaining fuel as its limit and the sum is charged afterwards, so `kiln/fuel_exhausted` never depends on thread count.
 
 ```wit
 package crucible:tool@0.1.0;
@@ -1188,7 +1193,7 @@ Contract 13.4's parity floor assigns PLT no capability. The rows below compare w
 | Capability | Incumbent and its documented feature | Crucible's capability row and phase | Standing |
 | --- | --- | --- | --- |
 | Operating systems | Ansys 2026 R1 focuses on Windows and Linux on Intel and AMD x86, with a few products on ARM64 [Ansys platform strategy 2026] | Tier 1 general availability and Tier 1 preview: Windows, macOS, Linux on x86-64 and ARM64, and four browser engines; phases 1 and 2 | Ahead: macOS, ARM64 and browsers with identical features |
-| GPU acceleration | Ansys 2026 R1's fully resident GPU solvers are tested on NVIDIA and, for Fluent, AMD Instinct and Intel GPUs, on Windows and Linux [Ansys GPU compute 2026 R1] | GPU paths with CPU paths, on every Tier 1 GPU including Apple silicon and WebGPU, phase 1; `f64` GPU server paths, phase 3 | Ahead on reach; Later on `f64` GPU sign-off solves, which wait for phase 3 Vulkan servers |
+| GPU acceleration | Ansys 2026 R1's fully resident GPU solvers are tested on NVIDIA and, for Fluent, AMD Instinct and Intel GPUs, on Windows and Linux [Ansys GPU compute 2026 R1] | GPU paths with CPU paths, on every Tier 1 GPU including Apple silicon and WebGPU, phase 1; `f64` GPU server paths, phase 3 | Ahead on reach; Later on `f64` GPU `SignOff` solves, which wait for phase 3 Vulkan servers |
 | Reproducible numerics | Intel oneMKL reproduces bits only at a fixed thread count, except a few BLAS routines in strict mode on AVX2 or AVX-512 [Intel oneMKL reproducibility] | Platform classes and the determinism suite, phase 0 | Ahead: identical bits at any thread count, instruction set, OS and browser |
 
 ## Platform notes
@@ -1211,12 +1216,12 @@ Contract 13.4's parity floor assigns PLT no capability. The rows below compare w
 | `repo` | Journal, atomic writes, locks, watching, portable paths, text normalization | `Journal`, `WatchEvent`, `RepoPath` | 0 |
 | ANV | Canonical SIMD lanes, `detmath`, `det_sum`, `exact_sum`, `linalg` and its frozen versions, GPU paths, archived engines for retired versions, the Parley stack under `anvil::text_outline` | `simd`, `detmath`, `GpuPath`, `GpuStop` | 0 |
 | FLX | `detmath`, combinators, `linalg` jointly, `gpu` with known-answer tests, the dispatch and agreement rules, FMA families, the class enum, the browser memory table, witness-role GPU paths | `GpuCompute`, `GpuPath`, `GpuStop`, `RanOn`, `PlatformClass` | 0 |
-| UIX | Windows, input and IME, accessibility hosting, clipboard, dialogs, surfaces, shared display rings, the approval session, hardware profile, workarounds, device loss, safe mode, crash monitor, the `Drag` lane, dispatch rule, memory caps, browser rows, telemetry pipeline, renderer image, native-code register | `WindowHost`, `AccessibilityHost`, `SharedRing`, `Authenticator` | 0 |
+| UIX | Windows, input and IME, accessibility hosting, clipboard, dialogs, surfaces, shared display rings, the approval session, hardware profile, workarounds, device loss, safe mode, crash monitor, the `Drag` lane, dispatch rule, memory caps, browser rows, telemetry pipeline, renderer image, native-code register | `WindowHost`, `AccessibilityHost`, `SharedRing`, `Authenticator` | 0; 1 (shared rings, approval session, device loss, safe mode); 2 (telemetry) |
 | ING | Executors, the determinizer, verification of generated modules, `detmath` and `det_sum` (Ingot's `sum`), text normalization, the `Drag` lane, the browser memory table | `WasmComponentEngine`, `CallLimits` | 0 |
-| ECO | The determinizer with install-time re-runs, the overhead table, Wasmtime LTS, world enforcement, sandboxes with default-deny egress, local External Op sandboxes, the browser runtime and sandbox site, `crucible:tool/process`, offline bundles, TUF and signature formats, release lines and support periods | `WasmComponentEngine`, `CallLimits` | 0 |
+| ECO | The determinizer with install-time re-runs, the overhead table, Wasmtime LTS, world enforcement, sandboxes with default-deny egress, local External Op sandboxes, the browser runtime and sandbox site, `crucible:tool/process`, offline bundles, TUF and signature formats, release lines and support periods, the webhook egress proxy | `WasmComponentEngine`, `CallLimits` | 0; 1 (install-time re-runs, browser runtime, webhook proxy); 2 (sandbox site, `crucible:tool/process`, LTS lines); 3 (offline bundles, local External Op sandboxes) |
 | AGT | `api` transport, `CredentialStore` with the device credential, the approval session and per-call assertions, `Usage` measurement, the stdio sandbox for external MCP servers, the pool lanes behind `PriorityClass`, the build program's taint and audit rules | `Guidance` errors, `Authenticator` | 0 |
 | MEC, COV | `linalg`; for MEC also `detmath`, the `Drag` lane and Parley shaping; for COV also `f64` availability per class, with no emulated `f64` on WebGPU, and the browser memory table | `linalg`, `PlatformClass` | 0 |
-| ELX | `detmath`, the `Drag` lane, the browser memory table, serial and USB access, local External Op sandboxes for vendor models, registry font packages (FLX owns circuit LU) | `DeviceIo` | 1 |
+| ELX | `detmath`, the `Drag` lane, the browser memory table, serial and USB access, hosting of ELX's flashing service and bench adapters in `apps/platform-*`, local External Op sandboxes for vendor models, registry font packages (FLX owns circuit LU) | `DeviceIo` | 1; 2 (serial and USB); 3 (flashing service) |
 | MFG | Packages for `apps/machine-gateway`, serial and USB access, the TPM-held gateway key, the browser memory table | `DeviceIo` | 2 |
 
 ## Oracles
@@ -1375,7 +1380,6 @@ None.
 | MDN iframe | `<iframe>` element, MDN | https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/iframe | 2026-10-11 |
 | MDN OPFS | Origin private file system, MDN | https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system | 2026-10-11 |
 | MDN script-src | CSP script-src, 'wasm-unsafe-eval', MDN | https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/script-src | 2026-10-12 |
-| MDN Set-Cookie | Set-Cookie header, cookie prefixes, MDN | https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie | 2026-10-12 |
 | MDN showDirectoryPicker | `Window.showDirectoryPicker()`, MDN | https://developer.mozilla.org/en-US/docs/Web/API/Window/showDirectoryPicker | 2026-10-11 |
 | MDN storage quotas | Storage quotas and eviction criteria, MDN | https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria | 2026-10-11 |
 | MDN SubtleCrypto digest | `SubtleCrypto.digest()`, MDN | https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/digest | 2026-10-11 |

@@ -73,7 +73,7 @@ Six kinds of data make up an electronics design. Geometry stays in Bodies and re
 *Rejected:* the drawing as the source, as in KiCad and Altium, whose geometric connectivity merges badly; drawings generated from code, which lose the signal-flow layout engineers read; an unchecked drawing beside the code.
 
 **Decision D-ELX-2:** Every catalog part used in a network is an Instance of the Part its definition package describes; the bare board is a Part, and the assembled board an Assembly.
-*Why:* one derived BOM view covers mechanical and electrical items, and moving a part in layout is the same edit as moving it in the assembly.
+*Why:* one computed BOM view covers mechanical and electrical items, and moving a part in layout is the same edit as moving it in the assembly.
 *Rejected:* a separate symbol-instance concept, which duplicates Instance and needs a synchronization step.
 
 [[DIAGRAM diagrams/08-electronics-source-model.jsx: electrical source model · what editors write and what Kiln derives]]
@@ -226,7 +226,7 @@ pub const drawing = schematic(of: buck_3v3, frame: a4,
 ```
 
 **Decision D-ELX-27:** `Schematic` and `Layout` stay Ingot text with no binary sidecar: each is a module of `table { … }` literals whose rows are atomic merge blocks.
-*Why:* a second storage format would bypass block-level merge, live documents, span provenance, text-derived `CallSite`s and Git export.
+*Why:* a second storage format would bypass block-level merge, live documents, span provenance, text-derived `CallSite`s and Git storage.
 *Rejected:* a binary sidecar keyed by statement identity, even as a fallback for very large boards; one module per board whatever its size.
 
 ING's row lexer parses rows without the general syntax tree and builds lossless nodes lazily on edit. The target is 10⁶ rows, about a 20-layer, 10,000-net board (an estimate), parsed and hashed in under 1 s natively. Above it, the layout splits into modules by board region, which merges and live documents already handle.
@@ -251,7 +251,7 @@ Agents and the code editor change connectivity in text, so without help every su
 *Why:* agents cannot draw by gesture, yet the drawing must match the network before release, so a reviewable proposal keeps both agent speed and human-readable schematics.
 *Rejected:* generating the whole drawing from code on every rebuild, which discards signal-flow layout; leaving code-only connections for a person to draw.
 
-The component routes short connections as wires and uses net labels when a wire would cross more than a stated number of symbols (default 3). It orders its work by canonical numbers, never by names, so the same inputs give the same rows.
+`autodraw` routes short connections as wires and uses net labels when a wire would cross more than a stated number of symbols (default 3). It orders its work by canonical numbers, never by names, so the same inputs give the same rows.
 
 ### Electrical rule checks
 
@@ -261,7 +261,7 @@ Electrical rule checks (ERC) live in `std::electronics::erc` and re-run only for
 
 A row diff of segment coordinates says nothing to an electrical reviewer, and a geometric diff of copper shows where things changed but not what changed electrically.
 
-**Decision D-ELX-32:** Proposal review of electronics shows three derived views, each a Kiln node: a schematic diff, a layout diff and a net-partition diff.
+**Decision D-ELX-32:** Proposal review of electronics shows three computed views, each a Kiln node: a schematic diff, a layout diff and a net-partition diff.
 *Why:* incumbent electronics review is visual and net-aware, and computing the views from the net partition and the integer layout data makes them exact and cacheable.
 *Rejected:* row diffs of the data modules, which are unreadable; screenshots of both versions, which hide connectivity changes; geometric diffs alone, which miss a pin moved to another net.
 
@@ -329,12 +329,12 @@ A selection is a pure function over pinned definitions, plus pinned offers when 
 When a board's layout is first released or locked, each selection records its part in the BOM data module as `resolved: parts::…`. Re-resolution then opens a Proposal with its reason ("selection now prefers X") instead of changing the part. A re-pick that changes the land pattern fails with `SelectionChangesLandPattern`, and ranked picks never change a released assembly BOM outside a change order.
 
 **Decision D-ELX-22:** An organization's parts-policy package lists approved internal part numbers with approved manufacturers, lifecycle and preferred flags; a `CatalogSelection` resolves over approved parts first and reaches the open catalog only under a Waiver.
-*Why:* companies design with internal numbers their parts engineers control, so open-catalog picks alone make the design, the ERP system and the assembly BOM disagree.
+*Why:* companies design with internal numbers their parts engineers control, so open-catalog picks alone make the design, the enterprise resource planning (ERP) system and the assembly BOM disagree.
 *Rejected:* manufacturer part numbers only; an approved-parts database outside the repository.
 
 BOM views list each internal number with its approved manufacturers. A new-part request is one Proposal creating the internal number, its facets and its approved manufacturers, and MEC's fastener selection reads the same policy.
 
-Parts go end-of-life, and that is the main reason released BOMs change. ECO's catalog connector turns a manufacturer's lifecycle change or product change notice into a dated External input update on a monitoring branch, never on released source. KLN's nightly obsolescence check then reports each affected end item ([KLN, BOM views and where-used](05-kiln-repo-plm.md#bom-views-and-where-used)). The report lists the Items and effectivity, alternates found by re-running each `CatalogSelection` without the part, and a last-time-buy quantity when ERP demand is available. ELX's part is that every selection can re-run with exclusions and report its candidates.
+Parts go end-of-life, and that is the main reason released BOMs change. ECO's catalog connector turns a manufacturer's lifecycle change or product change notice into a dated External input update on a monitoring branch, never on released source. KLN's nightly obsolescence check then reports each affected end item ([KLN, Where-used](05-kiln-repo-plm.md#where-used)). ELX's part is that every selection can re-run with exclusions and report its candidates.
 
 ### Footprints and symbols
 
@@ -355,7 +355,7 @@ Symbols are generated from the pin table, which is the source, as KiCad 10's CSV
 
 ### Creating and migrating catalog parts
 
-1. **From a datasheet.** An agent extracts values into a record Proposal, citing page and table for each. AGT's quarantined extraction reads the datasheet, so the values are `data_untrusted` and the agent's context stays clean ([AGT, Quarantined extraction](09-agents.md#quarantined-extraction-and-external-hosts)); a person approves.
+1. **From a datasheet.** An agent extracts values into a record Proposal, citing page and table for each. AGT's quarantined extraction reads the datasheet, so the values are `data_untrusted` and the agent's context stays clean ([AGT, Quarantined extraction](09-agents.md#quarantined-extraction)); a person approves.
 2. **From libraries.** KiCad libraries import into organization-private packages, or into public packages licensed CC-BY-SA-4.0 with attribution kept, because KiCad's licence binds redistributed collections [KiCad library licence]. EAGLE XML arrives through ECO's importer. Altium, CADSTAR, EasyEDA, P-CAD, Fabmaster, Allegro and PADS files arrive through KiCad 10's importers in a pinned container. KiCad 10 reads Allegro boards from versions 16 to 23, and PADS schematics and boards [KiCad 10 importers].
 3. **By hand.** The symbol and footprint editors write the same data modules.
 
@@ -564,7 +564,7 @@ Allegro X AI claims a 10× or greater turnaround reduction [Allegro X AI]. Quilt
 
 ### Test points and the manufacturing handoff
 
-`test_point(net, pad:, side:, min_pitch:, keepout_height:)` adds probe access, and an automatic Proposal adds test points to nets without access.
+`test_point(net, pad:, side:, min_pitch:, keepout_height:)` adds probe access, and MFG's test-access analysis proposes test points for nets without access.
 
 MFG owns the factory handoff ([MFG, Electronics and harness manufacturing handoff](07-manufacturing.md#electronics-and-harness-manufacturing-handoff)), and ECO owns every format writer and its phase. IPC-2581C [IPC-2581C release], Gerber X2 and X3 at revision 2026.05 [Ucamco Gerber downloads], drill files, IPC-D-356 test netlists [IPC design standards] and ODB++ [Siemens ODB++] arrive in phase 3. Gerber X3 carries component data for assembly [Gerber X3 release]. KiCad 9's ODB++ export [KiCad 9 release] is an external oracle, and ELX shows writer findings, including IPC-2581C fabricator feedback [IPC-2581 Consortium], on the objects they name.
 
@@ -612,7 +612,7 @@ Gates and `SignOff` checks accept an AMI result only when two single-use runs on
 
 ### Power integrity
 
-Target impedance per rail is the allowed ripple divided by the transient current. The power-delivery network (PDN) impedance comes from Flux's plane-pair cavity model ([FLX, Electromagnetics](03-flux.md#electromagnetics)). It solves a 2D Helmholtz problem on each pair of sheet Bodies, with port, via, capacitor and regulator elements, using Flux's indefinite solvers. Above the plane-pair limit, a full-wave solve is suggested.
+Target impedance per rail is the allowed ripple divided by the transient current. The power-delivery network (PDN) impedance comes from Flux's plane-pair cavity model, phase 4 in contract 13.4 ([FLX, Electromagnetics](03-flux.md#electromagnetics)). It solves a 2D Helmholtz problem on each pair of sheet Bodies, with port, via, capacitor and regulator elements, using Flux's indefinite solvers. Above the plane-pair limit, a full-wave solve is suggested.
 
 Decoupling optimization picks capacitor types, counts and sites by greedy insertion and local search. IR drop solves DC conduction on per-layer copper sheets joined by via and plating resistances, using Flux's layered sheets. A current-capacity screen follows IPC-2152, still current in its original revision [IPC design standards].
 
@@ -646,15 +646,15 @@ Explicit 3D copper serves only local zooms. Convection and the enclosure come fr
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
 | Impedance and RLGC | Cross-section solve to `Field<Frequency, Rlgc>` with tolerance bands | Beyond the quasi-TEM limit flagged; a dielectric without frequency data names the Material | ELX-O-SI-1 | 3 |
-| Post-layout extraction and crosstalk | Nets to S-parameters per net group; NEXT and FEXT within a reported window; full-wave for unmodelled discontinuities | An unmodelled discontinuity is sent to full-wave extraction with its cost reported | ELX-O-SI-1 | 4 |
+| Post-layout extraction and crosstalk | Nets to S-parameters per net group; NEXT and FEXT within a reported window; full-wave for unmodelled discontinuities. Requires: FLX Frequency-domain electromagnetics | An unmodelled discontinuity is sent to full-wave extraction with its cost reported | ELX-O-SI-1 | 4 |
 | S-parameter macromodels | Touchstone data through ECO's codec; vector fitting with passivity enforcement | Non-passive or non-causal data flagged per frequency; failed fit reports its worst error | ELX-O-SI-2 | 4 |
 | Pre-layout topology and channels | Topologies and routed nets to eyes, timing and BER contours; AMI results accepted on matching receipts | A non-linear channel in statistical mode is refused; a missing AMI build is reported | ELX-O-SI-3 | 4 |
 | Interface compliance kits | `std::electronics::compliance` packages per standard edition (DDR, PCIe, USB) as checks over channel results | A kit without its licensed limit table leaves its checks `Undecided` naming the table | ELX-O-SI-4 | 4 |
-| Target impedance and PDN | Masks per rail; plane-pair cavity model with capacitor, via and regulator elements | Missing load data leaves the check `Undecided`; beyond the plane-pair limit flagged | ELX-O-PI-1 | 4 |
+| Target impedance and PDN | Masks per rail; plane-pair cavity model with capacitor, via and regulator elements. Requires: FLX Plane-pair cavity model | Missing load data leaves the check `Undecided`; beyond the plane-pair limit flagged | ELX-O-PI-1 | 4 |
 | Decoupling optimization | Proposal with placements and impedance before and after | An infeasible mask reports the best achievable impedance and failing band | ELX-O-PI-1 | 4 |
 | IR drop and current capacity | Thin-sheet DC conduction per layer; IPC-2152 screen. Requires: FLX Layered sheets | Limit exceeded fails with location, value and limit | ELX-O-PI-1 | 3 |
-| Electro-thermal coupling | Monolithic Newton with continuation (FLX) | `Runaway { power }` at the turning point | ELX-O-PI-2 | 4 |
-| Extracted parasitics as subcircuits | `flux::extract_rlcg` results fitted to passive SPICE subcircuits used as Network elements | Fit error above the stated bound fails with the worst frequency | ELX-O-PWR-1 | 4 |
+| Electro-thermal coupling | Copper self-heating on FLX's monolithic coupling. Requires: FLX Electro-thermal coupling | `Runaway { power }` at the turning point | ELX-O-PI-2 | 4 |
+| Extracted parasitics as subcircuits | `flux::extract_rlcg` results fitted to passive SPICE subcircuits used as Network elements. Requires: FLX RLCG extraction | Fit error above the stated bound fails with the worst frequency | ELX-O-PWR-1 | 4 |
 | Emissions screening | Current Fields to far fields against limit lines; conducted emissions with a LISN model. Requires: FLX FDTD | Screening label; a missing cable or enclosure is listed as an assumption | ELX-O-EMC-1 | 4 |
 | Immunity and ESD screening | Ranked vulnerable nets | Screening label; an injection outside a port's model range is flagged | ELX-O-EMC-1 | 5 |
 | Return-path and EMC rule screening | Geometric checks on every rebuild | Violations with locations | ELX-O-EMC-1 | 3 |
@@ -705,7 +705,7 @@ Every simulation result carries an `ErrorBudget`, and each part names how it was
 | Statistical | Monte Carlo yield and percentiles | `Estimated { Statistical }`: Clopper–Pearson intervals for yield, order-statistic intervals for percentiles, each at a stated α |
 | Model form | A device envelope citing a validated bound, or a policy allowance | `NotQuantified` otherwise |
 
-The temporal rule exists because phase error accumulates in oscillators, LC tanks, phase-locked loops and switching converters, so summed local errors understate it; it follows [FLX, Time integration](03-flux.md#time-integration). When model form is `NotQuantified`, a check's verdict is `Undecided { reason: Unquantified(ModelForm) }` unless a policy allowance quantifies it (contract section 5.6).
+The temporal rule exists because phase error accumulates in oscillators, LC tanks, phase-locked loops and switching converters, so summed local errors understate it; it follows [FLX, Time integration](03-flux.md#time-integration). When model form is `NotQuantified`, a check's verdict is `Undecided { reason: Unquantified([ModelForm]) }` unless a policy allowance quantifies it (contract section 5.6).
 
 Monte Carlo draws from `Tol` distributions with ING's correlation groups, so parts from one reel move together. Random streams come from KLN's counter-based streams, keyed by sample index, never by class, fidelity or names (contract section 7.2). Added samples never change earlier ones. Targets: C6288 with PSP103.4 models within 1.2× of VACASK's time; 10,000 samples of a 200-node circuit's AC response in under 60 s on the reference laptop.
 
@@ -734,7 +734,7 @@ Crucible ships the engines, and handbook tables are licensed data packages under
 | Operating point | Newton with damping; gmin, source stepping and pseudo-transient homotopy in order. Requires: FLX Block-triangular sparse LU | Non-convergence returns the largest-residual nodes and a fix, such as a missing DC path | ELX-O-SIM-1 | 3 |
 | DC sweep | Continuation over a source value to `Field<(Ports, Voltage), Current>` | As operating point, per point | ELX-O-SIM-1 | 3 |
 | AC and noise | Linearized complex LU per frequency to `Field<(Ports, Frequency), Complex<Voltage>>`; adjoint noise | A singular matrix names the floating node set | ELX-O-SIM-1 | 3 |
-| Transient | BDF and trapezoidal with LTE control, breakpoints and ringing detection, to `Field<(Ports, Time), Voltage>`; temporal error `Indicator` unless adjoint-weighted or step-halving verified. Requires: FLX `flux::solve_dae` | `StepTooSmall` with time, device and nodes | ELX-O-SIM-1 | 3 |
+| Transient | BDF and trapezoidal with LTE control, breakpoints and ringing detection, to `Field<(Ports, Time), Voltage>`; temporal error `Indicator` unless adjoint-weighted or step-halving verified. Requires: FLX `flux::solve_dae` | FLX's `StepTooSmall { t }`, with the device and nodes named | ELX-O-SIM-1 | 3 |
 | Error budget labels | Algebraic part under class `mna_newton`; statistical parts with their method and α | A result outside the class envelope reports `Indicator` with the envelope variable | ELX-O-SIM-1 | 3 |
 | Pole-zero and loop stability | Generalized eigenvalues; loop gain by Middlebrook's method [Middlebrook 1975] or Tian's [Tian et al. 2001]; margins | As AC | ELX-O-SIM-1 | 3 |
 | Monte Carlo and corners | `Tol` samples with correlation groups, one per SIMD lane | Failed samples counted and reported, never dropped | ELX-O-SIM-4 | 3 |
@@ -774,7 +774,7 @@ A sensor has three layers: optional Flux transduction physics, a behavioural ele
 
 Inverters range from averaged models to switching models with losses from catalog switching-energy curves, and the switched transient serves closed-loop runs. Drivetrain elements let GP3's gearbox and ideal sources form one drivetrain from phase 2, with a lumped motor from phase 3.
 
-A propeller is a rotational load element whose torque and thrust come from a map over shaft speed and inflow. The map comes from FLX and COV's rotor aerodynamics: blade-element momentum theory at L1, and rotating-domain flow at L3 in phase 4 ([COV, Aerospace](04-coverage.md#aerospace)). GP6's motor, ESC and battery then see the propeller's real load.
+A propeller is a rotational load element whose torque and thrust come from a map over shaft speed and inflow. The map comes from FLX's rotor aerodynamics, phase 4 in contract 13.4: blade-element momentum theory at L1 up to rotating-domain flow at L3 ([FLX, Fluids and free surfaces](03-flux.md#fluids-and-free-surfaces)). GP6's motor, ESC and battery then see the propeller's real load.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -838,7 +838,7 @@ The reader is ECO's, in phase 4 ([ECO, Simulation and analysis](11-interop-ecosy
 *Why:* one runtime serves every FMU, while FMUs still join drives and plants through ordinary `connect`.
 *Rejected:* a second FMI master in ELX; FMUs outside the Network model.
 
-Flux's runtime implements FMI 3.0.2 [FMI 3.0.2 release] and SSP 2.0.1 [SSP 2.0 release], and FMU export and SSP are phase 4 (contract section 13.4). ELX owns bus simulation over FMI-LS-BUS. FMI-LS-BUS 1.0 (21 July 2025) covers the CAN family [FMI-LS-BUS 1.0], a 1.1 beta adds FlexRay and Ethernet, and a 1.3 beta adds LIN [FMI news]. Its demo FMUs cover CAN and FlexRay [FMI-LS-BUS examples].
+Flux's runtime implements FMI 3.0.2 [FMI 3.0.2 release] and SSP 2.0.1 [SSP 2.0 release], with FMU import in phase 3 and FMU export and SSP in phase 4 (contract section 13.4). ELX owns bus simulation over FMI-LS-BUS. FMI-LS-BUS 1.0 (21 July 2025) covers the CAN family [FMI-LS-BUS 1.0], a 1.1 beta adds FlexRay and Ethernet, and a 1.3 beta adds LIN [FMI news]. Its demo FMUs cover CAN and FlexRay [FMI-LS-BUS examples].
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -854,7 +854,7 @@ Flux's runtime implements FMI 3.0.2 [FMI 3.0.2 release] and SSP 2.0.1 [SSP 2.0 r
 | Hydraulic and coolant elements | `std::systems::fluid` single-phase hydraulic and coolant elements with stream connectors and CoolProp media | Operation outside a medium's property range is flagged; a cavitating element sets its flag | ELX-O-FLD-1 | 4 |
 | Two-phase and pneumatic elements | Two-phase thermofluid and pneumatic elements | As above, with choking flagged | ELX-O-FLD-1 | 5 |
 | Modelica translation coverage | Element libraries the reader targets; coverage of MSL examples measured | An untranslated construct stays an FMU with `Untranslated { construct }` | ELX-O-CTL-3 | 4 |
-| FMU elements | FMU instance as a Network element (FLX runtime). Requires: FLX FMU import (all three interface types) | Unmappable unit or variability is a typed import error | ELX-O-CTL-2 | 4 |
+| FMU elements | FMU instance as a Network element (FLX runtime), phase 3 in contract 13.4. Requires: FLX FMU import (all three interface types) | Unmappable unit or variability is a typed import error | ELX-O-CTL-2 | 3 |
 | Bus simulation | FMI-LS-BUS for the CAN family; LIN and Ethernet as the standard matures | Unsupported bus features reported | ELX-O-CTL-2 | 5 |
 
 ## Firmware and the bench
@@ -898,11 +898,11 @@ Real-time execution lies outside Kiln: plants export as FMUs or fixed-step C, an
 1. **Plan.** It names the Software item version, image digest, target board serial, and probe or bootloader.
 2. **Write.** The bench adapter or gateway writes the image and reads back its digest. The target stays halted or held in reset until a person at the bench releases it.
 3. **Approval.** It covers the image digest and target. The approval page lists the board's Network hazards (rotational ports, heaters, high voltage) with a "remove propellers and loads" step.
-4. **Clients.** Client flashing runs only in code that verifies the Approval. In browsers it runs on the approval origin page after the ceremony. That page holds the WebUSB grant and checks the image's SHA-256 against the approved plan; the main web origin never holds a WebUSB grant. On desktops it runs in `apps/platform-*`'s flashing service, which verifies the Approval signature against the pinned approver directory. On a rig under `unattended_safe`, `run_rig_test` covers flashing.
+4. **Clients.** Client flashing runs only in code that verifies the Approval ([AGT, Physical effects](09-agents.md#physical-effects)); on a rig under `unattended_safe`, `run_rig_test` covers it.
 
 Embedded developers flash dozens of times an hour, so one Approval per image would push them to their own probe tools and the record would never be written.
 
-A `bench_session` is one AAL3 Approval that covers a bench for at most 8 h (contract section 7.6). It names the person at the bench, the board serial, the probe, one Software item lineage on one branch, a maximum count and the board's hazard acknowledgements. Flashes inside the session need no further Approval but keep read-back, hold in reset and the canonical hash. The session ends early on expiry, on a hazard change in the Network, or on an image outside the lineage. Agents never open or extend one, and the approval page lists every flash afterwards.
+A `bench_session` covers a bench under one AAL3 Approval ([AGT, Physical effects](09-agents.md#physical-effects)); for boards it names the probe, one Software item lineage and the board's hazard acknowledgements.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -937,7 +937,7 @@ The hysteresis model counts only after its parameters are fitted to LFP data, an
 *Why:* PyBaMM is BSD-3-Clause with SPM, SPMe and DFN models [PyBaMM], while native models give derivatives, Wasm portability and Flux thermal coupling.
 *Rejected:* embedding PyBaMM, which puts a Python runtime in evaluation; DFN as an ordinary form, which needs nested domains.
 
-DFN cells use Flux's parameter-domain forms ([FLX, Fields](03-flux.md#fields)), and pack-scale models embedding them follow in phase 6.
+DFN cells use Flux's parameter-domain forms in phase 5 (contract 13.4; [FLX, One symbolic layer and compilation](03-flux.md#one-symbolic-layer-and-compilation)), and pack-scale models embedding them follow in phase 6.
 
 ### Pack design
 
@@ -965,12 +965,12 @@ The MagNet Challenge 2023 benchmarked data-driven magnetics models and reported 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
 | Equivalent-circuit cells | OCV, resistance, RC pairs and an optional fitted one-state hysteresis as a Network element | Operation outside the parameter set's range is flagged with the variable | ELX-O-BAT-1 | 4 |
-| SPMe cells | Forms with a parameter-set Material, to voltage, temperature and concentration Fields | Operation outside the parameter set's range is flagged with the variable | ELX-O-BAT-1 | 4 |
+| SPMe cells | Forms with a parameter-set Material, to voltage, temperature and concentration Fields. Requires: FLX Parameter-domain spaces | Operation outside the parameter set's range is flagged with the variable | ELX-O-BAT-1 | 4 |
 | Parameter fitting | Measured data to a set with confidence intervals | Unidentifiable parameters reported, never fixed silently | ELX-O-BAT-1 | 4 |
 | Swelling and stack pressure | Ai et al.'s expansion and pad stiffness to pressure and force Fields | Outside the tested pressure range flagged | ELX-O-BAT-2 | 4 |
 | Pack Network, busbars and thermal | Series-parallel layout with per-cell variation; Flux conduction and heat transfer | Inconsistent count or orientation is a compile error; limits fail checks | ELX-O-BAT-2 | 4 |
 | Pack safety screening | Fuse coordination, barriers, runaway propagation | Results labelled as screening; missing calorimetry data listed | ELX-O-BAT-3 | 6 |
-| Abuse mechanics and pack-scale DFN | Homogenized jellyroll failure model coupled to runaway screening; DFN cells in pack thermal | Outside the envelope the zone is `Invalid` and checks refuse | ELX-O-BAT-3 | 6 |
+| Abuse mechanics and pack-scale DFN | Homogenized jellyroll failure model coupled to runaway screening; DFN cells in pack thermal. Requires: FLX Parameter-domain spaces | Outside the envelope the zone is `Invalid` and checks refuse | ELX-O-BAT-3 | 6 |
 | Converter topologies and loops | Parameters to Networks with selection constraints; compensators with margins | An infeasible duty cycle is a typed error; an unstable loop fails with its margins | ELX-O-PWR-1 | 4 |
 | Losses and parasitics | Loss Fields; hot-loop inductance from extracted subcircuits | Missing loss curves leave the check `Undecided` | ELX-O-PWR-1 | 4 |
 | Magnetics design | Core, winding and gap to losses, inductances and Bodies | Saturation at peak current fails the check | ELX-O-PWR-2 | 4 |
@@ -1028,7 +1028,7 @@ Flux owns the solvers: frequency-domain Nédélec FEM for resonant antennas and 
 | --- | --- | --- | --- | --- |
 | Antenna features | Ingot features returning Bodies and ports | Geometry outside a feature's range is a typed error | ELX-O-RF-1 | 4 |
 | Antenna analysis | Bodies, Materials and ports to `Field<(Ports, Frequency), Complex<Impedance>>`, far-field Fields and efficiency. Requires: FLX Frequency-domain electromagnetics | Under-resolved mesh or missing material data flagged with the fix | ELX-O-RF-1 | 4 |
-| Antenna arrays | `array(element, lattice, taper)` to embedded patterns and array factors over scan angle | A lattice that admits grating lobes in the scan range is flagged with the angle | ELX-O-RF-3 | 5 |
+| Antenna arrays | `array(element, lattice, taper)` to embedded patterns and array factors over scan angle. Requires: FLX Periodic structures and arrays | A lattice that admits grating lobes in the scan range is flagged with the angle | ELX-O-RF-3 | 5 |
 | Matching synthesis | S-parameters and band to Network edits with yield | An infeasible match reports the Bode-Fano bound | ELX-O-RF-2 | 4 |
 | Linear RF analysis | S-parameter network analysis | Non-passive data flagged | ELX-O-RF-2 | 4 |
 
@@ -1084,10 +1084,10 @@ ELX owns no core crate (contract section 12). Its Rust ships in three places:
 | Where | What ELX ships there |
 | --- | --- |
 | `flux-op-*` operation families, owned with FLX | `flux-op-mna` (operating point, sweeps, AC and noise, transient, switched transient, periodic steady state), `flux-op-macromodel` (vector fitting and passivity enforcement), `flux-op-control` (Riccati, realization, reduction) |
-| std Wasm components under `std/` | DRC and fills on `anvil-planar`, the placer, the autorouter, `schematic.autodraw`, the schematic, layout and net-partition diff views, footprint generators, the Verilog-A front end, the SysML v2 and ReqIF codecs |
+| std Wasm components under `std/` | DRC and fills on `anvil-planar`, the placer, the autorouter, `schematic.autodraw`, the schematic, layout and net-partition diff views, footprint generators, the Verilog-A front end |
 | `apps/` services | The flashing service in `apps/platform-*`; bench adapters for probes and serial ports |
 
-Ingot packages: `std::electronics` (with `erc`, `rules`, `footprint`, `power`, `rf`, `compliance`) and `std::systems` (with `fluid` and the requirement records). The WIT package `crucible:electronics` holds the worlds of the placer, router, DRC and autodraw components; schematic and layout drawing goes through UIX's `crucible:ui/canvas2d`.
+Ingot packages: `std::electronics` (with `erc`, `rules`, `footprint`, `power`, `rf`, `compliance`) and `std::systems` (with `fluid` and the requirement records). The WIT (WebAssembly Interface Types) package `crucible:electronics` holds the worlds of the placer, router, DRC and autodraw components; schematic and layout drawing goes through UIX's `crucible:ui/canvas2d`.
 
 ### ERC rule families
 
@@ -1139,14 +1139,11 @@ Every ELX failure renders as `elx/<snake_case>` (contract section 7.6), with a r
 | Failure | Raised by | Typical fix |
 | --- | --- | --- |
 | `elx/named_net_join` | A pin placed in two named nets | Add a `tie` or remove one `connect` |
-| `elx/net_merge` (`Conflict::NetMerge`) | A merge that unions nets distinct on both sides | Resolve the conflicting `connect`s on one branch |
 | `elx/mated_pinout` | A mirrored or role-incompatible mated pair | Swap the connector variant or the placement side |
 | `elx/drawn_short`, `elx/stale_annotation` | `schematic_matches_network` | Split the drawn group; remove the stale item |
 | `elx/no_catalog_match` | A `CatalogSelection` with no candidate | Relax the tightest constraint named |
 | `elx/selection_changes_land_pattern` | A post-release re-pick | Open a change order |
 | `elx/unsupported_span` | A stackup span the fabricator cannot build | Use the nearest span named |
-| `elx/step_too_small` | A transient that cannot advance | Check the device and nodes named |
-| `elx/untranslated` | A Modelica construct outside the subset | Keep the FMU, or rewrite the construct |
 
 ## State of the art
 
@@ -1311,7 +1308,7 @@ ELX oracles live in `oracles/elx/`; held-out sets are never shown to agents, and
 
 ## Phasing
 
-Shared capabilities take their phase from contract section 13.4: conjugate heat transfer, Helmholtz solvers, electro-thermal coupling, RLCG and full-wave extraction, FMU export and SSP, and every battery cell row. ELX's parity-floor rows land no later than 13.4 allows. Native vendor dialects and mated connectors arrive in phase 3; hydraulic and coolant libraries, the switched transient and compliance kits in phase 4; two-phase and pneumatic libraries in phase 5. No ELX row precedes a row it requires.
+Shared capabilities take their phase from contract section 13.4: conjugate heat transfer, Helmholtz solvers, electro-thermal coupling, RLCG and full-wave extraction, the plane-pair cavity model, rotor aerodynamics, FMU import, FMU export and SSP, and every battery cell row. ELX's parity-floor rows land no later than 13.4 allows. Native vendor dialects and mated connectors arrive in phase 3; hydraulic and coolant libraries, the switched transient and compliance kits in phase 4; two-phase and pneumatic libraries in phase 5. No ELX row precedes a row it requires.
 
 | Phase | ELX contribution to the gate |
 | --- | --- |

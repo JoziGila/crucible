@@ -34,7 +34,7 @@ The maximum itself is regularized: Flux maximizes a local average over a small r
 
 | Error source | Illustrative size | How Flux obtained it | Kind |
 | --- | --- | --- | --- |
-| Discretization | ± 1.1 MPa | Dual-weighted residual estimate for this peak, times its class factor, confirmed by one refinement | `Estimated { Class elasticity.peak }` |
+| Discretization | ± 1.5 MPa | Dual-weighted residual estimate for this peak, times its class factor, confirmed by one refinement | `Estimated { Class elasticity.peak }` |
 | Algebraic | ± 0.02 MPa | Residual of the iterative solve, weighted by the adjoint | `Estimated` in the same class |
 | Regularization | ± 0.3 MPa | Enclosed gap to the raw maximum of the computed Field | `Guaranteed` |
 | Floating point | below 10⁻⁹ MPa | Rounding bound of the canonical evaluation | `Guaranteed` |
@@ -43,13 +43,13 @@ The maximum itself is regularized: Flux maximizes a local average over a small r
 
 A dual-weighted residual (DWR) estimate is an error estimate for one goal quantity, computed by solving an adjoint problem whose source is that goal. The class factor comes from a calibration corpus: Flux multiplies the raw estimate by the 99th-percentile underestimate it measured on hundreds of held-out cases, and labels the bound with that class.
 
-ING's decision rule reads this budget against the limit, 0.6 times the specification yield. The value sits far below the limit, but the model-form part is not counted, so the verdict is `Undecided { reason: Unquantified([model form]) }`. It becomes `Pass` when a pinned policy allowance quantifies model form for this check kind. It also becomes `Pass` once the phase 1 validation campaign of [contract section 13.1](../contract.md) has measured strain at fillets and turned model form into an `Estimated` part. The report then states the confidence: at least 1 − Σα, at 95% confidence, for the α of each calibrated part.
+ING's decision rule reads this budget against the limit, 0.6 times the specification yield. The value sits far below the limit, but the model-form part is not counted, so the verdict is `Undecided { reason: Unquantified([ModelForm]) }`. It becomes `Pass` when a pinned policy allowance quantifies model form for this check kind. It also becomes `Pass` once the phase 1 validation campaign of [contract section 13.1](../contract.md) has measured strain at fillets and turned model form into an `Estimated` part. The report then states the confidence: at least 1 − Σα, at 95% confidence, for the α of each calibrated part.
 
 ### What happens while the engineer works
 
 At `Interactive` fidelity the same study runs in about a second on the reference laptop, at polynomial degree 2 with one adaptive pass and a cheaper estimate. The verdict is provisional until `SignOff` recomputes it with hp-adaptivity and a confirming refinement. At `Preview` a coarse or reduced solve paints a picture but never decides.
 
-When the engineer drags `width` from 60 mm to 80 mm, Kiln re-runs only the nodes downstream of that literal: the octree reclassifies the cells the new faces cut, and the solve warm-starts. Results show as `Proxy` during the drag.
+When the engineer drags `width` from 60 mm to 80 mm, Kiln re-runs only the nodes downstream of that literal: the octree reclassifies the cells the new faces cut, and the solve warm-starts. During the drag, results show as `Proxy` where the change is affine on them, otherwise `Stale`.
 
 What the engineer gains over an incumbent is visible here. There is no mesh to build or repair, no submodel to set up around the fillet, and no convergence study to run by hand. The number on screen says which errors were counted and which were not, and the same Change gives the same bits on a laptop, in a browser and on the build farm. A study wrapped as a feature is also a simulation app: its parameters generate a dialog, its checks travel with it, and an agent can call it with the same schema.
 
@@ -91,7 +91,7 @@ A stored Field is a header plus 1 MiB chunks, byte-shuffled, zstd-compressed and
 | Field types and product domains | `Field<D, V>` keyed by `GeometryId` and canonical entity numbers | `DomainMismatch` with a `field_transfer` fix | FLX-O-FIELD-1 | 0 |
 | Sampling | `Sampler` with pointwise budget and gradient bound, located through Anvil's classification | `OutsideDomain`, `InsufficientAccuracy` | FLX-O-FIELD-1 | 0 (`Analytic`, `Discrete`), 1 |
 | Transfer and projection | Conservative for fluxes, consistent for states | `NotSameInterface` from Anvil | FLX-O-FIELD-2 | 1, 4 (interface overlays) |
-| Extremum enclosure and region extraction | Bernstein subdivision; Implicit Bodies from scalar Fields | `WorkLimit` with the achieved gap; `NotContinuous` | FLX-O-FIELD-3 | 1 |
+| Extremum enclosure and region extraction | Bernstein subdivision; Implicit Bodies from scalar Fields | `kiln/work_limit` with the achieved gap beside it; `NotContinuous` | FLX-O-FIELD-3 | 1 |
 | Geometry-driving Fields | Sizing, metric, displacement, thickness, radius, density, orientation | `InsufficientAccuracy` naming the producer | FLX-O-FIELD-4 | 1 (density), 2 |
 | Storage and canonical form | Chunked CAS arrays over canonical bytes | None: encoding is total over finite values, and non-finite values never reach storage | FLX-O-FIELD-5 | 0 |
 | Label invariance | Field values unchanged under renaming | `LabelVariance` raised by the rename oracle on any difference | FLX-O-FIELD-6 | 1 |
@@ -114,7 +114,7 @@ A total takes its weakest part's kind. It is `Guaranteed` only on fitted simplic
 
 For a bounded linear functional J with adjoint z, an iterative solve leaves a residual r, so J(u) − J(u_h) = a(u − u_h, z − z_h) + r(z_h). Flux bounds |J(u) − J(u_h) − r(z_h)| by the product of the primal and adjoint energy bounds, and files |r(z_h)| ≤ η_alg · ‖z_h‖_A, with η_alg the energy-norm algebraic bound, under the algebraic part. The floating-point part of a goal follows the same rule. After a direct factorization the energy-norm algebraic part is ‖r‖_{M⁻¹}/√σ, where a canonical LDLᵀ inertia count of A − σM certifies A ≥ σM, with σ lowered by the backward-error bound.
 
-Material properties enter in two ways, and Flux treats them differently. A limit written against a basis value, such as `0.6 * yield_strength`, reads that value as an exact definitional number with no budget part (COV owns this rule). A property that drives the solve, such as Young's modulus or conductivity, arrives as an enclosure from its statistical basis. Its input part is `Estimated { Statistical { method: basis, α } }`, with α the basis's non-content fraction (0.10 for a B-basis value, 0.01 for an A-basis value), and the union bound includes it.
+Material properties enter in two ways, and Flux treats them differently. A limit written against a basis value, such as `0.6 * yield_strength`, reads its basis as an exact interval, holds at both ends and adds no budget part (COV owns this rule). A property that drives the solve, such as Young's modulus or conductivity, arrives as its basis interval. Its input part is `Estimated { Statistical { method: ToleranceLimit, α } }`, with α the basis's non-content fraction (0.10 for a B-basis value, 0.01 for an A-basis value), and the union bound includes it.
 
 Flux propagates a property enclosure by the sign of the adjoint sensitivity. It first checks that the response is monotone: one derivative sign at both ends, and no interior extremum by a midpoint second-order test. Where that fails, as near a resonance, it subdivides the interval or marks the part `NotQuantified { NonMonotone }`.
 
@@ -161,7 +161,7 @@ An Ingot generator under `oracles/flux/` produces the corpus, from L-brackets an
 | `lattice.strut_stress` | Localized strut stress | Beam lattice with CT-fitted joints | GP2 |
 | `lattice.buckling` | Lattice buckling factor | Coupled DWR on the beam lattice | GP2 |
 
-MEC assigns classes to its check families. Later phases add classes for reduction, step halving, modal truncation, bolted joints and solution verification.
+MEC assigns classes to its check families. Later phases add classes for reduction, step halving, modal truncation, bolted joints, solution verification and circuit Newton residuals (`mna_newton`, on ELX's corpus).
 
 **Decision D-FLX-15:** Flux produces budgets and ING decides checks by one rule (disjoint enclosures decide, subject to the check's `decides_on`), returning `CheckOutcome`; Flux adds no margin rule of its own.
 *Why:* a second rule in the physics engine would let two tabs disagree about one verdict.
@@ -202,15 +202,15 @@ Results from different platform classes agree by PLT's rule: with equal resolved
 | Guaranteed algebraic parts | Multilevel bound; certified spectral bound after factorization; goal part through ‖z_h‖ | Elsewhere `Estimated`, so the total is too | FLX-O-ERR-2 | 2 |
 | Guaranteed linear goals | Primal–dual product with the residual term r(z_h) | `NotQuantified` if a factor is unguaranteed | FLX-O-ERR-2 | 2 |
 | Regularized goals | `max`, `at`, `pnorm` and `gauge` through `estimate_goal`, with ρ and its source reported | `Undecided { needed }` with a goals fix | FLX-O-ERR-3 | 1 |
-| Critical-distance goals | `tcd` by point, line, area or volume operator, matched to the Material's calibration | `CriticalDistanceMismatch { calibrated, requested }` | FLX-O-ERR-12 | 2 |
+| Critical-distance goals | `tcd` by point, line, area or volume operator, matched to the Material's calibration | `CriticalDistanceMismatch { calibrated, requested }` | FLX-O-ERR-12 | 1 |
 | Eigenvalue estimates | Two-sided DWR for frequencies; coupled DWR for buckling factors; Kato–Temple or Lehmann algebraic bounds | `Indicator` without a class | FLX-O-SOLVE-6 | 1 |
 | Singular sets | `singular_sets` by edge class and compatibility; `study.regular()` | `Undecided { SingularPoint }`; `Undecided { MaximumAtExclusion }` | FLX-O-ERR-4 | 1. Requires: ANV `anvil::classify_edges` |
 | Calibration | η99 tables with envelopes; one α rule; independent references | `Indicator` outside the envelope | FLX-O-ERR-5 | 1 |
 | Refinement confirmation | `confirm_refinement` one level finer | `Undecided { reason: CalibrationUnconfirmed }` | FLX-O-ERR-3 | 1 |
-| Property-basis propagation | Basis enclosures into the input part with a monotonicity test | `NotQuantified { NonMonotone }`; `NotQuantified` without both basis values | FLX-O-ERR-11 | 1 |
+| Property-basis propagation | Basis intervals into the input part with a monotonicity test | `NotQuantified { NonMonotone }`; `NotQuantified` without both basis values | FLX-O-ERR-11 | 1 |
 | Temporal goal estimates | Adjoint-weighted residual and step halving, each its own class | Summed local estimates stay `Indicator` | FLX-O-ERR-6 | 2 |
 | GPU-solved `Interactive` results | CPU `f64` estimation of the read-back Field | GPU-evaluated estimators stay `Indicator` | FLX-O-KER-4 | 2 |
-| `Preview` fidelity | Reduced, surrogate, coarsest or shifted-boundary solves | `Undecided { reason: PreviewOnly }` for every check | FLX-O-ERR-7 | 1, 2 (shifted boundary) |
+| `Preview` fidelity | Reduced, surrogate, coarsest or shifted-boundary solves | `Undecided { Indicator }` for every check | FLX-O-ERR-7 | 1, 2 (shifted boundary) |
 | Solution verification | Calibrated three-level GCI by coarsening from the production grid | `NotAsymptotic { ratio }` keeps `Indicator` | FLX-O-ERR-8 | 3 |
 | Validity zones | `validity_zones` with running extrema | `ValidityError::OutsideEnvelope` inside `Error(Failure)` | FLX-O-ERR-9 | 1 |
 | Cross-class agreement | PLT's rule on resolved plans and marks | `ClassDisagreement` opens PLT's determinism incident | FLX-O-ERR-10 | 1 |
@@ -382,7 +382,7 @@ let result = solve(elasticity, fixed: clamp, plan: plan.with(region: p.regions(r
 | Member or strut | Prismatic over L_local, d / L_local ≤ 0.2 | Timoshenko beam; Vlasov warping for open thin-walled sections | `anvil::member_axes` axes, joints, sections |
 | Strut lattice | Strut graph from `anvil::lattice` | Beam lattice with calibrated joints, or homogenized | Strut graph |
 | Sheet lattice | Minimal-surface cell from `anvil::lattice` | Shell on the cell's mid-surface, or homogenized | `mid_surface` implicit path |
-| Revolved or prismatic Body under conditions that share its symmetry | Certified revolution or extrusion, symmetric conditions | Axisymmetric or planar section model | Certified symmetry analysis and section |
+| Revolved or prismatic Body under conditions that share its symmetry | Certified revolution or extrusion, symmetric conditions | Axisymmetric or planar section model | MEC's declared symmetry; `anvil::section` |
 | Everything else | Fails the criteria above | Solid on the immersed octree, or fitted where required | The Body |
 
 **Decision D-FLX-12:** Discretization is chosen per region: shells and beams where the local slenderness criterion holds, the immersed octree for solids, fitted meshes for contact and turbulent boundary layers, beam lattices, sheet shells or homogenization for lattices, and isogeometric shells for very thin NURBS walls; junction zones stay solid for two wall thicknesses, three for a junction class that fails its coupling oracle.
@@ -395,7 +395,7 @@ Reduced regions couple to solids through `dI` interfaces [Nguyen et al. 2013]: r
 
 Incumbents solve an O-ring groove, a pressure vessel or a coil in two dimensions at a hundredth of the 3D cost, and a bladed disc on one sector. Flux offers the same reductions and checks that they are valid.
 
-**Decision D-FLX-48:** Plane stress, plane strain, generalized plane strain and axisymmetric models (with or without twist), and mirror symmetry, antisymmetry and cyclic-sector reductions with harmonic indices, are detected by `mark_reduction` from Anvil's certified analysis or declared with `std::sim::symmetry(planes:, kind:)` and `cyclic(sector:, count:, harmonics:)`; every reduction checks that loads, conditions and geometry share the symmetry and fails with `SymmetryBroken { entity }` otherwise.
+**Decision D-FLX-48:** Plane stress, plane strain, generalized plane strain and axisymmetric models (with or without twist), and mirror symmetry, antisymmetry and cyclic-sector reductions with harmonic indices, are detected by `mark_reduction` from MEC's declared symmetries or declared with `std::sim::symmetry(planes:, kind:)` and `cyclic(sector:, count:, harmonics:)`; every reduction checks that loads, conditions and geometry share the symmetry and fails with `SymmetryBroken { entity }` otherwise.
 *Why:* a silent reduction of a non-symmetric load gives a confident wrong answer, while a checked one gives the incumbent's speed with no new risk.
 *Rejected:* declared reductions without a check; reductions only by analyst declaration.
 
@@ -484,7 +484,7 @@ Channel filters follow the SAE J211 channel frequency classes [unverified], decl
 | --- | --- | --- | --- | --- |
 | Fitted continuous FEM | Curved Anvil meshes to p ≤ 8; hex-dominant | `InvalidElement { cell, jacobian_min }` with an `untangle` fix | FLX-O-DISC-1 | 2, 4 (hex-dominant). Requires: ANV `anvil::tetrahedralize` |
 | Aggregated CutFEM | `Interactive` and `SignOff` solids; Nitsche, ghost penalty, positive weights | `UncertifiedCut { cell, achieved }` | FLX-O-DISC-2, FLX-O-DISC-5 | 1 |
-| Shifted boundary method | `Preview` solids | `Undecided { reason: PreviewOnly }` for any check | FLX-O-DISC-3 | 2 |
+| Shifted boundary method | `Preview` solids | `Undecided { Indicator }` for any check | FLX-O-DISC-3 | 2 |
 | Finite cell method | Voxel, CT and density geometry | `PatchErrorAboveTolerance { alpha }` | FLX-O-DISC-4 | 2 |
 | Reissner–Mindlin and Kirchhoff–Love shells | Mid-surface sheets, thickness Fields, laminates | `UnpairedFaces` keeps the region solid | FLX-O-DISC-6 | 2, 4 (laminates). Requires: ANV `anvil::mid_surface` |
 | Timoshenko and Vlasov beams | Member axes and section regions | `NotPrismatic` keeps the region solid | FLX-O-DISC-6 | 1 (struts), 2. Requires: ANV `anvil::member_axes` |
@@ -535,7 +535,7 @@ Gears and bearings need elastohydrodynamic lubrication (EHL): the Reynolds equat
 
 ### General operations for non-variational methods
 
-COV's general operations serve particles, ray tracing, boundary elements and ELX's placer through `crucible:ops/flux`, each with a canonical CPU path and, where it pays, a WGSL path. Random streams come from Kiln's `OpCx::rng`, keyed without class, fidelity or names ([contract section 7.2](../contract.md)).
+Flux's general operations serve COV's particle methods, ray tracing, boundary elements and ELX's placer through `crucible:ops/flux`, each with a canonical CPU path and, where it pays, a WGSL path. Random streams come from Kiln's `OpCx::rng`, keyed without class, fidelity or names ([contract section 7.2](../contract.md)).
 
 Particle methods (DEM, the discrete element method; SPH, smoothed-particle hydrodynamics; MPM, the material point method; peridynamics) and lattice Boltzmann build on them, with errors from solution verification. Boundary elements build on bempp-rs, with fast multipole or H² compression and Calderón preconditioning for Maxwell [Scroggs et al. 2017].
 
@@ -555,7 +555,7 @@ Particle methods (DEM, the discrete element method; SPH, smoothed-particle hydro
 | Rotating zones, fans and resistances | Rotating-frame terms; sliding interfaces; mixing planes; `fan` and `resistance` models | `ZoneInterfaceMismatch { interface }` | FLX-O-FLOW-1 | 3 (laminar frames, fans), 4 (RANS frames, sliding), 5 (mixing plane) |
 | Rotor aerodynamics | Blade-element momentum package; vortex particle method; rotating-domain flow | `OutsideEnvelope` per COV's rotor envelopes | FLX-O-FLOW-2 | 4 |
 | Elastohydrodynamic lubrication | Reynolds equation with pressure–viscosity, FFT or H-matrix deflection, semismooth cavitation | `NonlinearDiverged` with the last film state | FLX-O-EHL-1 | 3 |
-| General operations | BVH, neighbours, reductions, random streams, FMM, H-matrices, FFT | `WorkLimit` | FLX-O-DISC-11 | 2, 3 (FMM, FFT) |
+| General operations | BVH, neighbours, reductions, random streams, FMM, H-matrices, FFT | `kiln/work_limit` | FLX-O-DISC-11 | 2, 3 (FMM, FFT) |
 | Lattice Boltzmann | D3Q19 and D3Q27 on sparse grids | `Unstable { step }` | FLX-O-DISC-11 | 4 |
 | Particles and peridynamics | DEM, SPH, MPM, peridynamics | `Indicator` without solution verification | FLX-O-DISC-11 | 5 |
 
@@ -585,10 +585,10 @@ Contract section 13.3 sets 1 s on the reference laptop for warm-started elastici
 Five goals therefore take 180 ms, and the total stays at 990 ms. That works because at `Interactive` Flux solves all goal adjoints at the primal degree p in one block-Krylov solve sharing the primal's preconditioner. It gets the DWR weights by patchwise higher-order reconstruction [Becker and Rannacher 2001]. Phase 0 measures the stages on GP1, GP2 and a named thin-walled part from the licence-filtered ABC subset, which GP5 takes over at the phase 3 gate.
 
 **Decision D-FLX-56:** At `Interactive`, goal adjoints are solved at the primal degree in one block-Krylov solve sharing the primal's preconditioner, with weights from patchwise higher-order reconstruction, as their own calibration class; `SignOff` keeps adjoints one degree higher.
-*Why:* one adjoint per goal at p + 1 costs more than the primal solve itself, so a part with several checks would miss the one-second target on every edit and fall back to `Proxy`.
+*Why:* one adjoint per goal at p + 1 costs more than the primal solve itself, so a part with several checks would miss the one-second target on every edit and fall back to `Proxy` or `Stale`.
 *Rejected:* p + 1 adjoints at both fidelities; estimating only the first goal at `Interactive`.
 
-**Decision D-FLX-37:** During a geometric drag, physics results show as `Proxy` until the full update arrives in phases 1 and 2; from phase 3, reduced models on a fixed background discretization answer parametric geometric drags through a morphing map from `anvil::shape_velocity`.
+**Decision D-FLX-37:** During a geometric drag, physics results show as `Proxy` where the change is affine on them, otherwise `Stale`, until the full update arrives in phases 1 and 2; from phase 3, reduced models on a fixed background discretization answer parametric geometric drags through a morphing map from `anvil::shape_velocity`.
 *Why:* cell classification changes with geometry, so a reduced model built on one discretization needs a morph to answer for another.
 *Rejected:* reduced-model answers for geometric drags in phase 1.
 
@@ -597,7 +597,7 @@ Five goals therefore take 180 ms, and the total stays at 990 ms. That works beca
 | Sizing and metric Fields | `Field<Body, Length>`, `Field<Body, Metric>` from estimators | Anvil's `QualityNotReached { worst, target }` reported upward | FLX-O-MESH-1 | 2 |
 | h-, p- and hp-adaptivity | Octree, fitted and spline refinement on declared goals | `ProbableSingularity { region }` on stagnation | FLX-O-MESH-1 | 1 (octree), 2, 3 (metric) |
 | Solution transfer | Conservative projection, its error in the temporal part | `TransferAboveTolerance` refines the transfer | FLX-O-MESH-2 | 2 |
-| Interactive stage budgets | Six stages within 1 s with five goals; block adjoints at p | A budget miss streams the coarse result as `Proxy` | FLX-O-MESH-3 | 1 |
+| Interactive stage budgets | Six stages within 1 s with five goals; block adjoints at p | A budget miss shows dependents as `Proxy` or `Stale` until the update arrives (KLN) | FLX-O-MESH-3 | 1 |
 | Geometric drags | `Proxy`, then morphing reduced models | `TopologyChange` ends the morph | FLX-O-ROM-1 | 1, 3 (morphing) |
 | Discretization Fields | Octree cells, cut and aggregated cells, polynomial degree and `ReductionKind` as `PerEntity` Fields for UIX's discretization view | None: the Fields are read from the plan and discretization that already exist | FLX-O-POST-2 | 1 |
 
@@ -845,6 +845,8 @@ ELX keeps FMU elements and the FMI layered bus standard, and ECO keeps packaging
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
 | Monolithic and partitioned coupling | Product-space forms; Aitken and interface quasi-Newton; conservative transfer | `CouplingDiverged { residual_history }` | FLX-O-COUP-1 | 1 (one way), 2, 3, 4, 5 per coupling |
+| Conjugate heat transfer | Robin partitioned, or monolithic on a shared octree with wall refinement | `CouplingDiverged { residual_history }` | FLX-O-COUP-1 | 3 (laminar, natural convection), 4 (turbulent) |
+| Electro-thermal coupling | Joule heating with temperature-dependent resistivity; monolithic Newton with continuation | `Runaway { power }` at the turning point | FLX-O-COUP-1 | 4 |
 | Element activation | Cells activated by a layer or time Field | `ActivationGap { layer }` | FLX-O-COUP-1 | 2 (layer and weld groups), 4 (transient) |
 | Additive distortion sequence | Activation with supports, baseplate cut, support removal, stress relief | `OutsideEnvelope` outside the coupon data | FLX-O-COUP-4 | 2 |
 | Weld joint loads on frames | Joint loads from local joint models and coupon inherent strains | `OutsideEnvelope` outside the coupon envelope | FLX-O-COUP-4 | 2 |
@@ -867,13 +869,13 @@ Flux differentiates the discretized problem from its forms [Farrell et al. 2013]
 
 A steady adjoint costs at most one forward solve and ships in phase 1. Eigenvalue and transient adjoints follow in phase 2, laminar flow adjoints in phase 3, and turbulent, contact and coupled adjoints in phases 3 and 4 ([Reference](#method-catalogs)).
 
-Transient adjoints use the CAMS checkpointing of Zhang and Constantinescu [Zhang and Constantinescu 2021], stored in Kiln's `Checkpoint` retention tier by (`NodeKey`, step), so an objective-only change reuses them.
+Transient adjoints use the CAMS checkpointing of Zhang and Constantinescu [Zhang and Constantinescu 2021], stored in Kiln's `StepState` retention tier by (`NodeKey`, step), so an objective-only change reuses them.
 
 ### Topology optimization
 
 Density methods by SIMP (solid isotropic material with penalization) on the immersed octree ship in phase 1 for compliance and volume, under additive and unrestricted constraints. Stress, robust designs and the other manufacturing methods follow in phase 2. Graded lattices, shell sizing, level sets, multiphysics and laminate optimization follow in the phases [Reference](#method-catalogs) lists.
 
-The optimizer is the method of moving asymptotes (MMA) [Svanberg 1987] with a globally convergent variant, implemented natively from the papers as `flux::mma_step`. The loop is Ingot (`std::opt::topology`), so iterations are cached nodes. Results include `design.geometry_density`, the filtered, projected H¹ density with the gradient bound `anvil::implicit_from_field` requires. Stress constraints aggregate regularized stresses by p-norms, and MFG's process profiles parameterize manufacturing constraints.
+The optimizer is the method of moving asymptotes (MMA) [Svanberg 1987] with a globally convergent variant, implemented natively from the papers as `flux::mma_step`. The loop is Ingot (`std::opt::topology`), so iterations are cached nodes. Results include `design.geometry_density`, the filtered, projected H¹ density with the gradient bound `anvil::implicit_from_field` requires. Stress constraints aggregate regularized stresses by p-norms, and manufacturing constraints take their limits as arguments, read from MFG's process profiles from phase 2.
 
 ```
 use std::opt::topology::{minimize, compliance, volume_fraction, density, overhang}
@@ -898,7 +900,7 @@ Shape optimization works on feature parameters through the geometry chain rule, 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
 | Form- and operation-level derivatives | `Differentiable` tangents and adjoints chained by Kiln; `grad`, `hessian_vector` | `NotDifferentiable { op }`; straddling tests flagged | FLX-O-OPT-1 | 0 (forms), 1 |
-| Adjoints | Steady, eigen, transient with checkpointing, contact, coupled | `CheckpointMissing` triggers recomputation | FLX-O-OPT-3 | 1, 2, 3, 4 per problem |
+| Adjoints | Steady, eigen, transient with checkpointing, contact, coupled | None: missing step state is recomputed (KLN) | FLX-O-OPT-3 | 1, 2, 3, 4 per problem |
 | Flow adjoints | Laminar steady adjoint from DG(0) and DG forms; frozen-turbulence and full RANS adjoints | `NotDifferentiable { op }` at a limiter switch, flagged in the Taylor test | FLX-O-OPT-4 | 3 (laminar), 4 (RANS) |
 | Shape gradients | Chain rule through `anvil::shape_velocity` | `TopologyChange { parameter, entities }` | FLX-O-OPT-1 | 2. Requires: ANV `anvil::shape_velocity` |
 | Density topology optimization | SIMP, filters, projection, MMA; `geometry_density` | `Infeasible { constraints }` with the closest feasible design | FLX-O-OPT-2 | 1. Requires: ANV `anvil::implicit_from_field` |
@@ -963,7 +965,7 @@ Kiln's cache already holds every `Interactive` result a repository has computed,
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
 | Modal and Craig–Bampton models | Eigen-solve bases; assembly-level reduction | `OutsideParameterBox` beyond the band | FLX-O-ROM-1 | 2 |
-| POD, reduced basis, hyper-reduction, morphing models | Snapshot bases; certified or residual bounds | `OutsideParameterBox { parameter, range }`; `TopologyChange` | FLX-O-ROM-1 | 3 |
+| POD, reduced basis, hyper-reduction, morphing models | Bases from solution samples; certified or residual bounds | `OutsideParameterBox { parameter, range }`; `TopologyChange` | FLX-O-ROM-1 | 3 |
 | `Preview` geometry surrogates | Trained on a repository's own cached results; labelled with that repository's labels | `Untrusted { reason }` outside the training envelope | FLX-O-ROM-3 | 2 |
 | Surrogate training | Any class; pinned weights; stored calibration set and envelope | `CalibrationTooSmall { n }` | FLX-O-ROM-2 | 4 |
 | Surrogate prediction | `Estimated { Statistical { method: conformal } }` with `scope: Marginal`; weighted conformal in loops | `Untrusted { reason }` outside the envelope | FLX-O-ROM-2 | 4 |
@@ -978,8 +980,8 @@ A solve is a set of Kiln nodes demanded by an Evaluation. Kiln owns scheduling, 
 - **Placement.** The plan picks class and place (local CPU or GPU, team server, cloud) from memory and time estimates, and never moves work to the cloud without permission. Browser evaluations follow PLT's heavy-worker rule.
 - **Cost models.** They price refinement confirmation, per-prediction bounds, confirming solves and second trusted builders, so a plan compares them before running.
 - **Aborts.** Aborts are never cached; completed adaptive iterations stay valid.
-- **Step state.** The state of a transient solve at an accepted step is stored in Kiln's `Checkpoint` retention tier by (`NodeKey`, step), so a resumed solve continues bit-identically.
-- **Safe points.** Ends of time steps, adaptive and optimizer iterations, and Krylov restarts; `OpCx::safe_point` is polled at least every 10 ms of CPU time.
+- **Step state.** The state of a transient solve at an accepted step is stored in Kiln's `StepState` retention tier by (`NodeKey`, step), so a resumed solve continues bit-identically.
+- **Safe points.** Ends of time steps, adaptive and optimizer iterations, and Krylov restarts; `OpCx::safe_point` is polled at least every 10 ms of monotonic time.
 
 ### Extending Flux
 
@@ -1324,7 +1326,7 @@ BDDC is balancing domain decomposition by constraints and FETI-DP the dual–pri
 | Model | Build | Error | Phase |
 | --- | --- | --- | --- |
 | Modal superposition; Craig–Bampton | Lanczos modes; fixed-interface and constraint modes per Part | Truncation estimates | 2 |
-| POD–Galerkin; hyper-reduction | Snapshots (proper orthogonal decomposition); DEIM [Chaturantabut and Sorensen 2010] or energy-conserving sampling | Residual-based, `Estimated` in a reduction class | 3 |
+| POD–Galerkin; hyper-reduction | Solution samples (proper orthogonal decomposition); DEIM [Chaturantabut and Sorensen 2010] or energy-conserving sampling | Residual-based, `Estimated` in a reduction class | 3 |
 | Certified reduced basis | Greedy sampling of affinely parametrized linear forms | `Guaranteed`, coercivity bound by the successive constraint method [Huynh et al. 2007] | 3 |
 | Krylov moment matching | Frequency-domain reduction for sweeps and FMU export | Residual over the band | 3 |
 | Morphing reduced models | Fixed background discretization plus `shape_velocity` morphs | Residual-based | 3 |
@@ -1416,15 +1418,15 @@ Linked dependencies are faer (`CpuIsa` only), wgpu, bempp-rs, and hypre and PETS
 
 | To | What | Types | Phase |
 | --- | --- | --- | --- |
-| ING | Spaces, measures, `solve`, `modes`, `minimize`, `continue_in`, plans and form checks; the `kernels::expr` symbolic layer | `Expr<T>`, `SolvePlan` | 0 |
+| ING | Spaces, measures, `solve`, `modes`, `minimize`, `continue_in`, plans and form checks; the `kernels::expr` symbolic layer | `Expr<T>`, `SolvePlan` | 0; 1 (plans, `modes`); 2 (`continue_in`) |
 | ING | Budgeted regularized, gauge and critical-distance goals; property-basis propagation; singular sets and `study.regular()` | `Field<D, V>`, `ErrorBudget`, `Approx` | 1 |
-| ANV | `field` and `kernels`; `Sampler`s with error and gradient bounds; `geometry_density`; reduction marking; sizing and metric Fields | `Field` | 1 |
+| ANV | `field` and `kernels`; `Sampler`s with error and gradient bounds; `geometry_density`; reduction marking; sizing and metric Fields | `Field` | 0 (`field`, `kernels`); 1; 2 (sizing and metric Fields) |
 | KLN | Operations with grades, fidelity maps, safe points, derivatives, step state and cost models; pinned calibration tables | `OpImpl`, `Differentiable` | 0 |
 | COV | Forms, solvers and estimators; calibration classes, corpus and independent references; calibrated solution verification; reduction and localization; `validity_zones`; strut regime variables; `koiter_coefficient`; `std::uq`; the general operations | `Field`, `ValidityEnvelope` | 1 |
-| COV | Linear dynamics outputs for vibration fatigue; EHL film Fields; rotor ladder; explicit-dynamics functionals and ensembles | `Field` | 2 |
-| MEC | Phase 1 classes, two-sided eigenvalue and coupled buckling estimates, strut stress for strut-strength checks; idealizations; influence coefficients | `Field` | 1 |
-| MEC | Multibody and rod solvers; beams and laminated shells; bolted-joint and fastener forms; tied interfaces; manufacturing constraints for `std::mech::generate`; shell and ply optimization | `Field`, `Assembly` | 2 |
-| MFG | Modal analysis; additive distortion and weld joint loads; thermo-elasto-plasticity; filling flow with wall resolution; topology optimization with manufacturing constraints; GCI on warpage | `Field`, `Body` | 1 |
+| COV | Linear dynamics outputs for vibration fatigue; EHL film Fields; rotor ladder; explicit-dynamics functionals and ensembles | `Field` | 2; 3 (EHL, drop functionals); 4 (rotor ladder); 5 (crash ensembles) |
+| MEC | Phase 1 classes, two-sided eigenvalue and coupled buckling estimates, strut stress for strut-strength checks; idealizations; density topology optimization with additive and unrestricted constraints for `std::mech::generate` | `Field` | 1 |
+| MEC | Multibody and rod solvers; beams and laminated shells; bolted-joint and fastener forms; tied interfaces; influence coefficients; milling, two-axis cutting and casting constraints for `std::mech::generate`; shell and ply optimization | `Field`, `Assembly` | 2; 4 (rods); 6 (ply optimization) |
+| MFG | Modal analysis; topology optimization with manufacturing constraints; additive distortion and weld joint loads; thermo-elasto-plasticity; rigid multibody contact for assembly stability; filling flow with wall resolution; GCI on warpage | `Field`, `Body` | 1 (modal, topology optimization); 2; 3 (filling, GCI) |
 | ELX | Network compiler and DAE solver with the temporal rule; block-triangular LU; Verilog-A constructs | `Network`, `Field` | 2 |
 | ELX | Layered sheets; conjugate heat transfer; FMI and SSP runtime; `fft_solve` | `Field` | 3 |
 | ELX | Electromagnetic solvers with S-parameter goals; plane-pair cavity model; RLCG extraction; electro-thermal coupling; parameter-domain battery forms; `linearize_multibody` | `Field` | 4 |
@@ -1522,13 +1524,13 @@ Oracles live in `oracles/flux/`, a separate Cargo workspace written by the oracl
 | FLX-O-NET-3 | Block-triangular LU | Refactorization bit-identical to fresh factorization |
 | FLX-O-MBD-1 | Multibody dynamics | Order within 0.1 of 2 on heavy top and slider–crank; redundancy reported |
 | FLX-O-MBD-2 | Rods | Elastica, helical buckling and hanging cable within 1% |
-| FLX-O-COUP-1 | Coupling and activation | Partitioned and monolithic agree within budgets; Turek–Hron within 5% [Turek and Hron 2006] |
+| FLX-O-COUP-1 | Coupling and activation | Partitioned and monolithic agree within budgets; Turek–Hron within 5% [Turek and Hron 2006]; a conjugate-heat case agrees across both forms; a self-heating strip returns `Runaway` at its turning point |
 | FLX-O-COUP-2 | Homogenization and lattices | Tensors within 1% of full unit cells; strut peaks inside budget on 20 held-out lattices; CT-fitted joints hold on cells from a held-out build plate; sheet shells inside their envelopes |
 | FLX-O-COUP-3 | FMI and SSP | Reference FMUs on every Tier 1 OS; SSP round trips; master error order |
 | FLX-O-COUP-4 | Additive and weld distortion | Coupon distortion within coupon scatter on held-out coupons; joint loads within 5% of 3D joint models |
 | FLX-O-OPT-1 | Derivatives | Taylor order 2 ± 0.1 for every `Differentiable` operation |
 | FLX-O-OPT-2 | Topology optimization | MBB beam and 3D cantilever within 2% of published compliance |
-| FLX-O-OPT-3 | Adjoints and checkpoints | Steady adjoint 1.2 times a forward solve (target), 2 times blocks; resumes bit-identical |
+| FLX-O-OPT-3 | Adjoints and step state | Steady adjoint 1.2 times a forward solve (target), 2 times blocks; resumes bit-identical |
 | FLX-O-OPT-4 | Flow adjoints | Taylor order 2 on a duct pressure-drop goal; agreement with finite-difference sensitivities on a backward-facing step within 2% |
 | FLX-O-OPT-5 | Shell sizing and laminate optimization | A thickness-sized plate matches a published optimum within 2%; ply rules hold in every optimized laminate |
 | FLX-O-OPT-6 | Manufacturing constraints | Outcomes for each method pass the method's own geometric test (overhang, tool access, extrusion, draw) on 20 cases |
@@ -1555,9 +1557,9 @@ Capabilities that several tabs phase, and the parity floor, take their phase fro
 | --- | --- |
 | 0 | Determinism suite green for Flux kernels; unit errors in forms fail to compile; kernel IR v0 and `kernels::expr` frozen; H¹ elements and manufactured solutions; CEED baselines and no-FMA penalties; the measurement that decides WGSL elasticity; nothing frozen before the Flux rename |
 | 1 | GP1: aggregated CutFEM, calibrated DWR at both fidelities with refinement confirmation, singular sets and `study.regular()`, gauge goals, eigen-solvers with two-sided and coupled estimates, verified convex Newton, planar and axisymmetric models, remote points, point masses and springs. GP2: density topology optimization, steady adjoints, homogenization, beam lattices with CT-fitted joints, strut stress and lattice buckling. The six calibration classes |
-| 2 | GP3: fitted tetrahedra with mortar contact, cyclic modal analysis, linear dynamics, rigid multibody, drivetrain Networks, transient solvers and adjoints. GP4: beams, shells, reduction error, thermo-elasto-plasticity, weld joint loads, load-case combination. Also the phase 2 parity floor: bushings, fasteners and spot welds, tied interfaces, stress linearization, submodeling, `Preview` surrogates and shell sizing; additive distortion; 10M-DOF `SignOff` solves |
-| 3 | GP5: filling with wall resolution, warpage by calibrated GCI, explicit drop functionals, laminar conjugate heat transfer, fans, laminar rotating frames and flow adjoints, layered sheets, Helmholtz solvers, circuit DAEs, FDTD, FMU import, solver decks, EHL, 50M-DOF and flow throughput rows |
-| 4 | GP6: turbulent conjugate heat transfer, RANS rotating frames, sliding interfaces and adjoints, the rotor ladder, electro-thermal coupling, RLCG extraction, S-parameter goals, the plane-pair cavity model, FMU export and SSP, SPMe forms, fluid–structure interaction, magnetodynamics with motion, rods, nonsmooth multibody, surrogates with per-prediction bounds, GPU flow certified on the CPU |
+| 2 | GP3: fitted tetrahedra with mortar contact, rigid multibody, drivetrain Networks, transient solvers and adjoints. GP4: beams, shells, reduction error, thermo-elasto-plasticity, weld joint loads, load-case combination. Also the phase 2 parity floor: bushings, fasteners and spot welds, tied interfaces, stress linearization, submodeling, `Preview` surrogates and shell sizing; linear dynamics and cyclic modal analysis; additive distortion; 10M-DOF `SignOff` solves |
+| 3 | GP5: filling with wall resolution, warpage by calibrated GCI, explicit drop functionals, laminar conjugate heat transfer, fans, laminar rotating frames and flow adjoints, layered sheets, circuit DAEs, FDTD, FMU import, 50M-DOF and flow throughput rows. Also Helmholtz solvers, solver decks and EHL |
+| 4 | GP6: turbulent conjugate heat transfer, RANS rotating frames, sliding interfaces and adjoints, the rotor ladder, electro-thermal coupling, RLCG extraction, S-parameter goals, FMU export and SSP, SPMe forms, fluid–structure interaction, magnetodynamics with motion, rods, nonsmooth multibody, surrogates with per-prediction bounds, GPU flow certified on the CPU. Also the plane-pair cavity model |
 | 5 and later | GP7 MEMS pull-in; GP8 frames with code combinations; GP9 crash with erosion and imperfection ensembles; DFN cells; Floquet arrays and mixing planes; ply optimization (6); free surfaces beyond filling; particles; FE²; IPC for GP16 |
 
 ## Open questions
@@ -1568,7 +1570,7 @@ Capabilities that several tabs phase, and the parity floor, take their phase fro
 
 ## Contract change requests
 
-- **CCR-FLX-12, shared rows for rotors, lubrication and board cavities.** Add to contract section 13.4's first table: rotor aerodynamics (blade-element momentum, vortex particle method, rotating-domain flow), phase 4, first gate GP6 rotor thrust and torque, owner FLX, also COV and ELX; elastohydrodynamic lubrication, phase 3, no gate, owner FLX, also COV; and the plane-pair cavity model for power-distribution impedance, phase 4, no gate, owner FLX, also ELX. Each is phased by more than one tab today without a shared row.
+None.
 
 ## Sources
 

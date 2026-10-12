@@ -97,9 +97,9 @@ Finishing workingsteps declare `comp`, the cutter compensation mode, which is `C
 
 Kiln keeps the best portfolio result by (objective, seed), and outputs quantize before locale-free formatting, so two machines produce byte-identical NC text. Outside data enter only as External inputs (prices, offers, machine readings) or Evidence records (part measurements), each pinned in `ingot.lock` and named by `ObjectId` in the outcome of every check that read it.
 
-Every failure is a typed `MfgError` whose fixes are typed edits, listed in the Reference section. No strategy substitutes a tool, direction or material silently. `WorkLimit` is the cacheable `Failure` of KLN's limit catalog, since a search budget is an argument; an Evaluation's own `Budget` running out is the Abort `BudgetExhausted` (contract 7.2), which is never cached.
+Every failure is a typed `MfgError` whose fixes are typed edits, listed in the Reference section. No strategy substitutes a tool, direction or material silently. A search that reaches its budget returns the cacheable `Failure` `kiln/work_limit` with its best result so far beside it (contract 7.2), since a search budget is an argument; an Evaluation's own `Budget` running out is the Abort `BudgetExhausted` (contract 7.2), which is never cached.
 
-Process profiles declare the representations their hand-off accepts. A 3MF process accepts implicit and mesh regions; a STEP process accepts only B-rep, which shops' CAM and CMM software read. A part with an implicit fallback region from MEC therefore releases for a STEP process only after conversion within tolerance, and no semantic PMI (product and manufacturing information: tolerances and notes the machine can read) may target such a region.
+Process profiles declare the representations their hand-off accepts and the `realize:` point their exports use, `Mid` for machining by default, recorded in the export record. A 3MF process accepts implicit and mesh regions; a STEP process accepts only B-rep, which shops' CAM and coordinate measuring machine (CMM) software read. A part with an implicit fallback region from MEC therefore releases for a STEP process only after conversion within tolerance, and no semantic PMI (product and manufacturing information: tolerances and notes the machine can read) may target such a region.
 
 What MFG owns, and what it leaves to others:
 
@@ -118,7 +118,7 @@ MFG writes Rust in exactly three places, as contract 12 allows: operation famili
 | --- | --- | --- | --- | --- |
 | Core manufacturing types | `std::mfg::core` records over Bodies, Fields and Assemblies | Typed compile errors | MFG-O-CORE-1 | 0 |
 | Typed failures with fixes | Every `MfgError` carries ranked typed edits | The `MfgError` itself, with fixes | MFG-O-CORE-1 | 0 |
-| Seeded, budgeted searches | `seed` and work-unit `budget` arguments; seeded portfolios; warm-started "continue" | `WorkLimit` with the best result | MFG-O-DET-1 | 0 |
+| Seeded, budgeted searches | `seed` and work-unit `budget` arguments; seeded portfolios; warm-started "continue" | `kiln/work_limit` with the best result | MFG-O-DET-1 | 0 |
 | Outside data | External inputs and Evidence records, pinned in `ingot.lock` and named by `ObjectId` in the `CheckOutcome` | `MissingData` naming the input | MFG-O-CORE-2 | 1 |
 | Representation acceptance | Accepted representations per process profile; the fallback-region rule | Release blocked, naming region and process | MFG-O-CORE-4 | 1 |
 | Label invariance | Plans and costs unchanged when every name is re-randomized | None: names never enter a plan's inputs | MFG-O-LABEL-1 | 1 |
@@ -400,7 +400,7 @@ MEC owns flat patterns, flat DXF export, the bend-allowance model (`BendRule`, `
 *Why:* these are the leading open methods, both written in Rust and both buildable for Wasm; jagua-rs links under MPL-2.0 with its notice and source duties (contract 7.7).
 *Rejected:* no-fit-polygon heuristics, which reach lower density; closed vendor libraries, which nobody can audit.
 
-**Decision D-MFG-8:** Press-brake sequencing searches bend orders with collision checks between the partly bent part, the tools and the machine. Allowances come from MEC's sheet-metal model, springback from measurement, and from Flux once sheet forming lands in phase 5 (contract 13.4).
+**Decision D-MFG-8:** Press-brake sequencing searches bend orders with collision checks between the partly bent part, the tools and the machine. Allowances come from MEC's sheet-metal model, springback from measurement, and from this tab's forming simulation once it lands in phase 5 (contract 13.4).
 *Why:* one search handles every part, and the physics stays with its owners.
 *Rejected:* rule tables per part family, which break on the first unusual part.
 
@@ -410,8 +410,8 @@ MEC owns flat patterns, flat DXF export, the bend-allowance model (`BendRule`, `
 | Flat-pattern hand-off | MEC's flat DXF export with layer convention and bend table per machine or shop. Requires: MEC Flat DXF export | Unmapped entities listed | MFG-O-CUT-2 | 2 |
 | Press-brake planning | Bend sequence, tool stations and backgauge; allowance tables for MEC's `BendTable`; a bend sheet drawing with bent STEP and flat DXF (2); native bend programs for surveyed families (3) | `Infeasible` with the colliding bend | MFG-O-CUT-3 | 2, 3 |
 | Waterjet taper, bevels and punching | Taper and corner compensation (3); 5-axis bevels (4); turret tooling, nibbling, repositioning (3) | `MissingData`; `AxisLimit`; missing tool | MFG-O-CUT-1 | 3, 4 |
-| Sheet nesting | `nest(items, sheets, rules, seed, budget) -> Nest` with rotation, grain, spacing, zones and common lines | `Infeasible`; `WorkLimit` with the best nest | MFG-O-NEST-1 | 2 |
-| Remnants, associativity and inventory | Remnant Parts; warm-started regeneration; mixed sheets by cost (3) | `Infeasible`; `WorkLimit` with the best nest | MFG-O-NEST-1 | 2, 3 |
+| Sheet nesting | `nest(items, sheets, rules, seed, budget) -> Nest` with rotation, grain, spacing, zones and common lines | `Infeasible`; `kiln/work_limit` with the best nest | MFG-O-NEST-1 | 2 |
+| Remnants, associativity and inventory | Remnant Parts; warm-started regeneration; mixed sheets by cost (3) | `Infeasible`; `kiln/work_limit` with the best nest | MFG-O-NEST-1 | 2, 3 |
 
 ## Feeds, speeds and chatter
 
@@ -489,7 +489,7 @@ Native designs need no feature recognition, since Ingot features already know th
 
 Agents program as people do: Ingot on a branch, every oracle in CI, then a Proposal with cycle-time and tool-count deltas against the last approved program. CloudNC presents its CAM Assist output as a draft to review [CloudNC CAM Assist], and NX 2606 suggests strategies [Janus NX 2606]; Siemens has also announced work with Lambda Function on AI-assisted CNC programming [Siemens Lambda Function]. In Crucible an agent's program is no different from a person's: it cannot approve itself, prepare a transfer that skips simulation, or touch an oracle.
 
-STEP-NC is ISO 14649, published in parts for process data, milling, turning, tools, EDM and additive manufacturing [ISO 14649 catalog]. AP238 edition 3 is ISO 10303-238:2022 [ISO 10303-238], and it adds geometry, GD&T and kinematics to the program [STEP Tools AP238e3]. G-code stays the shop-floor output; STEP-NC is an exchange format for programs between systems.
+STEP-NC is ISO 14649, published in parts for process data, milling, turning, tools, EDM and additive manufacturing [ISO 14649 catalog]. AP238 edition 3 is ISO 10303-238:2022 [ISO 10303-238], and it adds geometry, GD&T (geometric dimensioning and tolerancing) and kinematics to the program [STEP Tools AP238e3]. G-code stays the shop-floor output; STEP-NC is an exchange format for programs between systems.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -519,17 +519,11 @@ The program subject is what the Approval signs, and contract 5.6 fixes its conte
 
 ### What the person approving sees and can do
 
-MFG fills each physical-effect plan with the fields contract 7.6 requires of the approval page:
-
-- the device serial and location, and its controller version;
-- what the transfer supersedes in the control;
-- the simulation verdicts, with the minimum clearance and the count of unsupported semantics;
-- the gateway's offset results with their time, and the setup-sheet revision;
-- the steps the person at the device must take (reduced-speed prove-out, tool-length check, reduced override).
+MFG fills each physical-effect plan with the fields contract 7.6 requires of the approval page, from the device serial to the steps the person at the device must take.
 
 Programs for a shop-qualified machine class carry that label.
 
-The approver has three outcomes (contract 7.6). *Approve* signs the subject. *Return for changes* closes the request with a reason and no penalty. A shop lead who returns a program because of a feed in workingstep 3 gets a corrected plan back the same hour; only resubmitting the identical digest is refused. *Deny as suspicious* is for a plan the approver believes is an attack; it freezes the session and blocks the recipients for 24 hours.
+The approver has the three outcomes of [AGT, Three outcomes](09-agents.md#three-outcomes). A shop lead who returns a program because of a feed in workingstep 3 gets a corrected plan back the same hour; only resubmitting the identical digest is refused.
 
 ### Prove-out and the minimum ceremony
 
@@ -541,7 +535,7 @@ A new program is proven at the machine: the machinist runs the first parts at re
 
 The first-article record names the captured revision that actually ran, and `Proven` requires that revision merged into the program source, so the released program is the one that made the measured part. A one-off job that never repeats closes in `Prototype` with a run record linking program, part serials and results.
 
-Repeated sends during prove-out use `bench_session` (contract 7.6), one AAL3 Approval for a run of transfers. It covers the named person at the machine, the machine serial, the gateway and the payload kind; one program Item lineage on one branch; a maximum count and an expiry of at most 8 hours; and the hazard acknowledgements of the machine package. Each send inside the session still passes every gateway check, and the approval page lists every transfer afterwards. Agents never open or extend a session.
+Repeated sends during prove-out use `bench_session`, one AAL3 Approval over the machine, the gateway and one program Item lineage ([AGT, Physical effects](09-agents.md#physical-effects)).
 
 Whether the person who prepared a plan may also approve it is a policy, not a constant. The Cedar policy `self_approve_transfer` assigns the preparer as an eligible approver of their own transfer plans. It is off by default; enabling it is a widening Cedar change signed under contract 5.4, and the record names the site's safety officer. The approval still needs an approval credential at AAL3, and the audit log marks every self-approved transfer.
 
@@ -674,7 +668,7 @@ GP2's strut checks need as-built strut data in phase 1 (contract 13.4). A strut 
 *Why:* 18 specimens from three batches is the reduced-sampling minimum for a B-basis value under the Composite Materials Handbook [NPL MAT 134], which COV's phase 1 tolerance limits need, and cracks in GP2 start at as-built nodes that nominal cells do not represent.
 *Rejected:* nominal-geometry node fits, which miss systematic node growth; fewer replicates with typical values, which leave strength reads without a statistical basis; a random specimen split, which leaks one plate's bias into both sides.
 
-COV builds strut-scale Materials, their B-basis values and the strut imperfection regime variable from these data. GP2's struts are stocky, so compression is decided by a strut-strength check that reads MFG's compression tests: the localized axial stress against the as-built compressive strength, reduced by a factor computed from the measured waviness. Eigen-buckling stays for members slender enough for it to decide ([COV, Validity envelopes as data](04-coverage.md#validity-envelopes-as-data)). The CT cells are segmented to implicit Bodies, so FLX's phase 1 immersed solver runs on them at full resolution.
+COV builds strut-scale Materials, their B-basis values and the strut imperfection regime variable from these data. GP2's struts are stocky, so compression is decided by a strut-strength check that reads MFG's compression tests: the localized axial stress against the as-built compressive strength, reduced by a factor computed from the measured waviness. Eigen-buckling stays for members slender enough for it to decide ([COV, Dynamics and stability](04-coverage.md#dynamics-and-stability)). The CT cells are segmented to implicit Bodies, so FLX's phase 1 immersed solver runs on them at full resolution.
 
 ### Distortion and compensation
 
@@ -701,7 +695,7 @@ MFG supplies each step's data from coupons, such as cantilevers cut from the pla
 | Extrusion and vat layers | Adaptive layer height, variable-width perimeters, Field-driven infill, seams and travel; anti-aliased masks | Regions thinner than a bead; `OutsideEnvelope` | MFG-O-AM-6 | 2 |
 | Powder bed scan vectors | Hatch, stripes, islands and skins in 3MF Toolpath or another open format a named machine partner accepts | `Unsupported` without a partner format | MFG-O-AM-6 | 4 |
 | Multi-material, deposition and curved layers | Per-region materials from Fields (3); bead paths on the machining stack (3); isosurface layers (4) | `MissingData`; `Collision`; `Infeasible` order | MFG-O-AM-6 | 3, 4 |
-| Inherent-strain distortion | Coupon data for FLX's sequence: layer-group strains, support stiffness, relaxation factor. Requires: FLX Element activation | `OutsideEnvelope` outside the calibrated set | MFG-O-AM-7 | 2 |
+| Inherent-strain distortion | Coupon data for FLX's sequence: layer-group strains, support stiffness, relaxation factor. Requires: FLX Additive distortion sequence | `OutsideEnvelope` outside the calibrated set | MFG-O-AM-7 | 2 |
 | Recoater risk and thermo-mechanics | Recoater clearance (2); deposition bead activation with plasticity (3); powder bed layer thermo-mechanics on COV's model (4) | `OutsideEnvelope` at melt-pool scale | MFG-O-AM-7 | 2, 3, 4 |
 | Compensation | Iterative pre-deformation, sent as geometry to the vendor's build processor | `Infeasible` with the residual | MFG-O-AM-8 | 2 |
 | Cure, sintering and warp | Vat working curve (2); binder-jet shrinkage and filament warp (4) | `MissingData` without constants; `OutsideEnvelope` | MFG-O-AM-9 | 2, 4 |
@@ -874,7 +868,7 @@ Robots are Machines that share kinematics, collision checking and posts with mac
 | Tool and hand access | Swept volumes of tools and hands per step | `Unreachable` with fixes | MFG-O-ASM-1 | 3 |
 | Design for assembly | `dfa(assembly) -> DfaReport`: separate-part test, handling and insertion difficulty after Boothroyd, Dewhurst and Knight [Boothroyd et al. 2011], efficiency index against the theoretical minimum time [DFMA DFA] | Instances without data listed as undetermined | MFG-O-ASM-2 | 2 |
 | Work instructions | Steps with exploded views, tools, torques, checks and safety notes; glTF 2.0 with an accessible viewer and PDF (2); OpenUSD and locales (3) | Steps without a view; missing translations | MFG-O-ASM-3 | 2, 3 |
-| Robot programming | Targets, external axes and positioners, collision-free seeded planning; posts to ABB RAPID, KUKA KRL, FANUC TP, Yaskawa INFORM and URScript [RoboDK post processors], never safety configuration; loading paths; cycle time | `Unreachable`; `WorkLimit`; `Unsupported`, including `AsciiUpload` | MFG-O-ASM-4 | 3 |
+| Robot programming | Targets, external axes and positioners, collision-free seeded planning; posts to ABB RAPID, KUKA KRL, FANUC TP, Yaskawa INFORM and URScript [RoboDK post processors], never safety configuration; loading paths; cycle time | `Unreachable`; `kiln/work_limit`; `Unsupported`, including `AsciiUpload` | MFG-O-ASM-4 | 3 |
 | Line balancing | Stations for a takt or takt for stations (3); mixed models, zoning, skills, two-sided lines (4) | `Infeasible` when a task exceeds takt | MFG-O-ASM-5 | 3, 4 |
 
 ## Inspection and measurement
@@ -913,7 +907,7 @@ A customer PDF without a model imports as a controlled document whose balloons a
 
 Customers in regulated industries buy the records as much as the parts, so this section defines the first-article, nonconformance and process-capability records MFG keeps and how they join KLN's quality loop.
 
-Process profiles declare Cp and Cpk per process and feature class, which MEC's default tolerance distribution reads. A first-article record signs the program revision that ran, the machine and part serials, and one passing Evidence record per characteristic. It moves a program to `Proven` (KLN owns the lifecycle; [KLN, Change control, signatures and compliance](05-kiln-repo-plm.md#change-control-signatures-and-compliance)), and AS9102 forms render it from phase 3. Per IAQG's summary of 9102 revision C, first-article inspection is not product acceptance and each item needs its own [IAQG 9102C].
+Process profiles declare Cp and Cpk per process and feature class, which MEC's default tolerance distribution reads. A first-article record signs the program revision that ran, the machine and part serials, and one passing Evidence record per characteristic. It moves a program to `Proven` (KLN owns the lifecycle; [KLN, Revisions and lifecycle states](05-kiln-repo-plm.md#revisions-and-lifecycle-states)), and AS9102 forms render it from phase 3. Per IAQG's summary of 9102 revision C, first-article inspection is not product acceptance and each item needs its own [IAQG 9102C].
 
 A nonconformance record names serials, characteristics and a disposition. It arises from a failing measurement or from an edit at the control of a `Proven` or `Released` program, never from prove-out. A disposition to use nonconforming parts is a Waiver whose effectivity is a serial or lot range, which is what a deviation is (contract 5.6). From phase 3 a nonconformance links to KLN's corrective and preventive action record, which carries root cause, actions and an effectiveness check, so the loop from defect to verified fix closes inside Crucible. AIAG publishes PPAP-4 [AIAG PPAP] and the AIAG & VDA FMEA Handbook [AIAG-VDA FMEA].
 
@@ -951,7 +945,7 @@ Cost elements are material, scrap, machine and setup time, labour, consumables, 
 
 ## Factory connection and digital twin
 
-The plan must reach the factory systems that schedule work and come back as data about what really happened, so this section connects machines, ERP and MES, and keeps per-serial records.
+The plan must reach the factory systems that schedule work and come back as data about what really happened, so this section connects machines, enterprise resource planning (ERP) and manufacturing execution systems (MES), and keeps per-serial records.
 
 MTConnect's REST API is "read-only and does not produce any side effects" [MTConnect 2.5]. OPC 40501-1 (OPC UA for machine tools) is at 1.02.0 [OPC 40501-1], OPC 40001-3 (machinery job management) at 1.0.1 [OPC 40001-3], and async-opcua (MPL-2.0) links unmodified [async-opcua].
 
@@ -963,7 +957,7 @@ The gateway is `apps/machine-gateway`, owned by MFG and packaged by PLT (contrac
 
 A manufacturing BOM (MBOM) restructures the engineering BOM into what the factory builds: phantoms, kits, stations and consumables. Real products are often made in two plants, or by a contract manufacturer and an in-house line, each with its own MBOM, routings, programs and suppliers for one EBOM revision.
 
-**Decision D-MFG-40:** MBOM rules, routings and work centres are keyed by (EBOM configuration point, `ProductionSite`), where a `ProductionSite` is a policy-package record naming a plant or a supplier and its ERP mapping. Reconciliation, cost and ERP mapping run per site.
+**Decision D-MFG-40:** MBOM rules, routings and work centres are keyed by (EBOM configuration point, `Site`), where a `Site` is KLN's policy-package record naming a plant or a supplier and its ERP mapping. Reconciliation, cost and ERP mapping run per site.
 *Why:* one EBOM revision is routinely built at more than one site, and each site's plan must reconcile and cost on its own.
 *Rejected:* one MBOM per product, which assumes a single factory; one design repository per site, which duplicates the EBOM.
 
@@ -981,7 +975,7 @@ AOUSD announced OpenUSD Core Specification 1.0 on 17 December 2025 [AOUSD Core 1
 | MTConnect and OPC UA adapters | MTConnect observations on axes, spindles, programs, tools and offsets; OPC UA Machine Tools and Machinery models with job orders mapped to routing steps | Schema and security-policy failures typed; partial data marked | MFG-O-FAC-2 | 3 |
 | MES and ERP mapping | MBOM, routings and work orders out through ECO's connectors (2); status, scrap and labour back (4) | Mapping errors per field | MFG-O-FAC-3 | 2, 4 |
 | MBOM and routings | EBOM-to-MBOM rules as Ingot (phantoms, kits, stations, consumables); routing steps with times and work centres (2); effectivity by serial, date, work order or lot (3) | Unconsumed items; unmapped work centres | MFG-O-FAC-4 | 2, 3 |
-| Production sites | MBOM, routings and work centres keyed by (EBOM configuration point, `ProductionSite`); reconciliation, cost and ERP mapping per site | Reconciliation failure named per site | MFG-O-FAC-8 | 3 |
+| Production sites | MBOM, routings and work centres keyed by (EBOM configuration point, `Site`); reconciliation, cost and ERP mapping per site | Reconciliation failure named per site | MFG-O-FAC-8 | 3 |
 | OpenUSD export | Cells as USD layers with joints and prim paths from `EntityId`s, process animation (3); incremental layers (4) | Unsupported constructs listed | MFG-O-FAC-5 | 3, 4 |
 | As-built records | Per serial: lots, revisions, operators, Waivers with serial effectivity, nonconformances, Evidence records, deviation Fields | Gaps flagged, never back-filled with nominal values | MFG-O-FAC-6 | 3 |
 | Model calibration | As-run data update coefficients, cycle-time factors and distortion calibration through Proposals | Updates outside declared bounds need human approval | MFG-O-FAC-7 | 4 |
@@ -1018,7 +1012,7 @@ Regulation (EU) 2017/821 "will only apply directly to EU-based importers of tin,
 
 ### Failures
 
-Every `MfgError` variant renders as `mfg/<snake_case>` (contract 7.6), and every `fixes` list holds typed edits ranked by how little they change.
+Every `MfgError` variant renders as `mfg/<snake_case>` (contract 7.6), and every `fixes` list holds typed edits ranked by how little they change. A reached search budget is not an `MfgError`: it is `kiln/work_limit` with the best result so far beside it (contract 7.2).
 
 ```rust
 pub enum MfgError {
@@ -1030,7 +1024,6 @@ pub enum MfgError {
     Infeasible          { constraint: ConstraintRef, witness: Option<ObjectId>, fixes: Vec<Fix> },
     OutsideEnvelope     { model: ModelId, quantity: QuantityRef, value: f64, fixes: Vec<Fix> },
     MissingData         { what: DataRef, fixes: Vec<Fix> },
-    WorkLimit           { limit: base::WorkLimit, best_so_far: Option<ObjectId> },
     MachineModel        { check: MachineCheck, fixes: Vec<Fix> },   // ChainOpen | TravelMismatch | HomeCollision | KinematicParameters
     OffsetMismatch      { register: OffsetRef, expected: Length, read: Length, tolerance: Length },
     ControllerVersionUnqualified { machine: MachineSerial, version: ControllerVersion, qualified: VersionRange },
@@ -1038,6 +1031,7 @@ pub enum MfgError {
     HashMismatch        { diff: ObjectId },       // the semantic NC diff
     ProgramSlotOccupied { number: ProgramNumber, foreign: bool },
     DncSessionPreArmed  { machine: MachineSerial },
+    GatewayUnreachable  { machine: MachineSerial },
 }
 ```
 
@@ -1135,18 +1129,18 @@ Parity with the incumbents. Each row names a documented incumbent feature and wh
 | To | What | Types | Phase |
 | --- | --- | --- | --- |
 | All tabs | `std::mfg` packages (Reference lists them) | Ingot packages | 0 |
-| MEC | Process profiles (Cp, Cpk, accepted representations); DfAM, manufacturability and assembly checks; cost models | `Check`, `Field`, packages | 1 |
+| MEC | Process profiles (Cp, Cpk, accepted representations); DfAM, manufacturability and assembly checks; cost models | `Check`, `Field`, packages | 1; 2 (Cp and Cpk, assembly checks) |
 | MEC | Characteristic identities and balloon labels | Records | 1 |
-| MEC | Press-brake allowance data; the harness manufacturing package; in-process drawings | Packages, drawings | 2 |
+| MEC | Press-brake allowance data; in-process drawings; the harness manufacturing package | Packages, drawings | 2; 4 (harness package) |
 | FLX, COV | As-built strut calibration (diameter, waviness, tension and compression tests, CT unit cells) | `Field`, `Body`, packages | 1 |
 | FLX, COV | Process profiles for manufacturing-constraint forms; coupon data for inherent strain and weld joints; process data under the material-or-process ownership rule | `Field`, packages | 2 |
 | FLX | The Hele-Shaw filling and stability-lobe operation families | `flux-op-*` crates | 3 |
-| ELX | Rule packs by class; package choice; panels, stencils, test programs; fabrication feedback | `Check`, packages | 3 |
+| ELX | Fabricator capability records (`fab::…`: laminates, via spans, spacing and HDI limits); rule packs by class; package choice; panels, stencils, test programs; fabrication feedback | `Check`, packages | 3 |
 | KLN | Program subjects as `ItemDefinition`s of program Items; first-article and run records; setup sheets, instructions and inspection plans | CAS objects, records | 2 |
-| KLN | MBOM rules and routings per production site; nonconformance records linked to corrective actions; as-built records | Records | 2 |
-| AGT | Typed physical-effect payloads with the approval page's fields; bench-session payload kinds; `request_quote` and `publish_passport` payloads; `MfgError` fixes | Act plans | 2 |
+| KLN | MBOM rules and routings per `Site`; nonconformance records linked to corrective actions; as-built records | Records | 2; 3 (sites, corrective-action links, as-built records) |
+| AGT | Typed physical-effect payloads with the approval page's fields; bench-session payload kinds; `request_quote` and `publish_passport` payloads; `MfgError` fixes | Act plans | 2; 3 (`publish_passport`) |
 | UIX | Toolpaths with pass keys, stock, collisions, NC text with `BlockMap` and compensation modes, setup sheets, toolpath edits as source | `Body`, `Field` | 2 |
-| UIX | DfAM and carbon Fields, cost lines | `Field`, records | 1 |
+| UIX | DfAM and carbon Fields, cost lines | `Field`, records | 1; 2 (carbon) |
 | ECO | `verify_nc`; `crucible:mfg` worlds; connector manifests with endpoint allowlists; machine-definition formats to list | WIT interfaces, packages | 2 |
 | PLT | `apps/machine-gateway` for packaging | App | 2 |
 

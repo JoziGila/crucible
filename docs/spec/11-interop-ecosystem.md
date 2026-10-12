@@ -64,7 +64,7 @@ The import statement's `CallSite` comes from source text, so imported names surv
 | Source | Mechanism | Context | Enters a build |
 | --- | --- | --- | --- |
 | Open formats | A Wasm component in the `importer` or `exporter` world | Evaluation | As a cached Op output |
-| Licensed formats (native CAD, Parasolid, ACIS; JT at first) | An external tool on the vendor SDK, in PLT's translator host | Tool | As a signed External input in `ingot.lock` |
+| Licensed formats (native CAD, Parasolid, ACIS; JT at first) | An external tool on the vendor SDK, in a translator host under PLT's sandbox | Tool | As a signed External input in `ingot.lock` |
 | Live sources (machines, offers, enterprise systems) | A connector Wasm component | Connector | As a signed External input in `ingot.lock` |
 
 **Decision D-ECO-2:** Licensed translators never run inside evaluation; their output enters builds only as External inputs, pinned in the lockfile and signed by the translator host. A clean-room reader built under contract 7.7's insight protocol takes a licensed translator's place once it passes the same qualification.
@@ -124,7 +124,7 @@ Writers run in the evaluation context, so an export is a cached Op. Three rules 
 
 The signed release tag covers a manifest of exported Files and their SHA-256. Stable bytes let the phase 1 gate release reproduce the run build's AP242 and 3MF (contract section 13.1). Writers derive AP242 persistent ids from `exchange_form`'s id map, and the AP242 writer decides semantic PMI per target face: a control on a facet face exports as presentation only, with a report entry, under MEC's eligibility rule.
 
-Per-recipient watermarks deter casual redistribution and identify unmodified copies only. A watermark is a writer transform keyed with an HMAC (a keyed hash) under the tenant's watermark key, so one recipient cannot forge another's mark, and it never alters definitional geometry or attributes. A recipient who re-saves a STEP file or re-slices a 3MF removes it, so traceability rests on the release-data record of who received which file hash ([KLN, Data leaving a tenant](05-kiln-repo-plm.md#data-leaving-a-tenant)).
+Per-recipient watermarks deter casual redistribution and identify unmodified copies only. A watermark is a writer transform keyed with an HMAC (a keyed hash) under the tenant's watermark key, so one recipient cannot forge another's mark, and it never alters definitional geometry or attributes. A recipient who re-saves a STEP file or re-slices a 3MF removes it, so traceability rests on the release-data record of who received which file hash ([KLN, Exits](05-kiln-repo-plm.md#exits)).
 
 ### Untrusted content in imported files
 
@@ -134,7 +134,7 @@ An imported file comes from outside the organization, so it can attack the parse
 2. **Hostile text.** Names, notes, PMI text and metadata come back as `ExternalText` with origin (AGT), and entities get neutral identifiers such as `part_017`.
 3. **Hostile appearance.** Readers mark every output of an Asset `data_untrusted`, and Kiln joins it into everything derived. A human merge of the import Proposal endorses its typed outputs (contract section 5.3), while its text stays `ExternalText`. A render of an unendorsed Body is instruction-capable, since geometry can depict text.
 
-Archives (3MF, USDZ, FMU packaged simulation models, SSP system descriptions) are read with limits on entries, expanded size and compression ratio, and a path outside the root fails with `ImportError::UnsafeArchivePath`.
+Archives (3MF, USDZ, Functional Mock-up Unit (FMU) packaged simulation models, SSP system descriptions) are read with limits on entries, expanded size and compression ratio, and a path outside the root fails with `ImportError::UnsafeArchivePath`.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -144,9 +144,9 @@ Archives (3MF, USDZ, FMU packaged simulation models, SSP system descriptions) ar
 | Licensed translation | External tool without egress; output pinned and signed by an enrolled host | `ExternalInputMissing`; unsigned inputs shown as `Declared` | ECO-O-8, ECO-O-15 | 2 |
 | Translation report | Every source entity accounted for | A missing entry blocks release | ECO-O-17 | 1 |
 | Units and axes | Recorded conversion; `units:` for unitless formats | `MissingUnits` with plausible readings | ECO-O-16 | 1 |
-| Imported identity and matching | Persistent ids or exact signatures; re-imports matched into a reviewed `import_map` (ANV) | `NoCorrespondence { faces }`; unpaired faces keep their `ResolveError` | ANV-O-NAME-4 | 1 |
+| Imported identity and matching | Persistent ids or exact signatures; re-imports matched into a reviewed `import_map`. Requires: ANV Imported entity ids; ANV `anvil::match_bodies` | `NoCorrespondence { faces }`; unpaired faces keep their `ResolveError` | ANV-O-NAME-4 | 1 |
 | Receiver profiles | Named and declared profiles; merges, refusals and tolerant-edge reports | `MissingReceiver`; `NotRepresentable { entities, reason: BelowReceiverResolution }` | ECO-O-35 | 1 |
-| Exchange form | Seams, poles, B-spline approximations within the receiver's bound, id map | `NotRepresentable { faces }` (ANV). Requires: ANV `anvil::exchange_form` | ANV-O-NF-1, ECO-O-24 | 1 |
+| Exchange form | Seams, poles, B-spline approximations within the receiver's bound, id map | `NotRepresentable { entities, reason }` (ANV). Requires: ANV `anvil::exchange_form` | ANV-O-NF-1, ECO-O-24 | 1 |
 | Deterministic export | Byte-identical Files everywhere | None: a writer is a pure function of the Change, and ECO-O-4 catches any divergence | ECO-O-4 | 1 |
 | Recipient watermarking | HMAC-keyed, non-definitional, recorded with the release data | `WatermarkUnsupported { format }` | ECO-O-33 | 3 |
 | Untrusted content | Limits, `ExternalText`, integrity until endorsed | `ImportError::LimitExceeded`; `ImportError::UnsafeArchivePath` | ECO-O-5, ECO-O-18 | 1 |
@@ -222,13 +222,13 @@ A machine package needs the machine's kinematic structure, and machine builders 
 | AP242 PMI read, persistent ids, tessellation | Per recommended practice | Report entries | ECO-O-2, ECO-O-24 | 2 |
 | IGES read | Geometry level, healed with bounds | `ImportError` naming the entity | ECO-O-16 | 1 |
 | 3MF and STL | Beam Lattice marked required; a Core mesh beside it | `ExportError` over the triangle budget | ECO-O-16 | 1 |
-| Inspection results import | QIF Results or CSV to one Evidence record per characteristic (MFG) | Unmatched labels reported | ECO-O-16 | 1 |
+| Inspection results import | QIF Results or CSV to one Evidence record per characteristic (MFG) | Unmatched labels reported. Requires: MFG Results as Evidence records | ECO-O-16 | 1 |
 | Drawing writers | PDF, SVG, PDF/A and DXF of sheets and planar sections | `ExportError` | ECO-O-3, ECO-O-4 | 1 |
 | DXF and DWG exchange | Read and write R12 to R2018; imported DWG as an editable drawing program | `ImportError::UnsupportedVersion { version }` with the licensed fallback | ECO-O-36 | 2 |
 | Licensed MCAD translators | Mechanical catalog rows | Unqualified versions flagged | ECO-O-15 | 2 |
 | Board exchange for mechanical teams | IDF, STEP boards and IDX to a read-only board Part | `ImportError` naming missing data | ECO-O-26 | 2 |
 | Board fabrication and assembly writers | Gerber, XNC, IPC-2581C, ODB++, IPC-D-356, placements | `ExportError` | ECO-O-25 | 3 |
-| Solver decks | Nastran, Abaqus and LS-DYNA read; Nastran, DMIG and OP4 write | `UnmappedCard { card, line }` | ECO-O-37 | 3 |
+| Solver decks | Nastran, Abaqus and LS-DYNA read; Nastran, DMIG and OP4 write | `UnmappedCard { card, line }`. Requires: FLX Imported solver decks; FLX Solver deck export | ECO-O-37 | 3 |
 | Modelica source import | Declared subset to Networks; FMU fallback | `Untranslated { construct }` | ECO-O-38 | 4 |
 | Machine definitions | Builder STEP, MTConnect device models and licensed vendor exports, each with its licence recorded | `ImportError::LicenceUnrecorded { source }` | ECO-O-16, ECO-O-31 | 2 |
 | IDX change proposals | Incremental exchange with responses | Rejected proposals reported | ECO-O-16 | 4 |
@@ -341,9 +341,9 @@ PLT applies Wasmtime security releases within 7 days, each gated by ECO-O-6; the
 
 Tool and connector components run on the server for browsers and tablets. On iPadOS no downloaded code runs (guideline 2.5.2), and packages appear only as design dependencies under guideline 3.2.2(i) [App Review]. Local registry components there would first need a 4.7.4 web index, 4.7.1 reporting and 4.7.5 age ratings.
 
-**Decision D-ECO-10:** The registry ships determinized core modules plus a data description of each Wasm component, never per-component JavaScript, and one first-party browser runtime lifts and lowers from it. Browsers evaluate third-party evaluation components remotely until the asynchronous bridge passes PLT-O-WASM-1 there (contract section 7.4). Then each runs in a dedicated worker started by an `<iframe sandbox="allow-scripts">` on a sandbox site with another registrable domain. The site serves `Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; webrtc 'block'`, the last directive where the engine implements it, with `Cross-Origin-Embedder-Policy: require-corp` and `Cross-Origin-Resource-Policy`, and data cross as transferable `ArrayBuffer`s. An engine evaluates third-party components locally only after ECO-O-8's exfiltration cases pass in it.
-*Why:* generated glue would run beside every local repository and key. The sandbox drops storage and credentials, and `default-src 'none'` blocks `fetch` and WebSocket [MDN default-src]. The content security policy's fetch directives do not govern WebRTC, which has its own directive with the values `'allow'` and `'block'` [CSP3], and a worker exposes no `RTCPeerConnection` [unverified per engine].
-*Rejected:* per-component ES modules as jco generates them [jco]; transpiling in the client; Pulley compiled to Wasm; an opaque-origin worker without a network policy; trusting `default-src` alone, which leaves a WebRTC channel to an attacker's STUN or TURN server.
+**Decision D-ECO-10:** The registry ships determinized core modules plus a data description of each Wasm component, never per-component JavaScript, and one first-party browser runtime lifts and lowers from it. Browsers evaluate third-party evaluation components remotely until the asynchronous bridge passes PLT-O-WASM-1, PLT-O-WASM-6 and PLT-O-WASM-7 there ([PLT, Isolation of third-party Wasm components](12-platform-performance.md#isolation-of-third-party-wasm-components)). Then each runs in PLT's browser sandbox, and only after ECO-O-8's exfiltration cases pass in that engine.
+*Why:* generated glue would run beside every local repository and key.
+*Rejected:* per-component ES modules as jco generates them [jco]; transpiling in the client; Pulley compiled to Wasm.
 
 PLT owns the web app's integrity (an asset manifest in a transparency log, checks by TUF (The Update Framework) in the service worker, expiring apt and dnf metadata) and the main origin's own content policy.
 
@@ -372,7 +372,7 @@ An update that adds a capability or changes the signer waits as a Proposal. A na
 Contract section 7.4 states the rules, and PLT owns the determinizer and its overhead table. ECO adds three:
 
 1. Randomness arrives only as an explicit `seed` argument from an Ingot `Rng` (ING).
-2. Limit outcomes follow KLN's one catalog: `FuelExhausted`, `StackExhausted` and `WorkLimit` are cached `Failure`s, and host resource errors and cancellation are Aborts.
+2. Limit outcomes follow KLN's one catalog: `kiln/fuel_exhausted`, `kiln/stack_exhausted`, `kiln/work_limit` and `kiln/memory_limit` are cached `Failure`s whichever layer reaches them (contract 7.2), and host resource errors and cancellation are Aborts.
 3. Data parallelism uses `crucible:host/parallel`, whose combinators return outputs in input order; KLN owns the `crucible:host` package and PLT implements `parallel` behind it.
 
 **Decision D-ECO-8:** Evaluation-context Wasm components execute only as determinized binaries. The registry runs PLT's determinizer at publish in a single-use microVM that runs no package code, twice on different hosts, and each host computes the output hash; the index entry records both receipts. The local toolchain runs the same version for unpublished components, and every host re-runs it on the published input at install and refuses a mismatch. The binary's SHA-256 enters the `NodeKey`.
@@ -387,10 +387,10 @@ Limits apply per call. A manifest may request more, up to the organization's cei
 
 | Limit | Evaluation default (ceiling) | Tool and connector default | Outcome |
 | --- | --- | --- | --- |
-| Linear memory | 256 MiB (4 GiB) | 2 GiB | `memory.grow` past the declared maximum returns −1 and the component decides (PLT); a host-caused failure below it is an Abort |
-| Fuel | 5 × 10¹⁰ units, roughly 10 to 30 s native (policy) | Wall-clock budget | `FuelExhausted { used, limit }`, cached |
-| Logical stack | 256 KiB (1 MiB, calibrated in phase 0) | Engine default | `StackExhausted { limit }`, cached |
-| Output; handles; binary | 2 GiB per output; 10⁷ handles (10⁸); 64 MiB (256 MiB) | Policy; 10⁶; 64 MiB | `WorkLimit { kind, limit }`; large binaries refused at publish |
+| Linear memory | 256 MiB (4 GiB) | 2 GiB | `memory.grow` past the declared maximum is the cached `Failure` `kiln/memory_limit { limit }` (contract 7.2); a host-caused failure below it is a `ResourceExhausted` Abort |
+| Fuel | 5 × 10¹⁰ units, roughly 10 to 30 s native (policy) | Wall-clock budget | `kiln/fuel_exhausted { used, limit }`, cached |
+| Logical stack | 256 KiB (1 MiB, calibrated in phase 0) | Engine default | `kiln/stack_exhausted { limit }`, cached |
+| Output; handles; binary | 2 GiB per output; 10⁷ handles (10⁸); 64 MiB (256 MiB) | Policy; 10⁶; 64 MiB | `kiln/work_limit { kind, limit }`; large binaries refused at publish |
 | Wall clock | None, cancellation only | 15 min per call | The call fails with `Timeout`, never cached |
 
 Work above 4 GiB uses PLT's chunked buffers, operations or server-side tool components. 64-bit memories stay off until every Tier 1 browser engine supports them [Wasm 3.0].
@@ -417,7 +417,7 @@ WASI 0.3.0 shipped on 11 June 2026 and 0.3.1 on 11 August 2026, with no date for
 | Process isolation | Sandboxed workers; microVMs on trusted builders | Worker loss is an Abort | ECO-O-8 | 1 |
 | Tool egress | No network; named endpoints by grant (PLT enforces) | `EgressDenied { host }` | ECO-O-8 | 1 |
 | Capability grants and flow rule | Scoped grants; at most one risky capability | `CapabilityDenied` | ECO-O-8 | 1 |
-| Determinized execution and limits | Code-free determinizer runs on two hosts; install-time re-run; seeds; KLN's outcomes | Limit `Failure`s cached; a hash mismatch refuses the component | ECO-O-6, ECO-O-7 | 0 |
+| Determinized execution and limits | Code-free determinizer runs on two hosts; install-time re-run; seeds; KLN's outcomes | Limit `Failure`s cached; a hash mismatch refuses the component | ECO-O-6, ECO-O-7 | 0; 1 (install-time re-run) |
 | Browser Wasm component runtime | Generic runtime for first-party components | Missing description fetched remotely | ECO-O-6 | 1 |
 | Browser sandbox | Remote until the bridge and the exfiltration cases pass per engine, then the sandboxed iframe and worker | Remote evaluation | ECO-O-8 | 2 |
 | Tablet execution | First-party components only on iPadOS | Remote evaluation | ECO-O-6 | 3 |
@@ -465,7 +465,7 @@ CloudEvents requires `id`, `source`, `specversion` and `type`, with `source` plu
 3. **At least once.** Receivers deduplicate by `webhook-id`, and retries back off with jitter over about three days, then go to a dead-letter queue.
 4. **Address rules.** Deliveries leave through PLT's egress proxy, which checks each resolved address at connect time against ECO's webhook rules: loopback, private, link-local, carrier-grade NAT (100.64.0.0/10), IPv6 unique-local and IPv4-mapped ranges are refused unless a self-hosted policy names a host, and every 3xx response counts as a failure.
 5. **Opaque references.** Above `public`, payloads carry a per-subscription id, the HMAC of the `ObjectId` under the subscription's key, never an `ObjectId` or file hash, so a third-party receiver cannot confirm a guessed value.
-6. **People only.** Agents receive the same events as MCP (Model Context Protocol) resource subscriptions (AGT).
+6. **People only.** Agents read events through `read.events` and MCP (Model Context Protocol) resource subscriptions to branch heads, Proposals and Evaluations (AGT).
 
 ### Where tenant bytes leave
 
@@ -475,9 +475,9 @@ ECO provides three exit surfaces:
 
 - **Repository archive** (phase 1): a design repository's full history and the CAS objects needed to rebuild it; restoring it reproduces every Change's build hash.
 - **Release bundle** (phase 1): a release's neutral Files, the bill of materials (BOM) as CSV and JSON, and the signed manifest.
-- **Git mirror** (phase 2): Ingot sources, manifests and lockfiles, one Git commit per selected Change.
+- **Git mirror** (phase 2): a push of selected branches, with their commits, to another party's Git host.
 
-The archive format and the CAS encoding are open, so a third party can write an independent reader (ECO-O-12). On import, spans keep their integrity only if a device key of a principal in this organization signed the Change (KLN).
+The archive format and the CAS encoding are open, so a third party can write an independent reader (ECO-O-12). On import, spans keep their integrity only when the server that witnessed each write signed its span-integrity record and this organization trusts that server (KLN).
 
 **Decision D-ECO-28:** Every ECO surface that sends tenant bytes to another party is an Act in AGT's `release_data` family: archive export, mirror pushes, release bundles, quote requests, connector messages, passports and publishing. At commit each runs one set of checks: labels, screening, a `ControlAuthorization` for controlled payloads, and audit. Recurring channels such as a Git mirror run as a `standing_release` that two people approve once, fixing recipients, channel, schema, confidentiality ceiling and an expiry of at most 12 months.
 *Why:* exit paths with different controls leave the weakest open, and a standing release controls frequent flows without rubber-stamping each one.
@@ -613,7 +613,7 @@ Advisories use OSV 1.9.1, and ECO registers a `Crucible` ecosystem by pull reque
 | Act or method | Effect | Who |
 | --- | --- | --- |
 | Yank | New resolution skips the version; pinned bytes stay downloadable, as in Cargo [cargo yank] | Publisher, as an Act |
-| Deprecate | A notice and an optional successor | Publisher, as a publish Act |
+| Deprecate | A notice and an optional successor | Publisher, as a `yank_package` Act in its deprecation mode |
 | Quarantine | Download stops; hosts refuse to instantiate; pinned designs fail with `PackageQuarantined` | Operator, with a statement of reasons (D-ECO-35) |
 | Legal removal | After a court order or valid notice, and counter-notice where the law provides; a tombstone keeps the hash | Operator, with a statement of reasons |
 
@@ -736,7 +736,7 @@ ECO assembles the Computer Software Assurance package for medical customers unde
 *Why:* the CRA's Recital 15 counts monetising through a platform as commercial activity, and Article 13(8) sets the five-year floor. Article 13(10) allows latest-only support through a free upgrade, and Annex I Part II(2) asks for separate security updates.
 *Rejected:* manufacturer duties for commercial builds only; the 24-month LTS as the support period, below the floor.
 
-**Decision D-ECO-42:** Before phase 1 general availability, counsel assesses the steward's product-liability exposure under Directive (EU) 2024/2853 and US law for hosted and commercial distributions. The commercial terms, the product information shipped with each release (validity envelopes, the meaning of `Estimated` bounds and `Undecided` verdicts) and the C1 advisory process follow that assessment, and the program budget carries the insurance it recommends.
+**Decision D-ECO-42:** Before phase 1 general availability, as the phase 1 gate requires (contract 13.1), counsel assesses the steward's product-liability exposure under Directive (EU) 2024/2853 and US law for hosted and commercial distributions. The commercial terms, the product information shipped with each release (validity envelopes, the meaning of `Estimated` bounds and `Undecided` verdicts) and the C1 advisory process follow that assessment, and the program budget carries the insurance it recommends.
 *Why:* engineers release safety-critical parts on `SignOff` verdicts. The EU's new directive covers "all types of software" and applies to products placed on the market from 9 December 2026, inside phase 1 [EC product liability].
 *Rejected:* relying on the open-source licence's warranty disclaimer for commercial distributions; handling the CRA alone, which covers security but not liability for a non-conservative result.
 
@@ -857,8 +857,8 @@ Translators run in the tool context and must match the original's STEP export wi
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
 | MCAD migration | Geometry, structure, PMI, metadata, drawings | Per-file report; `ImportError` per dropped entity | ECO-O-1, ECO-O-17 | 1 to 4 per row |
-| Native CAD reference graphs | Referenced files and configurations extracted at import for KLN's `Document` Items | `UnresolvedReference { file }` | ECO-O-15 | 3 |
-| Manufacturing-data migration | Programs, tool libraries, posts and setup sheets | `ProgramUnverified` blocks any transfer Act (MFG) | ECO-O-17 | 2 |
+| Native CAD reference graphs | Referenced files and configurations extracted at import for KLN's `Document` Items | `UnresolvedReference { file }`. Requires: KLN Foreign native CAD files | ECO-O-15 | 3 |
+| Manufacturing-data migration | Programs, tool libraries, posts and setup sheets | No transfer until the program Item's subject is approved, else MFG's `PlanUnapproved`. Requires: MFG External NC verification | ECO-O-17 | 2 |
 | ECAD migration | EAGLE reader; KiCad 10 as an external tool; legacy board read | `Untranslated { construct }` per file | ECO-O-25 | 3 |
 | Reconstruction and source translators | Recognize, generate, verify, fall back | `ReconstructionIncomplete { regions }`; those regions stay imported | ECO-O-21 | 2 to 4 per row |
 | Inventory, bulk import, subordinate mode | Scan, convert, coexist | Per-file report; resumable | ECO-O-17, ECO-O-27 | 2 |
@@ -929,7 +929,7 @@ FLX owns the FMI and SSP runtime, and ECO owns FMU packaging, FMI-LS-WASM includ
 
 | Format | Version | R/W | Level | Strategy | Phase | Owner |
 | --- | --- | --- | --- | --- | --- | --- |
-| FMI | 3.0.2 [FMI 3.0.2 news], 3.0.3 announced [Modelica newsletter 2026-02]; 2.0.5 for import | R/W | Semantics | Build | 3 (R), 4 (W) | FLX |
+| FMI | 3.0.2 [FMI 3.0.2 news], 3.0.3 announced [Modelica newsletter 2026-02]; 2.0.5 for import | R/W | Semantics | Build | 3 (R, contract 13.4's FMU import row), 4 (W) | FLX |
 | FMI layered standards | LS-XCP 1.0.0, LS-BUS 1.3.0-beta.1, LS-STRUCT 1.0.0-rc.1, LS-REF 1.0.0-beta.1, LS-DAE 1.0.0-alpha.1 [FMI site] | R; LS-BUS W | Kept and reported when unsupported | Build | 4 | FLX, ELX |
 | FMI-LS-WASM | Non-normative prototype mapping the FMI C API to WIT [fmi-ls-wasm] | R/W, gated | Portable FMUs | Build; ECO joins the group | 3 (R), 4 (W) | FLX |
 | SSP | 2.0.1 [SSP site] | R/W | Structure | Build | 4 | FLX |
@@ -979,14 +979,14 @@ Each owner specifies its package with an oracle that the published WIT matches.
 | `crucible:geom` | `types`, `build` | ANV |
 | `crucible:field` | `types`, `build` | FLX |
 | `crucible:product` | `types`, `build`, `read` | MEC, KLN |
-| `crucible:host` | `diagnostics`, `progress` (write-only), `cas` (handle reads), `parallel` | KLN; PLT implements `parallel` |
+| `crucible:host` | `diagnostics`, `progress` (write-only), `cas` (handle reads), `parallel`, `chunk-worker` | KLN; PLT specifies and implements `parallel` and `chunk-worker` |
 | `crucible:io` | `types`, `read`, `write`; worlds `importer`, `exporter` | ECO |
 | `crucible:physics`; `crucible:material` | `solve`; `model`; worlds `solver`, `constitutive` | COV, FLX |
 | `crucible:mfg` | Worlds `toolpath-strategy`, `post-processor`, nesting, packing, slicer and recognizer | MFG |
 | `crucible:ui` | `types` (arena trees), `view`, `canvas-host`, `canvas`; worlds `panel`, `canvas2d` | UIX |
 | `crucible:api` | One interface per method group | AGT |
 | `crucible:tool` | `process`, `external`; world `driver` | ECO, with PLT |
-| `crucible:connect` | `types`, `secrets`, `partner`, `erp`, `mes`, `plm`; worlds `partner-connector`, `erp-connector`, `mes-connector`, `plm-connector` | ECO, with MFG and KLN |
+| `crucible:connect` | `types`, `secrets`, `partner`, `erp`, `mes`, `plm`, `quality`; worlds `partner-connector`, `erp-connector`, `mes-connector`, `plm-connector`, `quality-connector` | ECO, with MFG and KLN |
 
 ### ECO's WIT packages
 
@@ -995,7 +995,7 @@ Each owner specifies its package with an oracle that the published WIT matches.
 | `crucible:units` | `si`: one `f64` alias per SI dimension, such as `length` | None: the Ingot wrapper checks dimensions | 0 |
 | `crucible:io` | `types` (`source`, `sink`, options, receiver profile, `disposition`, `entry`); `read` (`probe`, `parse`); `write` (`emit` from a read-only `model-view`) | `import-error`, `export-error` | 1 |
 | `crucible:tool` | `process` (spawn in PLT's sandbox without egress); `external` (requests to a licensed translator host) | `process-error`, `egress-denied`, `capability-denied` | 2 |
-| `crucible:connect` | `types` (offers, lifecycle states, change notices, quotes, orders, sites); `secrets` (named, host-bound); `partner` (`request-quote`, `place-order`, `get-status`); `erp`, `mes`, `plm` (mapped records) | `partner-error`, `mapping-conflict` | 2 |
+| `crucible:connect` | `types` (offers, lifecycle states, change notices, quotes, orders, sites); `secrets` (named, host-bound); `partner` (`request-quote`, `place-order`, `get-status`); `erp`, `mes`, `plm` (mapped records); `quality` (KLN's quality records) | `partner-error`, `mapping-conflict` | 2; 3 (`quality`) |
 
 ### WIT example: an importer
 
@@ -1124,11 +1124,11 @@ Deviations, with reasons:
 | --- | --- | --- | --- |
 | ANV | `crucible:ops/anvil` bindings generated from its catalog; licence proof per model for the ABC subset; named receiver profiles for `exchange_form` | WIT package; hash list; `ReceiverProfile` | 0 (ABC), 1 |
 | FLX, COV | `crucible:ops/flux` bindings; hosting for solver and constitutive components; FMU packaging; Field, CGNS, Exodus, VTKHDF and OpenFOAM codecs; Nastran, Abaqus and LS-DYNA readers and Nastran, DMIG and OP4 writers; IFC, GDSII, OASIS, MatML and ISO 10303-235 codecs; package metadata for the coverage map | WIT package; `Mesh` Body; `Field`; Package | 2 to 5 per format |
-| MEC | AP242 and QIF translators; IGES read; PDF, SVG, PDF/A, DXF and DWG writers and readers; GDSII and OASIS writers; `crucible::standards::` Packages and their licence rule; receiver profiles for `export_resolution` | `Imported`; `File`; Package | 1, 2 (DWG), 5 (GDSII) |
+| MEC | AP242 and QIF translators; IGES read; PDF, SVG, PDF/A, DXF and DWG writers and readers; GDSII and OASIS writers; `crucible::standards::` Packages and their licence rule; receiver profiles for `export_resolution`; IDF and STEP board readers; IFC 4.3 | `Imported`; `File`; Package | 1, 2 (DWG, boards), 5 (GDSII, IFC) |
 | MFG | Every `io/` writer MFG's outputs use (3MF, IPC-2581, Gerber, IPC-D-356, ODB++, QIF, STEP-NC, USD, ISO 13399); QIF Results and CSV import; machine-definition sources; ERP and MES connector worlds mapped per `Site`; NC and tool-data migration | `File`; External input; `crucible:connect` | 1, 2, 3 (sites) |
 | ELX | Board and harness readers and writers; ECAD migration through KiCad 10; the Modelica reader; `parts::` publishing with its data-licence rule; the offer, lifecycle and change-notice feeds | `File`; `Network`; Package; External input | 2 to 4 |
 | KLN | Determinized binary hashes for node keys; event envelope and delivery; ERP, MES and PLM connectors; the software supply chain; feeds as signed External inputs; the HMAC watermark transform; reference graphs of native CAD files for `Document` Items; part lifecycle events for the obsolescence check | Event; External input; `File` | 1, 3 (watermark, reference graphs, lifecycle) |
-| ING | Registry and signing; interface diffs; determinized components; the RFC process | Package; lockfile entries | 0 |
+| ING | Registry and signing; interface diffs; determinized components; the RFC process; PubGrub resolution with typed explanations | Package; lockfile entries | 0 |
 | AGT | Catalog entries for ECO's methods; registry, event and archive behaviour; importers returning `ExternalText`; licence metadata; partner connectors; `release_data` members for every exit to another party; CLI exit codes | API method; Act kind; `ExternalText` | 1 |
 | UIX | The registry with metadata, capability descriptions and badges; `TranslationReport`s; font packages; licensed translators as external tools | Package; `TranslationReport` | 1 |
 | PLT | Worlds to enforce; declared memory limits; component descriptions; the sandbox site's policy including `webrtc 'block'`; font packages; the licence allowlist; export classification, the restricted-jurisdiction dataset for update servers and CRA reporting; webhook address rules for the egress proxy | WIT world; policy records | 1, 2 (browser sandbox) |
@@ -1184,10 +1184,10 @@ ECO's oracles live in `oracles/eco/`, readable but not writable by agents. Each 
 
 | Phase | ECO contribution to the gate |
 | --- | --- |
-| 0 | ECO-O-6 and ECO-O-7 green in the determinism suite; `crucible:` packages at 0.x, ECO's own specified (ECO-O-34); names cleared and `crucible-sdk` reserved on every index; ISO's permission requested and STEP layer 1 from hash-pinned schemas with its deterministic fallback; licence and contribution checks; counsel's authorship and thread-table opinions; the stewardship trigger, trademark option and key ceremony; Rust SDK |
+| 0 | ECO-O-6 and ECO-O-7's publish-time and build-time cases green in the determinism suite; `crucible:` packages at 0.x, ECO's own specified (ECO-O-34); names cleared and `crucible-sdk` reserved on every index; ISO's permission requested and STEP layer 1 from hash-pinned schemas with its deterministic fallback; licence and contribution checks; counsel's authorship and thread-table opinions; the stewardship trigger, trademark option and key ceremony; Rust SDK |
 | 1 | GP1: AP242 with geometry, structure, validation properties and semantic PMI passing ECO-O-1 to ECO-O-4 under the shop's receiver profile, in a release bundle; QIF Results and CSV import of external metrology. GP2: 3MF with beam lattices marked required, plus a Core mesh, passing consortium validation and the bureau's file-acceptance test. The gate release reproduces the run build's AP242 and 3MF (ECO-O-4). Also drawings with DXF sheets, IGES, AP203 and AP214 read, STL, re-import matching, the first-party index, the first CAx-IF round, the Python SDK, CLI, webhooks, archive, docs, export classification, CRA reporting and the product-liability assessment |
 | 2 | GP3 and GP4 exchanged with an external CAD system by AP242 round trip with persistent ids; GP3's legacy programs and tool libraries imported and its machines defined from builder sources; GP4's flat patterns as DXF. Also DXF and DWG exchange, licensed translators, board exchange, the public registry with notices and moderation, standing releases, connectors, the browser sandbox once the bridge passes, the TypeScript SDK, the C ABI and dual signatures |
-| 3 | GP5's board fabricated and assembled from Crucible's Gerber X2, XNC, IPC-2581C or ODB++ and placement outputs; GP5's drop model read from LS-DYNA keywords; Nastran and Abaqus decks that run, with BDF, DMIG and OP4 export; FMI import; ECAD migration; native CAD reference graphs; part lifecycle feeds; multi-site connectors; watermarks; paid packages and certified partners |
+| 3 | GP5's board fabricated and assembled from Crucible's Gerber X2, XNC, IPC-2581C or ODB++ and placement outputs; GP5's drop model read from LS-DYNA keywords; Nastran and Abaqus decks that run, with BDF, DMIG and OP4 export; FMU import (contract section 13.4); ECAD migration; native CAD reference graphs; part lifecycle feeds; multi-site connectors; watermarks; paid packages and certified partners |
 | 4 | GP6 FE and CFD models exchanged with an external solver; Modelica source import; FMU export and SSP (contract section 13.4); robot descriptions; IDX change proposals |
 | 5 and later | GP8 round-tripped through IFC 4.3; AP239 and AP233; GP14's IFC export in phase 7 |
 
@@ -1199,7 +1199,7 @@ ECO's oracles live in `oracles/eco/`, readable but not writable by agents. Each 
 
 ## Contract change requests
 
-- **CCR-ECO-13, product-liability assessment at the phase 1 gate.** D-ECO-42 requires counsel's product-liability assessment under Directive (EU) 2024/2853 and US law before phase 1 general availability. Contract 13.1 lists counsel's phase 0 opinions but no phase 1 item for it. Proposed: add "counsel's product-liability assessment for hosted and commercial distributions, with the release information and terms it requires" to the phase 1 gate in contract 13.1.
+None.
 
 ## Sources
 
@@ -1248,7 +1248,6 @@ ECO's oracles live in `oracles/eco/`, readable but not writable by agents. Each 
 | [crates.io crucible-sdk] | crates.io lookup for `crucible-sdk` (not found) | https://crates.io/api/v1/crates/crucible-sdk | 2026-10-11 |
 | [crates.io update 2025-07] | crates.io development update, July 2025 | https://blog.rust-lang.org/2025/07/11/crates-io-development-update-2025-07/ | 2026-10-11 |
 | [Crucible game] | Crucible (video game) | https://en.wikipedia.org/wiki/Crucible_(video_game) | 2026-10-11 |
-| [CSP3] | W3C Content Security Policy Level 3, the webrtc directive | https://www.w3.org/TR/CSP3/ | 2026-10-12 |
 | [Datakit] | Datakit home | https://www.datakit.com/en/ | 2026-10-11 |
 | [DCO] | Developer Certificate of Origin 1.1 | https://developercertificate.org/ | 2026-10-11 |
 | [DFARS 7012] | DFARS 252.204-7012, safeguarding covered defense information and cyber incident reporting | https://www.acquisition.gov/dfars/252.204-7012-safeguarding-covered-defense-information-and-cyber-incident-reporting. | 2026-10-11 |
@@ -1301,7 +1300,6 @@ ECO's oracles live in `oracles/eco/`, readable but not writable by agents. Each 
 | [Maven Central namespaces] | Maven Central namespace registration | https://central.sonatype.org/register/namespace/ | 2026-10-11 |
 | [MBx-IF] | MBx Interoperability Forum home | https://www.mbx-if.org/home/ | 2026-10-11 |
 | [MDN connect-src] | MDN, CSP `connect-src` | https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/connect-src | 2026-10-11 |
-| [MDN default-src] | MDN, CSP `default-src` | https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/default-src | 2026-10-11 |
 | [MDN script-src] | MDN, CSP `script-src` and `'wasm-unsafe-eval'` | https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/script-src | 2026-10-11 |
 | [meshio] | meshio repository README | https://github.com/nschloe/meshio | 2026-10-12 |
 | [Modelica newsletter 2026-02] | Modelica Association newsletter | https://modelica.org/newsletter/2026-02 | 2026-10-11 |

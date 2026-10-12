@@ -267,7 +267,7 @@ A tolerance belongs to the dimension it limits, so it is written where the dimen
 
 Inverted limits fail with `ing/4001`, and a deviation of the wrong dimension with `ing/4002`. A dimensionless deviation is relative only as a `%` or `ppm` literal.
 
-An untoleranced length is exact in Ingot arithmetic. MEC's Part-level general tolerance record ([MEC, Part features](06-mechanical.md#part-features)) supplies limits for untoleranced sizes in stacks, inspection and cost, so the language needs no implicit tolerance.
+An untoleranced length is exact in Ingot arithmetic. MEC's Part-level general tolerance record ([MEC, Specification model](06-mechanical.md#specification-model)) supplies limits for untoleranced sizes in stacks, inspection and cost, so the language needs no implicit tolerance.
 
 A `Tol<T>` may fill any parameter declared `T`. The body computes with the nominal, and geometry is built from it. std features mark the parameters whose value they realize, such as `#[realizes(OfSize)]` on `extrude`'s distance and `rib`'s `t`. A tolerance passed to a realizing parameter becomes PMI on an anchored aspect query, which re-resolves on the final Part. A tolerance passed to any other parameter fails with `ing/4104 ToleranceNotRealized`, whose fixes are `.nominal` or an explicit `part.tolerance(…)`.
 
@@ -312,7 +312,7 @@ These keys use names only to decide which symbols are one symbol. Every numeric 
 *Why:* linear stacks must be exact, two spacers from one specification must vary apart, and statistics must not change when someone renames a binding.
 *Rejected:* interval arithmetic (overestimates repeated uses); implicit RSS (hides a process assumption); ordering symbols by name (a rename moves Sobol dimensions).
 
-MEC's variation analysis has two paths, both reading `tolerances(x)`, the sites behind `x` ([MEC, Interference and clearance](06-mechanical.md#interference-and-clearance)). The zone path samples small displacements of each toleranced aspect and re-solves only the mates. The rebuild path, for size tolerances that change topology or contact, calls `vary(f, sites)`, which samples sites through literal overrides as ordinary evaluations.
+MEC's variation analysis has two paths, both reading `tolerances(x)`, the sites behind `x` ([MEC, Stack-up and variation analysis](06-mechanical.md#stack-up-and-variation-analysis)). The zone path samples small displacements of each toleranced aspect and re-solves only the mates. The rebuild path, for size tolerances that change topology or contact, calls `vary(f, sites)`, which samples sites through literal overrides as ordinary evaluations.
 
 A pin in a bore shows a linear stack:
 
@@ -336,7 +336,7 @@ pub feature pin_joint(bore_d: Length = 10mm, gap_min: Length = 4um) -> Assembly 
 
 A positional tolerance decides whether bolts assemble as much as a size tolerance does, so a stack can read one. `zone.along(d)` turns a `GeometricTolerance` into an affine contribution along direction `d`: ±t/2 on the zone's own symbol for a position or profile zone of width t.
 
-Under an MMC or LMC modifier the zone widens by the bonus |size − MMC size|. The bonus is linear in the feature's own size symbol, because a conforming size never crosses its MMC limit. It therefore shares that symbol with any size contributor in the same chain. The widened half-zone multiplies the zone's symbol, and affine arithmetic encloses that product in the remainder, so the worst case stays exact at (t + largest bonus)/2. MEC's one-dimensional chains and its fixed- and floating-fastener checks, with projected zones for tapped holes, read these contributions in phase 1 ([MEC, Interference and clearance](06-mechanical.md#interference-and-clearance)).
+Under an MMC or LMC modifier the zone widens by the bonus |size − MMC size|. The bonus is linear in the feature's own size symbol, because a conforming size never crosses its MMC limit. It therefore shares that symbol with any size contributor in the same chain. The widened half-zone multiplies the zone's symbol, and affine arithmetic encloses that product in the remainder, so the worst case stays exact at (t + largest bonus)/2. MEC's one-dimensional chains and its fixed- and floating-fastener checks, with projected zones for tapped holes, read these contributions in phase 1 ([MEC, Stack-up and variation analysis](06-mechanical.md#stack-up-and-variation-analysis)).
 
 ### Realizing a tolerance in geometry
 
@@ -354,7 +354,7 @@ Realization substitutes values through literal overrides, the mechanism `vary` u
 
 GD&T (geometric dimensioning and tolerancing) errors are usually type errors, so Ingot catches them at their line. MEC owns the GD&T records, the closed list of aspect kinds and the validators; Ingot owns attachment and the mistakes the type checker catches.
 
-1. **Typed aspects.** `Query<ShapeAspect<K>>` selects shape aspects whose kind is static when the producing feature declares it. MEC's kinds are `Planar`, `Cylindrical`, `Spherical`, `Helical`, `Prismatic`, `Revolute` and `Complex`, with the marker trait `OfSize` where a size applies, plus `Pattern<K>` and `Any` ([MEC, Shared types](06-mechanical.md#shared-types)). `hole(…)` gives `ShapeAspect<Cylindrical>`, which is `OfSize`; an extrude cap gives `ShapeAspect<Planar>`; a recognized import gives `ShapeAspect<Any>`.
+1. **Typed aspects.** `Query<ShapeAspect<K>>` selects shape aspects whose kind is static when the producing feature declares it. MEC's kinds are `Planar`, `Cylindrical`, `Spherical`, `Helical`, `Prismatic`, `Revolute` and `Complex`, with the marker trait `OfSize` where a size applies, plus `Pattern<K>` and `Any` ([MEC, Specification model](06-mechanical.md#specification-model)). `hole(…)` gives `ShapeAspect<Cylindrical>`, which is `OfSize`; an extrude cap gives `ShapeAspect<Planar>`; a recognized import gives `ShapeAspect<Any>`.
 2. **Controls are values.** `position(…)`, `flatness(…)` and the others return `GeometricTolerance` records whose signatures carry the standards' rules as trait bounds. A material condition modifier needs `K: OfSize`, and each dialect's modifiers are a closed enum (MEC).
 3. **Typed attachment.** `part.tolerance(target, control)` records the control on an anchored aspect query, re-resolved on the final Part. Every PMI item, forwarded or explicit, has MEC's check `pmi_target_resolved`, whose fix inserts an explicit `part.tolerance(…)`.
 4. **Dialects are modules.** `std::mech::gdt::asme` implements ASME Y14.5-2018 [ASME Y14.5]. `std::mech::gdt::iso` implements ISO 1101:2017 [ISO 1101], ISO 5459:2024, ISO 14405-1:2025, ISO 8015:2011, ISO 22081:2021, ISO 5458 and ISO 2692, whose editions MEC states. The manifest key `gdt-dialect` names the design's dialect, and importing the other fails with `ing/4302`.
@@ -380,7 +380,7 @@ A computed result is only as good as its error bound, so Ingot carries the bound
 
 Arithmetic propagates each error source separately with outward rounding, keeping the product term (|xy − x̃ỹ| ≤ |x̃|·e_y + |ỹ|·e_x + e_x·e_y). A part's bound kind is the weakest of its inputs, and dividing by an enclosure containing zero fails with `ing/6104`.
 
-A material property read in a limit, such as `p.material.yield_strength(at: 20degC)`, returns the design value at a statistical basis as an exact number. The read may name the basis (`basis:`); otherwise COV's default applies, the specification minimum and else the B-basis value ([COV, Coverage model](04-coverage.md#coverage-model)). The value defines the limit, so it adds no budget part, and the check's report names the basis. When the same property drives a solve, Flux carries it as an `Estimated` input part, and the union bound includes it. Its α is the basis's non-content: 0.10 for B-basis, 0.01 for A-basis.
+A material property read in a limit, such as `p.material.yield_strength(at: 20degC)`, returns the property's basis interval, from its lower to its upper basis value, as an exact `Range`, and the check must hold at both ends. The read may name the basis (`basis:`); otherwise COV's default applies, the specification limit and else B-basis ([COV, Two uses of a property](04-coverage.md#two-uses-of-a-property)). The interval defines the limit, so it adds no budget part, and the check's report names the basis. When the same property drives a solve, Flux carries it as an `Estimated` input part, and the union bound includes it. Its α is the basis's non-content: 0.10 for B-basis, 0.01 for A-basis.
 
 One rule decides every comparison of approximate values, in `if`, `match` guards, query `where:` and `require` alike. For `x < y` under `decides_on`, the weakest bound kind allowed to decide (`Estimated` unless a check declares `Guaranteed`):
 
@@ -392,6 +392,7 @@ One rule decides every comparison of approximate values, in `if`, `match` guards
 | `Undecided { Unquantified(sources) }` | A part is `NotQuantified`; for a check, a policy allowance it reads can quantify the model-form part ("Checks") |
 | `Undecided { CalibrationUnconfirmed }` | A `SignOff` decision rests on an `Estimated` discretization part, and the confirming refinement disagrees ([contract section 7.1](../contract.md#flux)) |
 | `Undecided { SingularPoint }`, `Undecided { MaximumAtExclusion }`, `Undecided { Flagged(flag) }` | A blocking flag from the producer, such as a peak on the boundary of an excluded neighbourhood |
+| `Undecided { MissingData }`, `Undecided { CredibilityBelowMinimum }` | A compliance input is unknown (KLN, MFG), or the model's credibility level is below the policy package's minimum (COV) |
 
 `==` on an `Approx` is `False` on disjoint enclosures and `Undecided` otherwise. `and`, `or` and `not` follow Kleene's strong three-valued logic, so `False and Undecided` is `False`. A decided comparison carries its confidence, 1 − Σα over the parts that carry one.
 
@@ -411,7 +412,7 @@ The Evaluation's fidelity ceiling changes only reporting. While a higher-fidelit
 
 Geometry is often driven by measured geometry, as in `rect(other.edge(role: end(r.top)).length(), 10mm)`. At a feature or operation boundary, an `Approx` argument passes only with a `Guaranteed` total. The call uses the value and records the bound in an `InputSensitivity` record for variation analysis.
 
-Weaker bounds fail with `ing/6403 EstimateAsInput`, whose fixes declare the parameter `Approx<T>` or write `.estimate()`. Representation error stays in Anvil's per-face bounds, so `body.convert(into: Mesh, tolerance: 0.01mm)` returns a `Body`.
+Weaker bounds fail with `ing/6403 EstimateAsInput`, whose fixes declare the parameter `Approx<T>` or write `.estimate()`. Representation error stays in Anvil's per-face bounds, so `body.convert(into: Mesh, accuracy: 0.01mm)` returns a `Body`.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -456,7 +457,7 @@ A face keeps its name across edits only if its name comes from something an edit
 
 Renaming a binding is a refactor that writes `#[was(original_name)]`, which keeps every entity name. The attribute always holds the original name, so a second rename rewrites it rather than stacking another. `crucible fmt --retire-was` removes every `#[was]` in one Proposal, whose review lists the entity renames and the checks, Waivers and Evidence records they touch; a major revision is the usual moment.
 
-Live-session edits and Git export never enter a `CallSite`: exporting to Git, re-importing and rebuilding leaves every `EntityId` unchanged. A same-name call inserted before others in one statement renames the later ones. The deny-by-default lint `ing/l-repeated-stage` flags a statement with several entity-naming calls of one name, and its fix splits the statement into bindings.
+Live-session block ids never enter a `CallSite`: cloning, pushing or mirroring through any Git host and rebuilding leaves every `EntityId` unchanged. A same-name call inserted before others in one statement renames the later ones. The deny-by-default lint `ing/l-repeated-stage` flags a statement with several entity-naming calls of one name, and its fix splits the statement into bindings.
 
 **Decision D-ING-21:** `CallSite`s derive from source text: frames of statement identities from binding names, call identities from callee name and occurrence, and iteration keys.
 *Why:* identities must survive a Git round trip, a retyped statement and an appended stage, and only the text survives all three.
@@ -464,7 +465,7 @@ Live-session edits and Git export never enter a `CallSite`: exporting to Git, re
 
 Nothing in Ingot orders, numerically hashes or prints names. `Entity<K>` orders by Anvil's canonical geometric order, and `Seed::from(x)` hashes `x` with names removed, as label invariance requires.
 
-A transform (`move`, `rotate`, `mirror`, `transform`) always keeps names. When one operation receives two operands carrying one `EntityId`, as a Boolean or a combine can, Anvil relabels the operand from the later transform in program order. Its entities take role `copy` or `mirror`, keyed by that transform's `CallSite`, and `copy(x)` relabels at once. `seed.face(role: top).copies()` follows copies on request, and role queries on reflections accept `mirrored: true` ([ANV, Copies and placements](02-anvil.md#copies-and-placements)).
+A transform (`move`, `rotate`, `mirror`, `transform`) always keeps names. When one operation receives two operands carrying one `EntityId`, as a Boolean or a combine can, Anvil relabels the operand from the later transform in program order. Its entities take role `copy` or `mirror`, keyed by that transform's `CallSite`, and `copy(x)` relabels at once. `seed.face(role: top).copies()` follows copies on request, and a reflection marks its entities with the aspect `Mirrored` ([ANV, Copies and placements](02-anvil.md#copies-and-placements)).
 
 ### The query language
 
@@ -692,15 +693,15 @@ A feature's checks are evaluated against its result; when the feature fails, the
 
 ### Limits
 
-Per-call limits are counted in units the language defines, with the cost table in the language behavior version. Outcome names follow KLN's catalog of limit outcomes.
+Per-call limits are counted in units the language defines, with the cost table in the language behavior version. Each limit ends in a `Failure` from KLN's catalog of limit outcomes.
 
 | Limit | Unit | Default per feature call | Failure |
 | --- | --- | --- | --- |
-| Fuel | Steps of the cost table | 10⁹; `#[fuel(…)]` raises it up to the manifest maximum | `ing/6301 FuelExhausted` |
-| Call depth | Ingot frames | 2,048 | `ing/6302 StackExhausted` |
-| Memory | Semantic bytes: 8 per scalar or handle, 16 per collection header | 1 GiB | `ing/6303 MemoryLimit` |
-| Operation calls | Count | 10⁶ | `ing/6304 WorkLimit { kind: OperationCalls }` |
-| Symbolic expression size | Expression nodes | 10⁷ | `ing/6305 WorkLimit { kind: ExpressionSize }` |
+| Fuel | Steps of the cost table | 10⁹; `#[fuel(…)]` raises it up to the manifest maximum | `kiln/fuel_exhausted` |
+| Call depth | Ingot frames | 2,048 | `kiln/stack_exhausted` |
+| Memory | Semantic bytes: 8 per scalar or handle, 16 per collection header | 1 GiB | `kiln/memory_limit` |
+| Operation calls | Count | 10⁶ | `kiln/work_limit { kind: OperationCalls }` |
+| Symbolic expression size | Expression nodes | 10⁷ | `kiln/work_limit { kind: ExpressionSize }` |
 
 A call's steps include the plain functions it calls, while feature and `#[memo]` calls are nodes with their own limits. An outcome therefore never depends on the caller's remaining budget or on the cache. An operation call charges 100 steps plus 1 per marshalled element. Effective limits come from source and manifest only and enter the node key.
 
@@ -749,7 +750,7 @@ In phase 1, edit plans rank by provenance first: the literal of the call whose `
 | Calls and accumulators | Eight call kinds; canonical accumulators as separate outputs | `ing/2501`, `ing/8001`; `ing/l-feature-kind` | ING-O-KILN-1 | 0 |
 | Determinism and randomness | Bit-identical values, failures and fuel; keyed Philox streams | None: cannot fail; Aborts are never cached | ING-O-EXEC-1, ING-O-EXEC-2 | 0 |
 | Failures and Aborts | `try` catches `Failure` only; no construct observes an Abort | Typed `Failure`; `DependencyFailed` | ING-O-EXEC-1, ING-O-EXEC-4 | 0 |
-| Per-call limits in keys | Limits from source and manifest; ceilings at admission | `ing/63xx`; Abort `FuelCeilingExceeded` | ING-O-EXEC-5, ING-O-EXEC-2 | 0 |
+| Per-call limits in keys | Limits from source and manifest; ceilings at admission | KLN's limit `Failure`s; Abort `FuelCeilingExceeded` | ING-O-EXEC-5, ING-O-EXEC-2 | 0 |
 | Evaluation-wide limits | Demand depth and fuel governor as Aborts (KLN) | Abort `DemandDepthExhausted` | ING-O-EXEC-4 | 0 |
 | IIR and the Kiln contract | Front-end keys; IIR shared across releases; split outputs; pending handles; program order; requested fidelity in keys | `DependencyFailed` | ING-O-EXEC-1, ING-O-KILN-1, ING-O-CHECK-1 | 0 |
 | Literal overrides | Keyed by `LiteralSite`; never in the shared cache; follow `#[was]` | `ing/6502` | ING-O-EDIT-2 | 1 |
@@ -829,7 +830,7 @@ A `require` under the protected `oracles/` directory has the source `Protected(p
 
 When no study estimates a check's functional, the language service offers a visible fix that adds it to the study's `goals:` (FLX).
 
-The bracket's check shows the verdicts at work. The limit is 0.6 × 241 MPa = 144.6 MPa, from the 6061-T6 specification minimum yield that COV's default basis selects; the stresses are illustrative.
+The bracket's check shows the verdicts at work. The check holds at 0.6 × 240 MPa = 144 MPa, the conservative end of the basis interval in COV's 6061-T6 record ([COV, The bracket's check](04-coverage.md#the-brackets-check)); the stresses are illustrative.
 
 | Situation | Outcome of `static_margin` |
 | --- | --- |
@@ -850,7 +851,7 @@ The bracket's check shows the verdicts at work. The limit is 0.6 × 241 MPa = 14
 
 Text can carry instructions to a later reader, human or agent, so Ingot separates text from structure. The lossless tree classifies every span as free text or structure. Comments, string literals, description templates, and identifiers that neither the compiler produced nor a person typed in Crucible's editor are free text. `repo` records the integrity of the context that wrote each span (KLN).
 
-A string evaluated from a free-text span of untrusted integrity is an `ExternalText` value, written `external("…")` in source. It carries its span's integrity and origin and is never read as instructions. Integrity therefore travels with the value, not with the node that holds it, so a merged supplier file gives trusted geometry and untrusted names. A node's label takes a text's integrity only when the node turns that text into a non-text value, such as embossed geometry or a parsed number ([contract section 5.3](../contract.md#53-labels)). `api` returns every `ExternalText` as a handle, and only a per-span endorsement, which shows the text verbatim, makes free text trusted.
+A string evaluated from a free-text span of untrusted integrity is an `ExternalText` value, written `external("…")` in source. It carries its span's integrity and origin and is never read as instructions. How that integrity reaches node labels is [contract section 5.3](../contract.md#53-labels)'s rule. `api` returns every `ExternalText` as a handle, and only a per-span endorsement, which shows the text verbatim, makes free text trusted.
 
 **Decision D-ING-24:** Every span is free text or structure; merging endorses only structure, and values evaluated from untrusted free text are `ExternalText`.
 *Why:* an agent could address a later reader through a merged comment or a literal evaluated into a part name, and integrity on nodes would taint every result downstream of one untrusted name.
@@ -930,7 +931,7 @@ pub async fn involute_profile(
 | Method | WIT import | Failure |
 | --- | --- | --- |
 | `site(name)`, `site_keyed(name, key)` on `Cx` and on every builder | None; returns an owned call key appended to the call's `CallSite` | `ing/8201` on a duplicate key |
-| Builders and operation calls (`planar_builder`, `anvil()`, `flux()`) | `crucible:ops/anvil`, `crucible:ops/flux`, asynchronous | The operation's typed `Failure` |
+| Builders and operation calls (`planar_builder`, `anvil()`, `flux()`) | `crucible:ops/anvil`; `crucible:ops/flux` from phase 2; asynchronous | The operation's typed `Failure` |
 | `seed()` | None; the call's `seed: u64` argument | None: cannot fail |
 | `diagnostic(…)` | `crucible:host/diagnostics` | None: cannot fail |
 
@@ -943,7 +944,7 @@ pub async fn involute_profile(
 | Operation calls go through `crucible:ops` as recorded Op dependencies; engine data arrive only through handles from the inputs | [Contract section 4](../contract.md#4-layering-operations-wasm-components-features) |
 | Every operation call and created entity takes a call key appended to the call's `CallSite`; duplicates fail with `ing/8201` | Stable `EntityId`s |
 | Fuel is metered by the determinizer and limited by the wrapper's `fuel:` | Deterministic limits |
-| Traps, `FuelExhausted`, `StackExhausted` and `MemoryLimit` are cached `Failure`s; host-caused growth failures and resource loss are Aborts | [Contract section 7.2](../contract.md#72-keys-failures-and-aborts) |
+| Traps, `kiln/fuel_exhausted`, `kiln/stack_exhausted` and `kiln/memory_limit` are cached `Failure`s; host-caused growth failures and resource loss are Aborts | [Contract section 7.2](../contract.md#72-keys-failures-and-aborts) |
 | Error estimates map to `Approx` values or `ErrorBudget` parts; `outside-envelope` maps to the validity flag | Wrapper convention |
 | Diagnostics attach to the call's span in emission order; Wasm component strings become `ExternalText` | Write-only accumulator |
 | The wrapper is the public interface; the raw `extern fn` is `pub(package)` | One typed signature |
@@ -1089,7 +1090,7 @@ Statement order matters only for definition before use and for the ordinals of u
 Data modules, such as ELX's `Schematic` and `Layout`, are `table { … }` literals whose rows are atomic blocks. A row-specialized lexer skips the general tree and builds lossless nodes lazily when a row is edited. The target is 10⁶ rows parsed and hashed in under 1 s natively, measured in phase 2 before ELX needs it. If it is missed, the module splits by board region.
 
 **Decision D-ING-27:** Data modules stay Ingot text, with no binary sidecar.
-*Why:* merge, live sessions, span provenance, `CallSite`s and Git export all work on text, and a second format needs a second path for each.
+*Why:* merge, live sessions, span provenance, `CallSite`s and Git storage all work on text, and a second format needs a second path for each.
 *Rejected:* a binary sidecar keyed by statement identity; a data format per subsystem.
 
 ### Formatting and structural edits
@@ -1288,7 +1289,7 @@ Named arguments may appear anywhere, and positional arguments fill the remaining
 | `ing/3xxx` | Units and kinds | `ing/3001` dimensions; `ing/3002` kinds; `ing/3201` affine misuse; `ing/3501` unit mismatch in a table |
 | `ing/4xxx` | Tolerances and GD&T | `ing/4101` comparison of tolerances; `ing/4103` tolerance in a query filter; `ing/4104` tolerance not realized; `ing/4201` material condition on a non-size aspect |
 | `ing/5xxx` | Geometry references | `ing/5001` positional entity access; `ing/5002` role on the wrong entity kind |
-| `ing/6xxx` | Evaluation failures | `ing/6001` incomplete code; `ing/6203` empty Instance set; `ing/63xx` limits; `ing/6401` undecided branch |
+| `ing/6xxx` | Evaluation failures | `ing/6001` incomplete code; `ing/6203` empty Instance set; `ing/6401` undecided branch |
 | `ing/7xxx` | Packages and lockfile | `ing/7001` unresolvable dependency; `ing/7201` value across major versions |
 | `ing/8xxx` | Bindings | `ing/8001` extern signature differs from the catalog; `ing/8201` duplicate call key |
 | `ing/l-<name>` | Lints | `ing/l-fragile-selector`, `ing/l-repeated-stage`, `ing/l-hertz-phase`, `ing/l-shared-symbol`, `ing/l-tolerance-dropped`, `ing/l-unnamed-check`, `ing/l-feature-kind`, `ing/l-positional-key` |
@@ -1331,7 +1332,7 @@ The design languages Ingot is measured against: Zoo's KCL, Onshape's FeatureScri
 | --- | --- | --- | --- |
 | Features written in a language | Onshape: "Part Studios are written in FeatureScript", and std features' source is public [Onshape FeatureScript intro] | "Calls and accumulators"; "Calls and effects", phase 0 | Ahead: the same openness, with compile-time units and tolerances and pure, cached calls |
 | Units in expressions | KCL numbers take a file's default unit [Zoo KCL units]; FeatureScript checks units at run time [Onshape FeatureScript variables] | "Dimensions and kinds", phase 0 | Ahead: units, kinds and affine temperatures are checked before anything runs |
-| Configurations and design tables | Onshape configurations: list, checkbox and variable inputs, each in its own table [Onshape configurations] | "Variant regions" and "Families and tables", phase 1 | Equal on inputs; ahead in that variant existence is static, so the 150% BOM needs no enumeration |
+| Configurations and design tables | Onshape configurations: list, checkbox and variable inputs, each in its own table [Onshape configurations] | "Variant regions" and "Families and tables", phase 1 | Equal on inputs; ahead in that variant existence is static, so KLN's 150% BOM (phase 3) needs no enumeration |
 | Geometry at tolerance limits | Creo regenerates a model at the upper, middle, lower or nominal bound of each dimension [PTC Creo dimension bounds] | "Realized geometry", phase 1 | Ahead: adds maximum and least material condition and keeps every entity name and the nominal PMI |
 | Tolerance stack analysis | CETOL 6σ, "3D model-based tolerance analysis software that integrates directly into leading CAD platforms" [Sigmetrix CETOL] | "Affine tolerance arithmetic" and "Geometric zones in stacks", phase 1; MEC's 3D zone path, phase 2 | Equal for one-dimensional stacks in phase 1, read straight from the design's own tolerances; Later for 3D zones |
 | Robust references to faces and edges | FeatureScript queries by creating feature (`qCreatedBy`) [Onshape FeatureScript library]; KCL tags with an index fallback [Zoo KCL edge references]; build123d's `Select.NEW` [build123d selection] | "Queries" and "Text-derived `CallSite`", phases 0 and 1 | Ahead: no positional fallback, typed resolve errors with ranked fixes, names that survive Git round trips |
@@ -1373,7 +1374,7 @@ All oracles live under `oracles/ingot/`, which agents building Ingot cannot edit
 | --- | --- | --- |
 | ING-O-BRK-1 | Contract section 6's example at 6 mm and 4 mm | Compiles; the check region contains the web-root fillet; `Pass` at 6 mm and `Fail` at 4 mm at `SignOff`, never `Undecided { SingularPoint }`; `width + load` gives `ing/3001` |
 | ING-O-EXEC-1 | Conformance of the interpreter on every Tier 1 target and browser engine, and of compiled code, on values, failures, fuel and Kiln call sequences; IIR across compiler releases; `sum` against `det_sum` | Bit-identical on the corpus |
-| ING-O-EXEC-2 | Deepest legal recursion on every target, and one deeper | Runs everywhere; fails with `ing/6302` everywhere |
+| ING-O-EXEC-2 | Deepest legal recursion on every target, and one deeper | Runs everywhere; fails with `kiln/stack_exhausted` everywhere |
 | ING-O-EXEC-3 | Differential fuzzing of the code generator: interpreter against compiled code, optimized against unoptimized | No divergence per release |
 | ING-O-EXEC-4 | `f(n) = f(n + 1)` on every Tier 1 target | Aborts with `DemandDepthExhausted`; no memo entry |
 | ING-O-EXEC-5 | Evaluations under varied organization ceilings | One limit outcome per source and manifest; a lower ceiling aborts at admission |
@@ -1401,7 +1402,7 @@ All oracles live under `oracles/ingot/`, which agents building Ingot cannot edit
 | ING-O-TOOL-3 | Debugger replay | Forward then backward steps give identical frames |
 | ING-O-TOOL-4 | KCL sample programs through the importer | Each builds the reference geometry or lists unmapped constructs |
 | ING-O-SKETCH-1 | A fixed SketchGraphs sample converted to sketch blocks | Every constraint type expressible; re-solves meet MEC-O-SK-1's target |
-| ING-O-NAME-1 | Golden products through Git export and re-import; appended, wrapped and inserted calls of other names; a prepended same-name call; renames with `#[was]`, a second rename, and `--retire-was` | Untouched `CallSite`s and `EntityId`s unchanged; the prepend raises `ing/l-repeated-stage`, whose fix keeps later names; a second rename leaves one attribute holding the original name |
+| ING-O-NAME-1 | Golden products cloned, pushed and mirrored through a second Git host; appended, wrapped and inserted calls of other names; a prepended same-name call; renames with `#[was]`, a second rename, and `--retire-was` | Untouched `CallSite`s and `EntityId`s unchanged; the prepend raises `ing/l-repeated-stage`, whose fix keeps later names; a second rename leaves one attribute holding the original name |
 | ING-O-NAME-2 | One element inserted into or removed from geometry-driven patterns and query loops | Only that element's entities renamed |
 | ING-O-CHECK-1 | Adding or removing any `require`; inserting a check before a named check; editing a check's limit | Every non-check node key unchanged; named checks keep their `CheckId`s, Evidence records and Waivers |
 | ING-O-CHECK-2 | The gate predicate over generated outcomes, allowances and Waiver records | Matches contract section 5.6; `Warning` failures never block; `Undecided` blocks an `Error` check; `#[waive]` alone counts nowhere |

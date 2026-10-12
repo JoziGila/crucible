@@ -48,7 +48,7 @@ Three inclusions lose no geometry. A Mesh is a B-rep with facet faces, as in Par
 
 A B-rep or Mesh is an implicit leaf: its exact signed distance, signed by generalized winding numbers [Jacobson et al. 2013]. A mixed operation returns the join of its operands. The join keeps each B-rep leaf's exact faces that stay on the boundary, with their `EntityId`s and attributes.
 
-Queries, PMI and drawings use those faces directly, and `convert(into: BRep)` keeps them exact. GP2, the printed lattice bracket that closes phase 1, thus keeps its mounting holes' `HoleSpec` and semantic PMI. CAx-IF practice allows those only on exact geometry [CAx-IF PMI 4.1].
+Queries, PMI and drawings use those faces directly, and `convert(into: BRep)` keeps them exact. GP2, the printed lattice bracket that closes phase 1, thus keeps its mounting holes' `HoleSpec` and semantic PMI. CAx Implementor Forum (CAx-IF) practice allows those only on exact geometry [CAx-IF PMI 4.1].
 
 **Decision D-ANV-2:** Mixed operations return the least representation in the lattice Mesh ⊂ BRep, SubD ⊂ BRep, BRep ⊂ Implicit that holds both operands, and never approximate geometry or drop B-rep faces that remain on the boundary.
 *Why:* exact faces keep their names and attributes, and later conversions are explicit and bounded.
@@ -64,7 +64,7 @@ Eight rules hold for every operation; later sections give the detail.
 
 1. **Bodies are immutable values**, and unchanged storage is shared between them.
 2. **Operations are pure and label-invariant:** results depend on arguments, input geometry and the operation version, never on clocks, randomness, thread order or names.
-3. **Work limits are arguments** with per-version defaults. Reaching one is the `Failure` `WorkLimit { kind, limit }` of KLN's limit catalog; cancellation and memory exhaustion are Aborts.
+3. **Work limits are arguments** with per-version defaults. Reaching one is the `Failure` `kiln/work_limit { kind, limit }`, written `WorkLimit` in this tab's tables. Reaching the declared memory maximum is `kiln/memory_limit`. Either carries any best-so-far result beside it (contract 7.2). Cancellation and host memory exhaustion below that maximum are Aborts.
 4. **Topological decisions are certified** at every fidelity, by exact predicates or certified enclosures ("Numbers, tolerances and decisions").
 5. **Approximations state their error** as per-face and per-edge bounds ("Conversions, exchange and error propagation").
 6. **The GPU orders work and previews,** and prunes only by exact integer tests; results are identical without it.
@@ -353,7 +353,7 @@ Each fix is a typed source edit that compiles. A partial deletion offers "accept
 It reports `RankSwap { at }` at every sample where the winner's lineage changes and labels the report `Sampled`. Protected-branch CI runs it on every query that ends in a rank selector or reaches an `Ordinal` id.
 
 **Decision D-ANV-15:** Resolution walks recorded lineage, then applies certified filters; splits, deletions and ambiguity are typed errors, and merges, partial deletions, `Ordinal` ids and near ties note for surface use and fail for extent use unless the call accepts them.
-*Why:* contract 5 forbids silent re-selection, and each case keeps the surface a sketch needs but changes the extent a fillet or GD&T target means.
+*Why:* contract 5 forbids silent re-selection, and each case keeps the surface a sketch needs but changes the extent a fillet or GD&T (geometric dimensioning and tolerancing) target means.
 *Rejected:* geometric re-identification, which fails after geometry edits; accepting merges and partial deletions silently; three separate accept flags for one set of degradations.
 
 **Decision D-ANV-34:** Range stability is the on-demand analysis `query_stability` over a fixed sample design, reported as sampled evidence, and `resolve` reports only local margins.
@@ -963,7 +963,7 @@ Fitted faces arrive in phase 2, so that generative-design outcomes for milling a
 
 Anvil's internal geometry is finer than any receiving program's. On GP1 the minimum size λ = 2⁴ρ is about 1.9 nm. That is below Parasolid's default tolerance of about 5 nm [Jackson 1995] and far below the micrometre tolerances many CAM and inspection programs use. A tolerant edge from healing or a contact curve may also exceed a receiver's tolerance and arrive as a gap.
 
-`anvil::exchange_form(body, profile)` therefore writes for a named receiver. A receiver profile states the receiver's `tolerance` and `min_feature`. Named profiles ship with Crucible (`Parasolid`, at a tolerance of 5 × 10⁻⁹ m), and an organization declares others, such as its reference shop's CAM and coordinate-measuring software.
+`anvil::exchange_form(body, profile)` therefore writes for a named receiver. A receiver profile states the receiver's `tolerance` and `min_feature`. Named profiles ship with Crucible (ECO's `parasolid`, at a tolerance of 5 × 10⁻⁹ m), and an organization declares others, such as its reference shop's CAM and coordinate-measuring software.
 
 1. Seams and poles are added where the receiver needs them, and new entities map to `EntityId`s.
 2. Entities below `min_feature` are merged within the profile's tolerance, or the operation fails with `NotRepresentable { entities, reason: BelowReceiverResolution }`.
@@ -1063,7 +1063,7 @@ An engineer should see geometry update while dragging and get release-quality ge
 
 | Fidelity | Anvil's behaviour | Cache |
 | --- | --- | --- |
-| `Preview` | Looser tolerances, surrogates (an implicit offset for a blend), GPU `f32` evaluation; results may show as `Proxy` | Never in the shared cache |
+| `Preview` | Looser tolerances, surrogates (an implicit offset for a blend), GPU `f32` evaluation; results are `Ready(Preview)` | Never in the shared cache |
 | `Interactive` and `SignOff` | One computation: certified decisions, certified seeding, branches traced from canonical start points with floating-point step validation, then `check_body` | Cached once for both fidelities |
 | `SignOff` certification | A certification node per geometric result: certified seeding finds exactly the traced branches, and a Krawczyk test confirms each traced point | Cached; consumed only by `SignOff` demands |
 
@@ -1195,7 +1195,7 @@ impl From<OpError> for Failure { /* code "anvil/<kind in snake_case>" */ }
 
 ### WIT packages and contract crates
 
-Anvil owns the WIT package `crucible:geom` and the generated interface `crucible:ops/anvil`; ECO keeps the index. Examples use `@0.1.0` until names clear and packages freeze (contract 13.1).
+Anvil owns the WIT (WebAssembly Interface Types) package `crucible:geom` and the generated interface `crucible:ops/anvil`; ECO keeps the index. Examples use `@0.1.0` until names clear and packages freeze (contract 13.1).
 
 For each work item, the oracle role writes `anvil-op-<family>-contract` from this Rust surface, with `unimplemented!()` bodies (contract 13.2). Anvil's oracles bind, in order of preference, to `api` methods and file formats, then to `crucible:ops/anvil`, then to contract crates.
 
@@ -1247,7 +1247,7 @@ Figures in the last column are targets unless quoted, and ABC data means the lic
 | Hidden lines and tessellation | Parasolid: "precise hidden line" and "versatile tessellation" [Parasolid product page] | `project_hlr`, `tessellate`, phase 1 | Equal, with a certified line bound and watertight display meshes |
 | Subdivision modelling | Fusion's Form workspace [unverified] | `anvil::subd_edit`, phase 3 | Later: no phase 1 or 2 gate needs freeform styling |
 | Generative-design outcomes as exact solids | Fusion: milling on "2.5-, 3- or 5-axis", 2-axis cutting and casting [Fusion GD methods] | Fitted Implicit → BRep, phase 2 | Equal at phase 2, with kept interfaces exact and named |
-| Finding duplicate parts | Teamcenter's Geolus finds "similar parts even if one person calls it a fastener while another person calls it a clip" [Geolus shape search] | `GeometryId` for exact duplicates, phase 0; similarity search is KLN's, phase 2 | Ahead for exact duplicates across every repository; Equal for similarity at phase 2 |
+| Finding duplicate parts | Teamcenter's Geolus finds "similar parts even if one person calls it a fastener while another person calls it a clip" [Geolus shape search] | `GeometryId`, phase 0; KLN's duplicate and similarity search, phase 2 | Ahead for exact duplicates across every repository; Equal for similarity at phase 2 |
 | Persistent naming | FreeCAD 1.0's toponaming mitigation [FreeCAD 1.0 release] | `EntityId`, `anvil::resolve`, phase 0 | Ahead: names from source text, typed errors with compiling fixes, no silent re-selection |
 | Parametric solids in AI-built clones | SolidCraft, on Truck, ships fillet and chamfer, shell, draft, combine and split, and STEP and IGES exchange [SolidCraft repository] | The phase 1 rows above | Ahead: certified decisions, per-entity tolerances, stable names and oracles that a clone on Truck lacks |
 
@@ -1268,15 +1268,15 @@ Figures in the last column are targets unless quoted, and ABC data means the lic
 
 | To | What | Types | Phase |
 | --- | --- | --- | --- |
-| ING | Versioned operations with roles and `Query` uses; `resolve` with the `accept` set and `query_stability`; `EntityId`s unchanged across `realize` points; constraint solves; `text_outline` | `Body`, `EntityId`, `HistoryRecord`, `ResolveError`, `OpError` | 0 |
+| ING | Versioned operations with roles and `Query` uses; `resolve` with the `accept` set and `query_stability`; `EntityId`s unchanged across `realize` points; constraint solves; `text_outline` | `Body`, `EntityId`, `HistoryRecord`, `ResolveError`, `OpError` | 0; 1 (`query_stability`, constraint solves, `text_outline`) |
 | KLN (Kiln) | Operation implementations per family crate with grades, fidelity maps, cost estimates, closure hashes and explicit registration; two-stage keys; certification nodes; deterministic outcomes as `Failure`s | `GeometryId`, `ObjectId`, `OpResult` | 0 |
 | KLN (`repo`, `plm`) | Interference, touched sets and deviation for merges; `GeometryId`s and definition digests for `ItemDefinition`s; `GeometryId`s for exact-duplicate search | `Body`, `EntityId`, `GeometryId` | 1; 2 (duplicate search) |
-| FLX | `GeometryQuery`; `classify_edges`; mid-surfaces, member axes and strut graphs; meshing and adaptation by canonical number; `shape_velocity`; `implicit_from_field`; `common_refinement`; the implicit node set over `kernels::expr` | `Body`, `Field`, `FaceBound`, `EdgeBound` | 1; 2 (meshing, `shape_velocity`); 4 (`common_refinement`) |
+| FLX | `GeometryQuery`; `classify_edges`; mid-surfaces, member axes and strut graphs; meshing and adaptation by canonical number; `shape_velocity`; `implicit_from_field`; `common_refinement`; the implicit node set over `kernels::expr` | `Body`, `Field`, `FaceBound`, `EdgeBound` | 1; 2 (mid-surfaces, swept-member axes, meshing, `shape_velocity`); 3 (metric adaptation); 4 (`common_refinement`) |
 | COV | Implicit and lattice Bodies; mid-surfaces and member axes; per-entity tolerances; curvature and thickness queries | `Body` | 1 |
 | MEC | The operations catalog with roles, phases and canonical `OpError` kinds; blend stages and parity targets; attribute classes; constraint solving with bounds; `exchange_form` reports for `export_resolution`; lattice regions for drawings; control-vertex previews | `Body`, `EntityId`, `Field`, `OpError` | 1; 3 (previews) |
 | MFG | Sections, offset curves, medial axes, tool contact, swept volumes, interference, draft maps, thickness, voxels, fitting; toolpath wire Bodies | `Body`, `Field` | 1; 2 (tool contact, swept volumes) |
 | ELX | `anvil::planar` with centre–radius arcs and conservative snapping; `fold`; `convex_decompose`; `text_outline` | `Body` | 1 (`text_outline`); 3 |
-| UIX | `DisplayPackage` pages and face table, identified without status; `cluster_dag`; measures, sections, ray casts; face edits; the WGSL tape interpreter | `DisplayPackage`, `Body` | 1; 2 (`cluster_dag`, face edits) |
+| UIX | `DisplayPackage` pages and face table, identified without status; `cluster_dag`; measures, sections, ray casts; face edits; the WGSL tape interpreter | `DisplayPackage`, `Body` | 1; 2 (`cluster_dag`, face edits other than `offset_faces`) |
 | AGT | Entity inspection with provenance; resolution with ranked fixes; `query_stability` reports; measures, sections and geometry diffs | `EntityId`, `ResolveError` | 1 |
 | ECO | `crucible:geom`, `crucible:ops/anvil`; builders and healing; imported ids, `match_bodies` and `import_map`; `exchange_form` with receiver profiles; 3MF meshes and beam lattices [3MF beam lattice repository; 3MF beam lattice spec] | `Body`, `ErrorBound` | 1 |
 | PLT | Per operation: grade, GPU paths and their roles, determinism-suite corpora, and each family crate's size for the engine module split | `DeterminismGrade` | 0 |
@@ -1294,7 +1294,7 @@ Every oracle runs on `cpu-ci`. ANV-O-DET-1 and ANV-O-FID-1 also run on `browser-
 | ANV-O-DET-1 | Determinism | Identical output hashes at 1, 2, 7 and 64 threads, on forced x86-64 v2, v3 and v4, ARM64 and wasm32, with and without a GPU |
 | ANV-O-DET-2 | Order-free rounds | Chains spaced at τ ± ρ/2⁹ give identical bits under shuffled pair orders and 1 to 64 threads; face growth that forces a vertex merge re-decides the vertex round; re-deciding only touched pairs gives the same bits as a full re-run of every round |
 | ANV-O-LABEL-1 | Label invariance | Golden products and blended corpora with re-randomized `EntityId`s, `CallSite`s and Instance names keep `GeometryId`s, Assembly identities and check values; renamed equal geometry shares pages, and picks return each design's ids |
-| ANV-O-SITE-1 | Text-derived names | Golden products exported to Git, re-imported and rebuilt keep every `EntityId` |
+| ANV-O-SITE-1 | Text-derived names | Golden products cloned, pushed and mirrored through a second Git host and rebuilt keep every `EntityId` |
 | ANV-O-CACHE-1 | Cross-design sharing | Two designs share every geometric-stage entry of a 20-operation chain; a shared failing stage gives each design fixes naming its own bindings |
 | ANV-O-SCALE-1 | Scale invariance | Bodies framed at the origin and scaled by 2⁻²⁰ to 2²⁰ give the scaled outputs bit for bit |
 | ANV-O-SCALE-2 | Resolution from the result | Bit-identical final geometry built with different-sized tools has one `GeometryId`; a pin far from ρ(D) reports `ResolutionStep` |
@@ -1311,7 +1311,7 @@ Every oracle runs on `cpu-ci`. ANV-O-DET-1 and ANV-O-FID-1 also run on `browser-
 | ANV-O-LAW-1 | Law curves and surfaces | Enclosures contain dense samples; evaluation equals the kernel IR reference |
 | ANV-O-PROC-1 | Procedural nesting | Flattened constructions stay within propagated bounds |
 | ANV-O-NF-1 | Normal form | Re-imported `exchange_form` output keeps exact geometry bit-identical and topology equal |
-| ANV-O-NF-2 | Receiver profiles | A part with a 3 nm sliver and a 10 µm tolerant edge, exported under the `Parasolid` profile, reports both; approximation bounds follow the tightest tolerance on each face |
+| ANV-O-NF-2 | Receiver profiles | A part with a 3 nm sliver and a 10 µm tolerant edge, exported under the `parasolid` profile, reports both; approximation bounds follow the tightest tolerance on each face |
 | ANV-O-HEAL-1, ANV-O-HEAL-2 | Sewing, healing | Exploded solids re-sew; healed CAx-IF and ABC imports pass `check_body` within the reported deviation |
 | ANV-O-NAME-1 | History | Coverage, kind, soundness and canonical order on every operation; a width change and a new hole on one face touch disjoint sets |
 | ANV-O-NAME-2 | Query resolution | Zero silent re-selections at the evaluated configuration on golden products; a pocket removing part of a profile target and a fillet chain fails both with `Partial`; extent use of `Ordinal` ids or near ties fails with `Fragile`; a copy translated 1 m from the origin reports the same near ties as the original |
@@ -1386,11 +1386,11 @@ Gate contributions follow contract 13, in milestone order. Shared capabilities t
 ## Open questions
 
 1. **GPU sampling for SSI.** Whether GPU sampling orders SSI work from phase 2 waits on counsel's freedom-to-operate opinion on US 12,229,885 B1 (contract 13.1). Without a favourable opinion, `Interactive` keeps certified CPU seeding.
-2. **GP1's receiver profile.** The tolerance and minimum feature of the reference shop's CAM and coordinate-measuring software wait on the phase 0 shop agreement; until then GP1 exports under the `Parasolid` profile.
+2. **GP1's receiver profile.** The tolerance and minimum feature of the reference shop's CAM and coordinate-measuring software wait on the phase 0 shop agreement; until then GP1 exports under the `parasolid` profile.
 
 ## Contract change requests
 
-- **CCR-ANV-10, blend stages in contract 7.1.** Add "convexity change along an edge" to stage 1, and "partial-length blends with setback ends, and capped and cliff ends" to the later stages. The contract's stage list then matches the stage table in "Blends".
+None.
 
 ## Sources
 

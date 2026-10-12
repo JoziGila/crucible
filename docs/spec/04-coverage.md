@@ -10,17 +10,17 @@ An engineer who reads a stress needs to know three things that numerical accurac
 
 The bracket's check reads `study.von_mises.max(over: study.regular())` and requires it to stay below `0.6 * p.material.yield_strength(at: 20degC)`. Behind `static_stress` sits a physics model, `std::physics::solid::linear_elasticity`, and behind `alu_6061_t6` sits a Material record. Both are packages that COV defines, and both are pinned in the design's `ingot.lock`, so the answer never changes unless someone changes a pin.
 
-At `SignOff` fidelity, Flux reports the regularized peak at the web-root fillet as 118 MPa with a discretization bound of 1.5 MPa (FLX). A regularized peak is a stress averaged over a stated small region rather than read at one point, because a raw maximum depends on the mesh. Flux's bound is `Estimated`: it was multiplied by a calibrated factor, so it covers the true discretization error in all but a stated fraction α = 0.01 of cases.
+At `SignOff` fidelity, Flux reports the regularized peak at the web-root fillet as 94 MPa with a discretization bound of 1.5 MPa (FLX). A regularized peak is a stress averaged over a stated small region rather than read at one point, because a raw maximum depends on the mesh. Flux's bound is `Estimated`: it was multiplied by a calibrated factor, so it covers the true discretization error in all but a stated fraction α = 0.01 of cases.
 
 The limit reads the Material's yield strength. For 6061-T6 the record holds a basis interval from 240 MPa, the specification minimum, to 276 MPa, so the limit is the interval 144 MPa to 165.6 MPa. A check written against a design basis must hold at the interval's conservative end, here 144 MPa, and the interval adds nothing to the error budget, because the design value is the requirement itself ([Materials](#materials)).
 
-Three more questions decide whether 118 MPa may be compared with 144 MPa at all. COV answers each with a record attached to the result:
+Three more questions decide whether 94 MPa may be compared with 144 MPa at all. COV answers each with a record attached to the result:
 
 1. **Is the model valid here?** The model's validity envelope evaluates to a zone Field over the Part. At the fillet the stress ratio σ_eq/σ_proportional is about 0.5 and the temperature is 20 °C, both inside the conditions the model was validated at, so the zone is `Calibrated`.
 2. **How well has the model been tested?** Linear elasticity holds credibility level C3 (Validated) for the response quantity "regularized surface peak at a fillet, linear elastic", because the phase 1 validation campaign measured exactly that quantity on separate 6061-T6 plates (contract 13.1).
-3. **How wrong may the model's form be?** The validation campaign gives a model-form bound of 8.6% at the nearest validation point, which at 118 MPa is 10.2 MPa ([Model form](#model-form-how-far-tests-say-a-model-can-be-wrong) derives this number).
+3. **How wrong may the model's form be?** The validation campaign gives a model-form bound of 8.6% at the nearest validation point, which at 94 MPa is 8.1 MPa ([Model form](#model-form-how-far-tests-say-a-model-can-be-wrong) derives this number).
 
-The check's total is then 118 + 1.5 + 10.2 = 129.7 MPa against a limit of 144 MPa. The verdict is `Pass` at confidence at least 1 − (0.01 + 0.05) = 0.94, stated at 95% confidence, because the discretization part carries α = 0.01 and the model-form part α = 0.05. The modulus does not appear in the budget: the bracket is loaded by a force, so its stress is insensitive to stiffness, and Flux's adjoint sensitivity to Young's modulus is zero.
+The check's total is then 94 + 1.5 + 8.1 = 103.6 MPa against a limit of 144 MPa. The verdict is `Pass` at confidence at least 1 − (0.01 + 0.05) = 0.94, stated at 95% confidence, because the discretization part carries α = 0.01 and the model-form part α = 0.05. The modulus does not appear in the budget: the bracket is loaded by a force, so its stress is insensitive to stiffness, and Flux's adjoint sensitivity to Young's modulus is zero.
 
 ### When the answers change
 
@@ -28,7 +28,7 @@ The same bracket shows what happens outside the comfortable case. Each outcome i
 
 | Change to the bracket | What COV reports | Verdict |
 | --- | --- | --- |
-| Run at 120 °C, where no validation plate was tested | Zone `Extrapolated`; the model-form part grows by the package's inflation factor, here 1.6 times to 16.3 MPa | `Pass` if the inflated total stays below the limit, with the zone named in the report |
+| Run at 120 °C, where no validation plate was tested | Zone `Extrapolated`; the model-form part grows by the package's inflation factor, here 1.6 times to 12.9 MPa | `Pass` if the inflated total stays below the limit, with the zone named in the report |
 | Run at 250 °C, beyond the range the inflation was fitted on | Model-form part `NotQuantified { reason: BeyondInflationFit }` | `Undecided { reason: Unquantified([ModelForm]) }` until a test, an allowance or a Waiver covers it |
 | Raise the load to 3 kN, so the fillet yields | The stress-ratio bound is `Refuse`; `ValidityError::OutsideEnvelope` suggests `solid::finite_strain_plasticity` | `Error(Failure)` on the check; no Waiver applies |
 | Swap to a new alloy with no validation data | The model is C2 for that Material: benchmarked, not validated | `Undecided { reason: Unquantified([ModelForm]) }` unless a pinned policy allowance covers model form |
@@ -102,7 +102,7 @@ The coverage map is the list of what Crucible can simulate, by domain, scale, mo
 
 ## Model form: how far tests say a model can be wrong
 
-Numerical error shrinks as Flux refines, but model-form error does not: a linear elastic model of a part that yields stays wrong at any mesh. This section shows how COV fills the model-form part of a result's budget, step by step, and ends with the numbers behind the bracket's 10.2 MPa.
+Numerical error shrinks as Flux refines, but model-form error does not: a linear elastic model of a part that yields stays wrong at any mesh. This section shows how COV fills the model-form part of a result's budget, step by step, and ends with the numbers behind the bracket's 8.1 MPa.
 
 ### Who fills which part
 
@@ -114,7 +114,7 @@ Flux reports each estimated bound already multiplied by its calibration class's 
 *Why:* only the model's author knows which estimator it needs, but a label alone cannot show that a result belongs to the sampled population.
 *Rejected:* one class per numerical method; membership assigned by the author.
 
-Phase 1 needs FLX's four classes, each with 300 held-out samples: `elasticity.peak` and `elasticity.eigen` for immersed linear elasticity at p = 2 to 6, and `lattice.strut_stress` and `lattice.buckling` for the beam lattice's strut stresses and buckling factors. A `SignOff` `Pass` resting on such a bound also needs FLX's one-refinement confirmation, otherwise it is `Undecided { reason: CalibrationUnconfirmed }` (contract 7.1).
+Phase 1 needs FLX's six classes, each with 300 held-out samples: `elasticity.peak`, `elasticity.peak.interactive`, `elasticity.frequency` and `elasticity.buckling` for immersed linear elasticity at p = 2 to 6, and `lattice.strut_stress` and `lattice.buckling` for the beam lattice's strut stresses and buckling factors. A `SignOff` `Pass` resting on such a bound also needs FLX's one-refinement confirmation, otherwise it is `Undecided { reason: CalibrationUnconfirmed }` (contract 7.1).
 
 ### How the model-form part is filled
 
@@ -161,7 +161,7 @@ At the validation point nearest the bracket, the simulated regularized peak is S
 
 Then u_val = √(0.52² + 1.0² + 1.4²) = 1.80 MPa. Welch–Satterthwaite gives ν_eff = 1.80⁴ / (1.4⁴/2) ≈ 5.5, rounded down to 5, so k = t₀.₉₇₅,₅ = 2.571. The bound is 4.0 + 2.571 × 1.80 = 8.6 MPa, or 8.6% of S.
 
-Linear elasticity declares a relative transfer, since its error scales with the response. At the bracket's 118 MPa the part is therefore 10.2 MPa, `Estimated { Statistical { VvTwenty { k: 2.571, ν_eff: 5 }, α: 0.05 } }`. When GP1's proof-load articles are later gauged, each check also predicts its gauge functional (the average surface strain over the gauge grid), and agreement within the prediction's budget confirms the bound on held-out articles (COV-O-VAL-1).
+Linear elasticity declares a relative transfer, since its error scales with the response. At the bracket's 94 MPa the part is therefore 8.1 MPa, `Estimated { Statistical { VvTwenty { k: 2.571, ν_eff: 5 }, α: 0.05 } }`. When GP1's proof-load articles are later gauged, each check also predicts its gauge functional (the average surface strain over the gauge grid), and agreement within the prediction's budget confirms the bound on held-out articles (COV-O-VAL-1).
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -338,7 +338,7 @@ Snap fits and soft parts use mortar contact until FLX's Incremental Potential Co
 
 ### Dynamics and stability
 
-Modal analysis and linear buckling, with Lanczos and LOBPCG eigensolvers, land in phase 1 because GP2's struts need them (13.4). Flux bounds each eigenvalue on the unsafe side (FLX). Linear dynamics follows in phase 2 as one FLX capability (13.4): prestressed, damped and gyroscopic eigenproblems; mode-superposition harmonic, random and response-spectrum response; and damping models declared as data (modal, Rayleigh, structural hysteretic and frequency-dependent viscoelastic).
+Modal analysis and linear buckling, with Lanczos and LOBPCG eigensolvers, land in phase 1 because GP2's struts need them (13.4). Flux bounds each eigenvalue on both sides, since an immersed discretization may err either way (FLX). Linear dynamics follows in phase 2 as one FLX capability (13.4): prestressed, damped and gyroscopic eigenproblems; mode-superposition harmonic, random and response-spectrum response; and damping models declared as data (modal, Rayleigh, structural hysteretic and frequency-dependent viscoelastic).
 
 COV's vibration and shock row therefore covers sine sweeps, base-excitation power spectral density (PSD) response and shock response spectra together in phase 2. Its envelope requires the forcing band to lie inside the modal coverage, with a residual-flexibility term for the modes left out. Near a resonance, an error in a natural frequency is amplified by about 1/(2ζ) for damping ratio ζ, so the envelope `Flag`s a response whose half-power band contains an eigenvalue whose bound overlaps the forcing frequency. Launch environments reuse this row; they add only the launch provider's spectra.
 
@@ -368,7 +368,7 @@ Fatigue starts in phase 1 with uniaxial stress-life: Basquin's law with Goodman,
 
 Fatigue and fracture checks near notches use the theory of critical distances, which reads stress at a material length L from the hot spot [Taylor 2008]. L is fitted together with the operator that evaluates it (a point, a line, an area or a volume average), so reading a published L with a different operator gives a different, often unconservative stress.
 
-**Decision D-COV-34:** Every critical distance in a Material records the method that calibrated it (point, line, area or volume), and Flux's critical-distance goal evaluates that method's own operator along the inward normal from the hot spot. A check that asks for another method fails with `CriticalDistanceMethodMismatch { calibrated, requested }`.
+**Decision D-COV-34:** Every critical distance in a Material records the method that calibrated it (point, line, area or volume), and Flux's critical-distance goal evaluates that method's own operator along the inward normal from the hot spot. A check that asks for another method fails with FLX's `CriticalDistanceMismatch { calibrated, requested }`.
 *Why:* the length and its operator are one calibration, and pairing a point-method length with a volume average understates stress by an amount that depends on the gradient.
 *Rejected:* one smoothing radius for every method; a Gaussian volume average with the published length.
 
@@ -422,7 +422,7 @@ Pressure equipment joins in phase 5 with GP8's structural checks: design by anal
 
 GP6's gate validates rotor thrust and torque, so rotor aerodynamics has a full ladder by phase 4.
 
-**Decision D-COV-31:** Rotor aerodynamics is a ladder of three COV packages. Blade-element momentum theory with tip losses is an Ingot package (L1); a vortex particle method with regularized particles and a stated core size is a std Wasm component on Flux's fast multipole operations; and RANS runs on FLX's rotating frames and sliding interfaces (L3). Each carries its envelope, and the ladder's consistency oracle compares the rungs on GP6's propellers.
+**Decision D-COV-31:** Rotor aerodynamics, FLX's capability in phase 4 (13.4), is a ladder of three rungs with COV envelopes. Blade-element momentum theory with tip losses is an Ingot package (L1); a vortex particle method with regularized particles and a stated core size is a std Wasm component on Flux's fast multipole operations; and RANS runs on FLX's rotating frames and sliding interfaces (L3). Each carries its envelope, and the ladder's consistency oracle compares the rungs on GP6's propellers.
 *Why:* a drone engineer needs thrust and torque from the first sketch, and each rung serves a different question at a cost that differs by orders of magnitude.
 *Rejected:* RANS as the only rotor model; leaving rotor aerodynamics to an outside tool.
 
@@ -450,7 +450,7 @@ A buyer comparing Crucible with Ansys or Abaqus asks a workflow question: "can I
 | Strut strength and buckling envelopes | Strut-strength check with a Johnson–Perry–Robertson factor; eigen-buckling below inelasticity ratio 1; waviness `Flag`. Requires: FLX Beam-lattice models | Struts above ratio 1 `Refuse` linear eigen-buckling and decide by strength | COV-O-BENCH-2 | 1 |
 | Vibration, shock and rotordynamics envelopes | Harmonic, PSD, response-spectrum and Campbell rows; resonance and modal-coverage bounds; Dirlik and narrow-band PSD fatigue | Forcing outside modal coverage or an overlapping resonance: `Flag` | COV-O-BENCH-2 | 2 |
 | Impact functionals | Channel-filtered acceleration, energy absorbed, mean crush force, time-averaged strain maxima; seeded imperfection ensembles. Requires: FLX Explicit dynamics | Mass scaling above 5%: `Refuse`; a raw peak as a goal: `NotRegularized` | COV-O-BENCH-14 | 3 drop, 5 crash |
-| Critical distances | Method recorded per Material; the method's own operator | `CriticalDistanceMethodMismatch { calibrated, requested }` | COV-O-MAT-11 | 1 |
+| Critical distances | Method recorded per Material; the method's own operator (FLX) | `CriticalDistanceMismatch { calibrated, requested }` | COV-O-MAT-11 | 1 |
 | Gear, bearing and shaft ratings (13.4) | L0 ratings and L2 tooth contact with margin Fields | Outside the rating's scope or lambda range: `Invalid` | COV-O-BENCH-10 | 2 |
 | Composite and lattice models | Laminate, failure, short-fibre and lattice envelopes; CT-fitted node corrections | `Invalid` near boundaries; `Flag` above the Bloch-wave bound | COV-O-BENCH-2 | 1 to 4 per row |
 | Thermal and fluid models | Conduction to two-phase rows; turbulence closures, wall treatments and wall resolution; turbomachinery, fan and fluid-system envelopes | Correlations outside range `Refuse`; separation, blade-row interaction, cavitation and choking `Flag`; under-resolved walls `Extrapolated` | COV-O-BENCH-3 | 1 to 6 per row |
@@ -845,7 +845,7 @@ pub enum ValidityError {
 }
 ```
 
-Other typed failures COV raises: `MissingBasis { available }`, `InsufficientSamples { needed }`, `BatchesNotPoolable`, `CriticalDistanceMethodMismatch { calibrated, requested }`, `MissingStandard { code, edition }`, `NotRegularized`, `RegimeUncomputable { variable }`, `BoundaryMismatch` and `TangentInconsistent`. Their error codes take the form `cov/<snake_case>` (contract 7.6).
+Other typed failures COV raises: `MissingBasis { available }`, `InsufficientSamples { needed }`, `BatchesNotPoolable`, `MissingStandard { code, edition }`, `NotRegularized`, `RegimeUncomputable { variable }`, `BoundaryMismatch` and `TangentInconsistent`. Their error codes take the form `cov/<snake_case>` (contract 7.6).
 
 ### Coverage matrix
 
@@ -871,7 +871,7 @@ Columns: domain and scales; the L0 · L1 · L2 rungs; the L3 method; envelope de
 
 | Domain (scales) | L0 · L1 · L2 | L3 method | Envelope defaults | Benchmark | Phase · delivery |
 | --- | --- | --- | --- | --- | --- |
-| Modal analysis (µ Me P L) | Rayleigh, Dunkerley · lumped MDOF · Craig–Bampton | Lanczos and LOBPCG (13.4); eigenvalue bounds on the unsafe side; prestressed modes with stress stiffening and spin softening; cyclic-sector modes by harmonic index (13.4) | Linear; damping from test (OOR-18) | NAFEMS free vibration [NAFEMS P18] | 1, 2 (prestressed, cyclic, Craig–Bampton) · Nat |
+| Modal analysis (µ Me P L) | Rayleigh, Dunkerley · lumped MDOF · Craig–Bampton | Lanczos and LOBPCG (13.4); two-sided eigenvalue bounds; prestressed modes with stress stiffening and spin softening; cyclic-sector modes by harmonic index (13.4) | Linear; damping from test (OOR-18) | NAFEMS free vibration [NAFEMS P18] | 1, 2 (prestressed, cyclic, Craig–Bampton) · Nat |
 | Vibration and shock (Me P L) | SDOF, Miles, shock spectra · — · modal superposition with residual vectors | Direct and modal frequency response; base excitation; PSD response; response spectrum with SRSS and CQC; damping models (13.4); implicit generalized-α | Forcing band within modal coverage; damping from test; an eigenvalue bound overlapping the forcing band `Flag` | NAFEMS R0016; SDOF and two-DOF closed forms | 2 · Nat |
 | Rotordynamics (Me P) | Jeffcott rotor · rotor beams · Campbell modal | Prestressed gyroscopic eigenproblems with spin softening (FLX); fluid-film bearings from the Reynolds equation | Bearings linearized at operating speed | Jeffcott critical speed | 2 · Nat |
 | Buckling (µ Me P L) | Euler, Johnson, Perry–Robertson; strut-strength check · — · linear eigen-buckling (13.4) | Arc-length post-buckling with imperfections and plasticity; Koiter asymptotics (FLX) | Struts decide by strength above inelasticity ratio 1; eigen-buckling `Calibrated` below 0.5; `Refuse` at `SignOff` on imperfection-sensitive shells | NAFEMS R0024; Euler and Johnson columns; single-strut compression coupons | 1 linear and strut strength, 2 nonlinear and Koiter · Nat |
@@ -1139,13 +1139,13 @@ The parity table maps each workflow an incumbent's analyst relies on to the Cruc
 
 | To | What | Types | Phase |
 | --- | --- | --- | --- |
-| FLX | Physics and constitutive models; envelopes and regime functions for `flux::validity_zones`; the model-to-class map; critical distances with their method; property scatter for solve inputs; the operations non-variational methods need | `PhysicsModel`, `Material`, `ValidityEnvelope` | 1 |
-| ING | `std::physics` and `std::materials`; record syntax needs; property reads as exact basis intervals for limits | Ingot packages, `Approx<Q>` | 1 |
+| FLX | Physics and constitutive models; envelopes and regime functions for `flux::validity_zones`; the model-to-class map; critical distances with their method; property scatter for solve inputs; the method logic non-variational methods run on Flux's general operations; the `flux-op-material` operation family, owned with FLX | `PhysicsModel`, `Material`, `ValidityEnvelope` | 1 |
+| ING | `std::physics` and `std::materials`; record syntax needs; property reads as exact basis intervals for limits | Ingot packages, `Range<Q>` | 1 |
 | KLN | Envelope and Material records as CAS inputs; calibration Ops; External Op keys; `DataLicence` values in the usage part; the model-form allowance catalogue that policy-package allowances cite; Material composition for compliance | `Op`, `Labels`, `Material` | 1 |
 | AGT | Coverage map; limit records; envelopes; `ValidityError`s with escalations; the parity map | `api` Read and Inspect methods | 1 |
 | UIX | Zone Fields with assumptions; model-form parts; basis citations; escalations | `Field<Body, ValidityZone>` | 1 |
-| MEC | Materials; solid, contact, joint, fatigue, buckling and dynamics models; strut-strength and idealization envelopes; gear, bearing and shaft ratings; constitutive draping (13.4) | `Material`, `PhysicsModel` | 1 |
-| MFG | Process models and envelopes; state Fields; strut-scale Materials and tolerance limits from its calibration; phase-transformation kinetics; environmental records; gear, bearing and shaft ratings | `Field`, `ValidityEnvelope`, `EnvironmentalRecord` | 1 |
+| MEC | Materials; solid, contact, joint, fatigue, buckling and dynamics models; strut-strength and idealization envelopes; gear, bearing and shaft ratings; constitutive draping (13.4) | `Material`, `PhysicsModel` | 1; 2 (contact, joint and dynamics models; ratings); 5 (constitutive draping) |
+| MFG | Process models and envelopes; state Fields; strut-scale Materials and tolerance limits from its calibration; phase-transformation kinetics; environmental records; gear, bearing and shaft ratings | `Field`, `ValidityEnvelope`, `EnvironmentalRecord` | 1; 2 (environmental records, ratings); 4 (phase-transformation kinetics) |
 | ELX | Dielectric, copper, magnetic and cell Materials; electromagnetic, thermal, electrochemical and fluid-system envelopes, including refit LFP hysteresis; precision tiers | `PhysicsModel`, `Material` | 3 |
 | ECO | Domain acceptance checks; semantics of `crucible:physics`, `crucible:material`, MatML and OpenFOAM cases | Package | 1 |
 | PLT | Precision tiers per model; External Op worker needs | Model metadata | 1 |
@@ -1203,7 +1203,7 @@ Oracles live in the protected `oracles/cov/`; held-out validation Evidence recor
 | COV-O-MAT-8 | Property Fields | Exact at tabulated nodes; monotone where declared; out-of-coverage reads zoned, never clamped |
 | COV-O-MAT-9 | Environmental records | Every value carries source, boundary and year; carbon checks report them; mixed boundaries fail |
 | COV-O-MAT-10 | UMAT ports | Stress updates within 10⁻¹⁰ relative of the original over the calibrated envelope; Taylor tests pass |
-| COV-O-MAT-11 | Critical distances | Point, line, area and volume operators reproduce their analytic values on a notch field; a mismatched method fails with `CriticalDistanceMethodMismatch` |
+| COV-O-MAT-11 | Critical distances | Point, line, area and volume operators reproduce their analytic values on a notch field; a mismatched method fails with `CriticalDistanceMismatch` |
 
 ## Phasing
 
@@ -1212,10 +1212,10 @@ Shared phases follow contract 13.4, and each matrix row lists its own phase. Gol
 | Phase | COV's contribution to the gate |
 | --- | --- |
 | 0 | Envelope schema; regime variables with transforms; credibility levels; Material records and units; the coverage map; limit records |
-| 1 | GP1 and GP2: immersed linear elasticity and the beam-lattice model at C3 from the separate-specimen validation campaign, confirmed by gauge functionals on the proof loads; four calibration classes; the strut-strength check and buckling envelopes; strut-scale Materials with normal and Weibull basis values; planar and axisymmetric rungs; idealization envelopes; the allowance catalogue; the parity map |
-| 2 | GP3 and GP4: gear, bearing and shaft ratings; vibration, shock and rotordynamics envelopes on FLX's linear dynamics; weld distortion from coupons at C3; inherent strain for metal powder bed fusion; environmental records with generic factors |
-| 3 | GP5: moulding with the Hele-Shaw envelope, laminar conjugate heat transfer, linear acoustics and drop functionals; warpage and drop models at C3 |
-| 4 | GP6: rotor aerodynamics, motor and thermal models validated by flight, dynamometer and thermal tests; phase-transformation kinetics |
+| 1 | GP1 and GP2: immersed linear elasticity and the beam-lattice model at C3 from the separate-specimen validation campaign, confirmed by gauge functionals on the proof loads; FLX's six phase 1 calibration classes; the strut-strength check and buckling envelopes; strut-scale Materials with normal and Weibull basis values; planar and axisymmetric rungs; idealization envelopes; the allowance catalogue; the parity map |
+| 2 | GP3 and GP4: gear, bearing and shaft ratings; vibration, shock and rotordynamics envelopes on FLX's linear dynamics; weld distortion from coupons at C3. Also inherent strain for metal powder bed fusion and environmental records with generic factors |
+| 3 | GP5: moulding with the Hele-Shaw envelope, laminar conjugate heat transfer and drop functionals; warpage and drop models at C3. Also linear acoustics |
+| 4 | GP6: rotor aerodynamics, motor and thermal models validated by flight, dynamometer and thermal tests. Also phase-transformation kinetics |
 | 5 | GP7 MEMS, GP8 steel platform with the IFC structural check and pressure-equipment routes, GP9 crash box; particle tracing and free-molecular flow |
 | 6 | GP10 wing box with the tool qualification kit, GP11 CubeSat, GP12 battery sub-pack |
 | 7 | GP13 hull, GP14 timber pavilion, GP15 bone plate with its V&V 40 package, GP16 sewn pack |

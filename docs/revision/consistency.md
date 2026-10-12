@@ -896,3 +896,15 @@ This audit covers the twelve subsystem tabs as committed at `312d1b3` (unchanged
     - Must say: "tool processes and stdio MCP (Model Context Protocol) servers; Windows"
     - Why: contract 11.
 
+
+## Contract v7.4 (applies to every tab)
+
+Contract v7.4 ruled on the audit's contract items after this brief was written. Apply these on top of your section:
+
+- **Computed view.** "Derived view" now means only the declassified view of a labelled module or supplier package (contract 2). Where your tab calls a BOM or another computed node a derived view, write "computed view" (KLN and ELX use this sense; grep your tab).
+- **Reached limits** are `kiln/work_limit` and `kiln/memory_limit` Failures whichever layer reaches them, with any best-so-far result beside the Failure (contract 7.2). MFG: replace `MfgError::WorkLimit { limit: base::WorkLimit, best_so_far }` accordingly. PLT and ECO: a Wasm `memory.grow` past the maximum surfaces as `kiln/memory_limit`.
+- **`standing_release`** is in contract 7.6's Act kinds; AGT's table and D-AGT-36 stay as they are.
+- **Single-person mode** (5.4): only two-person records and R3 and R4 merges wait 72 h; before phase 2 the verifier role's CI-signed review counts as `Attested`. AGT and KLN state this in one line with a pointer.
+- **`PlacementPolicy`** is implemented by `trust`.
+- **13.4:** MEC no longer appears as "Also phased in" for planar models, linear dynamics and symmetry reductions, nor FLX for fibre orientation, phase-transformation kinetics, battery swelling and abuse; a tab that still phases these itself states the owner's phase in one line instead. FMU import has a shared row at phase 3 (owner FLX, also ELX and ECO): ELX's "FMU elements" row and ECO's FMU catalog row cite it.
+- **Bracket figures** are ING's, as judgment call 1 says.

@@ -22,7 +22,7 @@ A designer asks an agent to widen the bracket to 80 mm for a new mounting patter
 4. **Evaluate.** `evaluate.ci` runs exactly what Proposal CI will run and streams frames as Kiln computes them: the rebuilt Body, the stress Field with its error budget, and the check outcome. `static_margin` passes at `Interactive` fidelity and stays provisional until CI's `SignOff` run ([Evaluations and streams](#evaluations-and-streams)).
 5. **Look.** `inspect.describe` answers from typed facts, with no model in the loop ([Observation](#observation)). Its brief form, with illustrative values:
 
-   > Part `bracket`, aluminium 6061-T6. Bounding box 80.0 × 40.0 × 26.0 mm; mass 78 g ± 1 g. Features: sketch, extrude 6 mm, rib 20 mm, fillet 2 mm on the new edges. Checks: `static_margin` `Pass` at `Interactive`, provisional. Regularized peak von Mises stress at the web root: 74 MPa ± 7 MPa (`Estimated`) against a limit of 166 MPa.
+   > Part `bracket`, aluminium 6061-T6. Bounding box 80.0 × 40.0 × 26.0 mm; mass 78 g ± 1 g. Features: sketch, extrude 6 mm, rib 20 mm, fillet 2 mm on the new edges. Checks: `static_margin` `Pass` at `Interactive`, provisional. Regularized peak von Mises stress at the web root: 72 MPa ± 9 MPa (`Estimated`) against a limit of 144 MPa.
 
    `inspect.render` adds a four-view Snapshot whose numbered marks map to entity ids, so "the edge marked 3" means one exact edge.
 6. **Propose.** `propose.create` opens a Proposal from `widen-bracket` into `main` with a rationale ("widen for the 80 mm pattern") and a requirement link. The server refuses it unless the head builds, every check meets its gate, Snapshots exist at the head, the rationale is complete and every Change carries signed provenance ([Proposals and review](#proposals-and-review)).
@@ -77,7 +77,7 @@ An agent needs a handle that says whom it acts for, a way to change source that 
 
 ### One catalog
 
-**Decision D-AGT-1:** The `api` method catalog is the only programmatic surface of Crucible: MCP tools, SDK methods, WIT functions, UI commands and CLI subcommands map one-to-one onto API methods.
+**Decision D-AGT-1:** The `api` method catalog is the only programmatic surface of Crucible: MCP tools, SDK methods, WIT (WebAssembly Interface Types) functions, UI commands and CLI subcommands map one-to-one onto API methods.
 *Why:* agents are first-class users, a second surface would drift from the first, and principle 1 forbids privileged paths.
 *Rejected:* a separate agent API, which drifts and doubles testing; a code-only surface that runs scripts, which loses typed inspection, evaluation and review.
 
@@ -265,7 +265,7 @@ Budgets nest from organization to session. The default ceilings are 25 USD per s
 *Why:* solves, certified geometry and Wasm components vary in cost by orders of magnitude at one input size, so a mean admits work that cannot finish.
 *Rejected:* regression estimates as reservations; caps only between Ops, which an unbounded factorization overruns.
 
-An Op estimated above 10 core-seconds gets a work budget from the remaining money and reaches a safe point every 10 core-seconds; exhaustion aborts it at its last checkpoint. The work budget never enters a `NodeKey`: an Op completes with its usual value or aborts and writes nothing. GPU seconds come from timestamp queries on compute-only submissions. A failed reservation returns `budget/exceeded` with cheaper options, such as a lower fidelity. A session is warned at 80% of a cap, and spending three times the role's median raises an alert.
+An Op estimated above 10 core-seconds gets a work budget from the remaining money and reaches a safe point every 10 core-seconds; exhaustion is KLN's Abort `BudgetExhausted`, reported with the last safe point reached. The work budget never enters a `NodeKey`: an Op completes with its usual value or aborts and writes nothing. GPU seconds come from timestamp queries on compute-only submissions. A failed reservation returns `budget/exceeded` with cheaper options, such as a lower fidelity. A session is warned at 80% of a cap, and spending three times the role's median raises an alert.
 
 | Method kind | Default sustained rate | Burst |
 | --- | --- | --- |
@@ -332,7 +332,7 @@ The element-by-element mapping, header rules and request-state sealing are in [R
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
-| Admission and metering | Priced upper-bound reservations; safe points every 10 core-seconds | `budget/exceeded`; a budget Abort keeps the checkpoint | AGT-O-BUD-1 | 1 |
+| Admission and metering | Priced upper-bound reservations; safe points every 10 core-seconds | `budget/exceeded`; KLN's Abort `BudgetExhausted` | AGT-O-BUD-1 | 1 |
 | Rate limits | Per principal at the gateway | `limit/rate` | AGT-O-BUD-1 | 0 |
 | Priority classes | `Drag`, `Foreground`, `Agent`, `Ci`, `Batch` on PLT's lanes; preemption at node boundaries (KLN); Dominant Resource Fairness within a class | None: admission always assigns a class | AGT-O-BUD-1 | 0 |
 | Errors | One `<family>/<code>` rendering; RFC 9457 shape; typed context; ordered fixes; restricted names hidden | Third-party fixes labelled and restricted | AGT-O-MCP-1 | 0 |
@@ -483,7 +483,7 @@ Every role holds `design:read` and `propose:author`. The verifier and the DFM (d
 | DFM reviewer | None; findings carry fixes | Never | `every_finding_anchored`, `every_blocker_has_fix_or_rationale`, `rules_version_recorded` | None | 2 |
 | CAM programmer | `mfg/cam/**` | Extracts (tool data) | `no_collisions`, `no_gouges`, `stock_removed_within_tolerance`, `tools_in_library`, `feeds_within_tool_limits`, `posted_for_machine_class` | `send_to_machine`, `store_machine_job` | 2 |
 | Cost engineer | `cost/**` and cost-reduction branches | Extracts (quotes) | `every_bom_line_priced_or_flagged`, `prices_have_source_and_date`, `totals_have_intervals` | `request_quote` | 2 |
-| Drawing and MBD author | Drawing source and PMI | Never | `every_feature_of_size_toleranced`, `datum_reference_frames_complete`, `annotations_reference_live_entities`, `pmi_semantic_in_ap242_export` | None | 2 |
+| Drawing and model-based definition author | Drawing source and PMI | Never | `every_feature_of_size_toleranced`, `datum_reference_frames_complete`, `annotations_reference_live_entities`, `pmi_semantic_in_ap242_export` | None | 2 |
 | Catalog librarian | Catalog package repository | Extracts | `key_dimensions_match_datasheet`, `units_typed`, `geometry_licence_recorded`, `provenance_recorded` | `publish_package` | 2 |
 | Documentation writer | `docs/**` except drawings | Never | `every_number_cites_a_fact`, `facts_current_at_head`, `snapshots_within_threshold` | None | 2 |
 | Independent verifier | Own scratch and counter-proposal branches | Never | `attack_catalog_covered`, `findings_reproducible`, `mutation_score_reported` | None | 1 |
@@ -506,7 +506,7 @@ Every review attacks uncovered requirements, worst-case tolerance stacks, omitte
 *Why:* self-review shares the author's blind spots, the author's text is an injection channel, and Crucible cannot see one host play both roles.
 *Rejected:* self-verification; render questions alone, since CADCodeVerify's improvement in point-cloud distance [Alrashedy et al. 2024] misses checks that cannot fail; server lineage alone.
 
-The review is `Attested` only under a different delegating human, in the hosted crew or behind the model gateway; a `Declared` review needs a human approval beside it. Mutation covers the changed Parts and the checks their dependency closure reaches. Beyond the verifier's budget, a fixed hash rule samples them, and the report states the count.
+The review is `Attested` only in the hosted crew or behind the model gateway, under a different delegating human except in single-person mode; a `Declared` review needs a human approval beside it. Before phase 2, a verifier review that Crucible's own CI runs and signs counts as `Attested` (contract 5.4). Mutation covers the changed Parts and the checks their dependency closure reaches. Beyond the verifier's budget, a fixed hash rule samples them, and the report states the count.
 
 | Capability | Contract | Failure | Oracle id | Phase |
 | --- | --- | --- | --- | --- |
@@ -523,7 +523,7 @@ A reviewer's time is the scarcest resource around an agent, so a Proposal arrive
 
 ### The Proposal object
 
-A Proposal is a branch plus rationale plus CI report, stored by `repo`.
+A Proposal is a branch plus rationale plus CI report, stored by `repo`. A pull request on any Git host is a Proposal once Kiln's CI runs it (contract 7.1), so an agent may also work in a plain Git clone; spans it pushes that way stay untrusted until a person confirms them, as for any channel outside Crucible's own editor ([Local credentials](#local-credentials)).
 
 ```rust
 pub struct Proposal {
@@ -581,7 +581,7 @@ The risk class decides who must look at a Proposal, so the server computes it, n
 
 For agent Proposals, UIX's Proposal view adds provenance, the risk class and its reasons, integrity flags with their sources, the verifier's report and the canonical description. Findings anchor to `EntityId`s, feature paths or source spans and return to the author as typed input.
 
-- A merge into a protected branch needs the merge approvals its branch rule requires, from reviewers outside the authoring and delegation chain, each with a fresh approval credential bound to the call (contract 5.4).
+- A merge into a protected branch needs the merge approvals its branch rule requires, from reviewers outside the authoring and delegation chain, each with a fresh approval credential bound to the call; in single-person mode the one person approves after an `Attested` verifier review, and an R3 or R4 merge takes effect after contract 5.4's 72-hour delay.
 - Into an unprotected branch, the delegating human may merge R0 to R2; R3 and R4 always need a person outside the chain.
 - Agent reviews never count toward a human approval requirement.
 - Change orders follow KLN's review routing from phase 2 ([KLN, review routes](05-kiln-repo-plm.md#review-routes-and-delegation)). A route has ordered stages of roles with a quorum, conditions that add stages, and delegation during absence that never names an agent. The Proposal view shows the route's progress.
@@ -921,7 +921,7 @@ Every Act is two-phase: `act.prepare` produces a plan with a digest, and `act.co
 | `release` | Record | A signed release tag, with deliveries to the organization's own systems | Superseded by a change order | 1 |
 | `yank_package` | Record | A registry version marked yanked or deprecated | Never deletes | 2 |
 | `send_to_supplier` | Data release | Files for quotation or production | Irreversible | 1 |
-| `export` | Data release | A repository archive or release bundle; a Git mirror, a branch shared with another organization or a message to a connector | Irreversible; sharing revocable going forward | 1 (archive, bundle), 2 (others) |
+| `export` | Data release | A repository archive, release bundle or web-view link; a Git mirror, a branch shared with another organization or a message to a connector | Irreversible; sharing revocable going forward | 1 (archive, bundle, web-view link), 2 (others) |
 | `request_quote`, `order` | Data release | Requests for quotation and purchase orders | Orders compensable | 2 |
 | `standing_release` | Data release | Bounded recurring transfers on one channel | Revocable going forward | 2 |
 | `publish_package` | Data release | A public registry version | Yankable | 2 |
@@ -1020,10 +1020,10 @@ Contract 7.6 fixes the physical-safety rules: no device starts except through th
 *Rejected:* remote starts through OPC UA job methods; agent-committed transfers; static interface review alone.
 
 - **Plans** name the device class, serial, location, controller version, program number and the program the transfer overwrites. The machine gateway checks the Approval against its pinned approver directory (MFG).
-- **OPC UA.** Crucible calls `Store` only in `store_machine_job`, and `Cancel`, `Clear` and `RevokeStart` only on its own unstarted jobs; every other job-control method is uncallable [OPC 10031-4].
+- **OPC UA.** `store_machine_job` calls only the job methods MFG allows ([MFG, Acts, payloads and wire-level rules](07-manufacturing.md#acts-payloads-and-wire-level-rules)).
 - **Bench sessions.** A `bench_session` plan names the person at the device, its serial, the probe or gateway and the payload kind. It also fixes one Software item or program lineage on one branch, a maximum count, an expiry of at most 8 hours and the hazard acknowledgements. Transfers inside it need no further Approval and keep every check (read-back, hold in reset, no start, the gateway's offset check, the canonical program hash). It ends on expiry, on a hazard change or on a payload outside the lineage, agents never open or extend one, and the approval page lists every transfer afterwards.
 - **Firmware.** `flash_device` leaves the target held for a person at the bench. Client flashing runs only in code that verifies the Approval: the approval-origin page in browsers, which alone holds the WebUSB grant and checks the image's SHA-256, and `apps/platform-*`'s flashing service on desktops. The main web origin never holds a WebUSB grant.
-- **Small shops.** MFG's minimum-ceremony table says how a one-person shop runs ([MFG, approval and transfer](07-manufacturing.md#prove-out-and-the-minimum-ceremony)). A program Item starts in `Prototype` with its first transfer plan. The Cedar policy `self_approve_transfer`, off by default and enabled by the site's safety officer, lets the person who prepared a transfer approve it with AAL3.
+- **Small shops.** MFG's minimum-ceremony table says how a one-person shop runs ([MFG, approval and transfer](07-manufacturing.md#prove-out-and-the-minimum-ceremony)). A program Item starts in `Prototype` with its first transfer plan. The Cedar policy `self_approve_transfer`, off by default and enabled by a widening Cedar change that names the site's safety officer, lets the person who prepared a transfer approve it with AAL3.
 
 Physical-effect kinds ship with MFG's transfers in phase 2, `store_machine_job` with the OPC UA path in phase 3, and `flash_device` with ELX's Software items in phase 3.
 
@@ -1200,8 +1200,8 @@ Sessions emit the events `session.called` (method, status, audit entry, usage), 
 | `evaluate.build` † | Targets, `Fidelity`, `estimate_only` → `EvaluationReport` | `budget/exceeded`, `build/failed` | AGT-O-BUD-1 | 0 |
 | `evaluate.checks` † | Selection, `Fidelity` → `CheckOutcome`s | `budget/exceeded`, `build/failed` | AGT-O-MCP-1 | 0 |
 | `evaluate.subscribe` † | Targets, overrides, fidelity ceiling → a frame stream under the `Drag` class | `budget/exceeded` | AGT-O-API-2 | 1 |
-| `evaluate.simulate` † | Study, `Fidelity` → Fields with `ErrorBudget`s and zones | `flux/study_invalid`; zones flag, never hide | AGT-O-MCP-1 | 1 |
-| `evaluate.manufacture` † | Setup → toolpaths, collisions, removal, cycle time | `mfg/setup_invalid` | AGT-O-MCP-1 | 2 |
+| `evaluate.simulate` † | Study, `Fidelity` → Fields with `ErrorBudget`s and zones | `flux/study_error`; zones flag, never hide | AGT-O-MCP-1 | 1 |
+| `evaluate.manufacture` † | Setup → toolpaths, collisions, removal, cycle time | `mfg/unreachable`, `mfg/infeasible`, `mfg/missing_data` | AGT-O-MCP-1 | 2 |
 | `evaluate.cost` † | Quantity, process → cost lines with intervals and price sources | `cost/unpriced_lines` (partial report) | AGT-O-MCP-1 | 1 |
 | `evaluate.ci` † | Change → the `CiReport` that Proposal CI would produce | `budget/exceeded` | AGT-O-RISK-1 | 1 |
 | `evaluate.explore`, `evaluate.materialize` † | Exploration → Pareto frames; a variant → `SetParameter` edits | `explore/no_feasible_point`, `explore/variant_unknown` | AGT-O-EXP-1 | 2 |
@@ -1264,9 +1264,9 @@ Each family has one owner. `api` families name boundary failures, never method g
 | `crew`, `bench` | AGT | `no_qualified_endpoint`, `replay_missing`, `dataset_hash_mismatch` | Qualify an endpoint; refetch the dataset |
 | `ing` | ING | `ing/3001`, `ing/4104`, `ing/6401`; lints `ing/l-fragile-selector`, `ing/l-unnamed-check` | The diagnostic's `SourcePatch` |
 | `anvil` | ANV | Geometry operation failures | The failure's ranked fixes |
-| `flux`, `cov` | FLX, COV | `study_invalid`, `symmetry_broken`; validity failures | Change the study; escalate the model |
-| `kiln`, `repo`, `plm`, `trust` | KLN | `op_version_retired`, merge conflicts, lifecycle and signature failures | An upgrade Proposal; resolve the conflict |
-| `mech`, `mfg`, `elx`, `ui` | MEC, MFG, ELX, UIX | `mfg/gateway_unreachable`, `mfg/setup_invalid`, `mfg/dnc_session_pre_armed` | The tab's typed fix |
+| `flux`, `cov` | FLX, COV | `study_error`, `symmetry_broken`; validity failures | Change the study; escalate the model |
+| `kiln`, `cas`, `repo`, `plm`, `trust`, `evidence`, `share` | KLN | `op_version_retired`, merge conflicts, lifecycle and signature failures | An upgrade Proposal; resolve the conflict |
+| `mech`, `mfg`, `elx`, `ui` | MEC, MFG, ELX, UIX | `mfg/gateway_unreachable`, `mfg/plan_unapproved`, `mfg/dnc_session_pre_armed` | The tab's typed fix |
 | `package`, `archive`, `events`, `policy` | ECO | `not_found`, `unsatisfiable`, `incomplete`, `cursor_expired`, `denied` | The explanation in `context` |
 | `platform` | PLT | Device, storage and runtime failures | The platform's remedy |
 
@@ -1320,12 +1320,12 @@ Each family has one owner. `api` families name boundary failures, never method g
 | --- | --- | --- | --- |
 | All tabs | The `api` catalog; sessions; boundary labels; budgets; idempotency; the error namespace and family registry; audit payloads | API method, `ApiError` | 0 |
 | ING | `SourcePatch` application; `evaluate.subscribe` and `edit.stream` under `LiteralSite` overrides; `ExternalText` values returned as handles | API method | 0 |
-| KLN | Admission; `Budget` and `PriorityClass`; `release_data` Acts and standing releases; context labels on writes; Proposals, risk classes and auto-merge; audit payloads; `act.*` events | `Budget`, `PriorityClass`, `Proposal` | 1 |
+| KLN | Admission; `Budget` and `PriorityClass`; `release_data` Acts and standing releases; context labels on writes; Proposals, risk classes and auto-merge; audit payloads; `act.*` events | `Budget`, `PriorityClass`, `Proposal` | 0 (`PriorityClass`); 1 |
 | KLN | `propose.change_order` under KLN's review routing; `read.search_items` serving KLN's similarity search | API method | 2 |
 | KLN | `propose.mass_change` as a swarm with one work item per repository | API method, `Plan` | 3 |
 | UIX | `inspect.render`, `inspect.ask_render`; `evaluate.subscribe` and `edit.stream`; `read.language_service`; `session.ask` and `session.*` events; Proposals with verifier reports and provenance; `ActPlan`s, approval requests, the three outcomes and the approval origin's rules; `session.control` | `Proposal`, `ActPlan`, `ChangeProvenance` | 1 |
-| MFG | Physical-effect, `request_quote` and `publish_passport` Act kinds and plan schemas; `bench_session`; `read.machine_data`; the CAM programmer | `ActPlan` | 2 |
-| ELX | `edit.stream` and `edit.apply` for layout tools; datasheet extraction, labelled `data_untrusted`; budget caps for long tool runs | API method, `Proposal` | 1 |
+| MFG | Physical-effect, `request_quote` and `publish_passport` Act kinds and plan schemas; `bench_session`; `read.machine_data`; the CAM programmer | `ActPlan` | 2; 3 (`publish_passport`, `store_machine_job`) |
+| ELX | `edit.stream` and `edit.apply` for layout tools; datasheet extraction, labelled `data_untrusted`; budget caps for long tool runs | API method, `Proposal` | 1; 2 (extraction) |
 | ELX | `flash_device` and board `bench_session`s with Approval-verifying client flashing | `ActPlan` | 3 |
 | ECO | Catalog entries for ECO's methods; `crucible:api`; Act kinds and `release_data`; `ExternalText` and instruction authority; image rules; `std::agents` and `std::explore` | Package, `ActPlan` | 1 |
 | PLT | Canonical JSON; the `ApiError` shape; `Usage` as the resource record; the `PriorityClass` to pool-lane mapping | `Usage`, `ApiError`, `PriorityClass` | 0 |
@@ -1382,7 +1382,7 @@ No AGT capability is in contract 13.4's tables; each row follows its owner's pha
 
 ## Contract change requests
 
-- **CCR-AGT-14. Single-person merge approvals.** Contract 5.4's merge-approval row forbids the author and the delegating human from approving a merge into a protected branch. Single-person mode covers only the two-person rows, so an organization with one eligible person can never merge its agents' Proposals into a protected `main`. Proposed: single-person mode also covers the merge-approval row. The one person approves with a fresh approval credential after an `Attested` verifier review, the record is marked `single_person`, and R3 and R4 merges take effect after the mode's 72-hour delay.
+None.
 
 ## Sources
 
@@ -1442,7 +1442,6 @@ No AGT capability is in contract 13.4's tables; each row follows its owner's pha
 | [NVIDIA FLIP] | Ebelin et al., "ꟻLIP: A Difference Evaluator for Alternating Images" (High Performance Graphics 2020) | https://research.nvidia.com/labs/rtr/publication/andersson2020flip/ | By 2026-10-11 |
 | [Onshape FeatureScript MCP] | Onshape, "FeatureScript MCP Server Enables Text Code CAD" | https://www.onshape.com/en/blog/featurescript-mcp-server-enables-text-code-cad | 2026-10-12 |
 | [Onshape terms] | Onshape Terms of Use | https://www.onshape.com/en/legal/terms-of-use | By 2026-10-11 |
-| [OPC 10031-4] | OPC Foundation, OPC 10031-4 (OPC UA for ISA-95, Part 4: Job Control) v2.00, section 6.3 | https://reference.opcfoundation.org/ISA95JOBCONTROL/v200/docs/6.3 | By 2026-10-11 |
 | [OpenID Connect Core] | OpenID Connect Core 1.0, section 9, client authentication (`private_key_jwt`) | https://openid.net/specs/openid-connect-core-1_0.html | By 2026-10-11 |
 | [OWASP agentic top 10] | OWASP Top 10 for Agentic Applications for 2026 (resource page, published 9 December 2025) | https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/ ; item list as reproduced at https://docs.modulos.ai/frameworks/owasp-top-10-agentic | By 2026-10-11 |
 | [OWASP LLM01] | OWASP, "LLM01:2025 Prompt Injection" | https://genai.owasp.org/llmrisk/llm01-prompt-injection/ | By 2026-10-11 |
