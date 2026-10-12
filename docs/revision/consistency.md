@@ -1,670 +1,898 @@
-# Round 3: consistency pass (brief for each tab's agent)
+# Round 4: consistency pass (brief for each tab's agent)
 
-All twelve subsystem tabs are v3, and contract v6.1 rules on every change request filed so far (contract sections 16 and 17). A cross-tab audit found the mismatches below and decided each one; the owner of a fact wins. Your job: apply your tab's edits, without reopening the revision.
+All twelve subsystem tabs are v4 and pass `check.py`, and contract v7.3 is binding: version 7.1 rules on every change request the v4 tabs filed, and versions 7.2 and 7.3 make Crucible's history Git-native (contract section 18). A cross-tab audit found the mismatches below and decided each one; the owner of a fact wins. Your job: apply your tab's edits, without reopening the revision.
 
 ## Rules
 
 - Edit only your own `docs/spec/<file>.md` (and its diagram files if an edit touches a diagram). Never edit another tab, the contract, a README or CLAUDE.md, and never commit.
-- Apply every edit in your tab's section below. Each quotes the current text; if the text has moved, find it by its words. If an edit is wrong on the evidence, skip it and say why in your report.
-- Keep every decision, oracle and source. A decision you change ends with "(revised in round 3)" unless it is new in round 3.
-- Stay within the word limit (12,000 to 18,000 words excluding Sources; ING and ANV up to 20,000). Apply your change-request edit first; it frees room.
-- Names only the owner may choose are yours if you own them: FLX names its circuit-analysis operations (operating point, AC, transient, harmonic balance) in its operations catalog, and ELX then cites them; AGT names `api` methods for ING's language service, agent questions to the delegating human, and COV's coverage map, and adds their rows. PLT reopens NIST's CMVP page for certificate 5314 before citing it.
-- Run `python3 docs/tools/check.py docs/spec/<file>.md --base round-2`: zero errors, and nothing cut since round 2.
+- Apply every edit in your tab's section below. Each quotes the current text and gives its line in the committed tab; if the text has moved, find it by its words. If an edit is wrong on the evidence, skip it and say why in your report.
+- Keep every decision, oracle and source that the edits do not name. A decision you change states the new decision under its number, and the Decisions log records the change. Write no "(revised in round N)" markers, finding ids, "formerly" or "replaces" anywhere above `## Open questions` (contract 10 and 11); `check.py` fails on them. When an edit removes the last citation of a source key, drop that Sources row.
+- Delete each change request contract 18 accepted from your `## Contract change requests` section; a section left empty reads "None." Wherever your text relies on a ruling, cite the contract section, never the request.
+- A `Requires:` entry names the other tab's Capability cell word for word, and several entries are separated by ";" (contract 13.4). Two entries added here point at rows that another tab's edit creates or re-phases: ELX's "FLX Electro-thermal coupling" (added by FLX) and UIX's "MEC Exploded views" (moved to phase 1 by MEC). If `check.py` reports only those, apply everything else and say so; the orchestrator re-runs the check once every tab has landed.
+- Stay within the length rule: 9,000 to 15,000 words of prose (ING and ANV up to 17,000). Capability tables, the Reference section, State of the art, Interfaces, Oracles and Sources do not count (contract 11). The budget table below gives your room.
+- Run `python3 docs/tools/check.py docs/spec/<file>.md --base round-3`: zero errors, and nothing reported cut since round 3 except what an edit below removes.
 - Reply in at most 150 words: edits applied and skipped (with reasons), names you chose, the word count and the check result.
 
 ## The audit
 
-This audit covers the twelve subsystem tabs at commit `60f0264` (contract v6.1; the working tree was clean). It checks each interface row against the other tab's row, phases against contract 13.4 and the owners' capability tables, names against the glossary and the owners, change-request citations against contract 16 and 17, staffing wording against contract 13.2, and the items the round 3 agents reported.
+This audit covers the twelve subsystem tabs as committed at `312d1b3` (unchanged since `be97e4f`), against contract v7.3. It checks every `Requires:` entry; each tab's Interfaces rows against what the receiving tab's design assumes; phases against contract 13.1, 13.2 and both tables of 13.4; names against contract 2 and the owners; the renames and deletions of v7 and the v4 revisions; change-request citations against contract 18; cross-tab decision and oracle ids; shared facts (the canonical bracket's figures, lanes, fidelities, the signature table, failure families); the orchestrator's follow-up notes; every intra-spec link; and editorial coherence across tabs.
 
-**How the owner was chosen.** The owner of a fact wins (`docs/revision/consistency.md`). The owner is the tab named by contract 5's `[TAB]` tags or 13.4's Owner column. Otherwise it is the tab whose design section specifies the fact, and any item decided another way says so.
+**How the owner was chosen.** The owner of a fact wins. The owner is the tab named by contract 5's `[TAB]` tags or 13.4's Owner column; otherwise it is the tab whose design section specifies the fact. Items where the other direction is defensible are listed under "Judgment calls".
 
-**How the quotes were checked.** Every "Now" quote below occurs exactly once in the committed file, at the line given (`grep -F`). A row quoted without its first cells is still unique.
+**How the edits were checked.** Every "Now" quote below occurs exactly once in the committed file, at the line given (`grep -F`). A row quoted without its first cells is still unique. Applying every quoted replacement to a scratch copy of the tabs, with FLX's two new rows, gives zero `check.py` errors and leaves every tab inside its length range before any of the deletions, which only free room.
 
-**Word budgets.** Several tabs sit at their ceiling. Each tab's change-request edit below shortens its section by 20 to 110 words, which pays for that tab's additions. Apply that edit first, then run `python3 docs/tools/check.py docs/spec/<file>.md --base round-1`.
+**Where the working is.** The audit's scripts and helper findings are in `docs/build/audit/` (ignored by git): `caps.tsv` (every capability row), `requires.tsv` (every `Requires:` entry), `xids.tsv` (every cross-tab oracle and decision citation), `links.py` (the intra-spec link checker) and `verify.py`, `verify2.py` and `apply.py` (the quote, line and scratch-copy checks).
+
+**Word budgets.** Prose words from `check.py` at `312d1b3`, and room to the ceiling. FLX, UIX and KLN are tightest; UIX 18 and KLN 9, 10 and 12 free about 330 and 120 words.
 
 | Tab | Words now | Room | Tab | Words now | Room |
 | --- | --- | --- | --- | --- | --- |
-| ING | 19,918 | 82 | MFG | 17,860 | 140 |
-| ANV | 19,963 | 37 | ELX | 17,956 | 44 |
-| FLX | 17,937 | 63 | AGT | 17,836 | 164 |
-| COV | 17,690 | 310 | UIX | 17,981 | 19 |
-| KLN | 17,996 | 4 | ECO | 17,752 | 248 |
-| MEC | 17,949 | 51 | PLT | 17,776 | 224 |
+| ING | 14,327 | 2,673 | MFG | 12,350 | 2,650 |
+| ANV | 15,783 | 1,217 | ELX | 13,041 | 1,959 |
+| FLX | 14,691 | 309 | AGT | 12,799 | 2,201 |
+| COV | 11,877 | 3,123 | UIX | 14,632 | 368 |
+| KLN | 14,353 | 647 | ECO | 13,234 | 1,766 |
+| MEC | 13,925 | 1,075 | PLT | 13,713 | 1,287 |
 
 ## Summary
 
-**The round 3 agents' items.**
+**Edits per tab.** ING 14, ANV 9, FLX 18, COV 11, KLN 15, MEC 14, MFG 10, ELX 13, AGT 11, UIX 18, ECO 17, PLT 15: 165 numbered edits, several with sub-edits.
 
-| Reported item | State at `60f0264` | Edit |
+**The orchestrator's follow-up notes** (`docs/build/r4-followups.md`).
+
+| Note | State at `312d1b3` | Edit |
 | --- | --- | --- |
-| ANV relabels copies "in `CallSite` order"; ING says program order | Mismatch; ING owns the program-order index | ANV 1, 3 |
-| KLN ships minimal signature records in phase 1 | Already consistent: KLN-O-SIG-1 is phase 1 ("Phase 1 ships this record for the GP1 release"), and declassification, Waivers and `ControlAuthorization`s are phase 1 too | none |
-| KLN's two-person list includes AGT's items | Mismatch: D-KLN-41 lacks `allow_raw_external` and training opt-in, and names standing releases only generically | KLN 1 |
-| ANV's on-demand query stability analysis | Exists: `anvil::query_stability`, phase 1, ANV-O-NAME-6 (D-ANV-34); AGT's phase 1 matches, but AGT never names it | AGT 4 |
-| ECO's "data-package record" | That wording is gone; ECO now says "`release_data` commit records", where KLN says release-data records | ECO 7 |
-| PLT adds `PoolLane::Interactive` | The enum exists (`enum PoolLane { Interactive, Foreground, Background }`), but PLT's rows to ING, MEC, ELX and AGT omit the lane those tabs require | PLT 4 |
-| AGT lists `evaluate.subscribe` and `edit.stream` | Both are in the catalog (phase 1); AGT's interface rows still say "drag streams" | AGT 4 |
-| ANV's references to KLN's limit catalog | Exists (`base` catalog, KLN-O-LIMIT-1) | none |
-| ANV's references to MEC's `pmi_target_resolved` | Exists (D-MEC-27, MEC-O-TL-6). MEC's interface rows omit it, and ING cites the wrong MEC oracle | MEC 7, ING 4 |
-| ANV's reference to ING's error for a wrong-kind role filter | Exists as the compiler error `ING5002`; ANV calls it a language-service rejection | ANV 4 |
-| ANV's reference to D-AGT-8 | Exists, but it decides `inspect.suggest_query` ranking, not the ranking of `ResolveError` fixes ANV cites it for | ANV 5 |
+| AGT and ELX cite renamed ING oracles | AGT and ELX cite no ING oracle; all 27 cross-tab oracle citations exist | none |
+| COV drops the yield-strength enclosure from D-COV-13 | Done in COV (an exact basis interval, held at both ends); ING still reads one number and FLX an enclosure | ING 1, FLX 2, FLX 17 |
+| The Overview uses ING's bracket figures | The rewritten Overview now uses COV's 118 MPa; ING (94 MPa) and COV disagree, and AGT reads a 166 MPa limit | ING 2, FLX 5, COV 3, AGT 2, UIX 7; judgment call 1 |
+| ECO's "Imported identity and matching" needs a `Requires:` | ANV's rows exist at phase 1 | ECO 1 |
+| MFG's nine `Requires:` may need re-matching | All resolve; one names a weaker row than the 13.4 owner row | MFG 9 |
+| ELX `Requires:` for the plane-pair model, `flux::extract_rlcg` and Floquet arrays | FLX names them "Plane-pair cavity model", "RLCG extraction" and "Periodic structures and arrays" | ELX 10 |
+| COV's five FLX `Requires:`; `flux-op-material` | All five resolve; FLX never hears of `flux-op-material` | COV 7 |
+| AGT oracle ids and row names renamed | No other tab cites an old AGT oracle id or the old row names | none |
+| AGT walkthrough 74 MPa ± 7 against 166 MPa | 166 MPa is the non-conservative end of COV's basis interval | AGT 2 |
+| CCR-AGT-14 | Accepted in 5.4; AGT's merge and `Attested` rules still exclude it | AGT 3, AGT 4 |
+| KLN deleted the CRDT, watermark, `grant_deviation`, module-signature path and Deployment | No tab cites them; KLN's CRDT mention is a rejected alternative, and recipient watermarks are a separate, live mechanism | none |
+| CCR-KLN-11 and CCR-KLN-12 | Accepted; `Checkpoint` survives in KLN, FLX and AGT | KLN 1 to 3, FLX 4, AGT 1 |
+| MEC's `Repr` → `Detail`; generative design is MEC's `generate` | No tab or contract text uses `Repr`; FLX and ANV cite `std::mech::generate` | FLX 14 (MEC row) |
+| FLX's calibration classes | COV and MEC still use `elasticity.eigen` and "four classes" | COV 1, COV 2, MEC 3 |
+| FLX's `Repr` → `FieldRepr`, `OpCx::safe_point`, `flux/<code>` failures | No other tab uses the old names; contract 5's `DynField { …, repr }` field holds a `FieldRepr` | none |
+| CCR-FLX-12 | Accepted in 13.4; COV and ELX still credit COV with rotor aerodynamics | FLX 18, COV 10, ELX 5, ELX 6 |
+
+**Git-native history (contract v7.2 and v7.3).** Changes are Git commits, any Git host can be home with Kiln as a required status check, and a module gets its own repository only when some reader may not read it. KLN's `### Git export` section contradicts this outright (KLN 15), and ING, ANV, MEC, ELX and ECO still describe Git as an export (ING 14, ANV 9, MEC 14, ELX 13, ECO 17).
+
+**Intra-spec links.** Thirteen cross-tab anchors resolve to no heading, most into KLN's and MEC's reorganized sections (ING 1, 5; MFG 4; ELX 1; UIX 12, 18; ECO 8).
 
 **Sweeps with nothing to change.**
 
-- **Staffing.** No staffing, hires, engineer-years or calendar months remain in the twelve tabs. KLN's "Hit rate for 20 people" is a benchmark scenario, and ECO's stewardship trigger is a governance date, not a plan figure.
-- **Ids and names.** Every decision id cited across tabs exists, though four are cited for something they do not decide (ANV 5, KLN 1, ECO 7, MEC 11). Every cross-tab oracle id exists except `COV-O-ENV-2` (FLX 8). Every `<group>.<name>` method cited exists in AGT's catalog. No banned Act name (`transfer_program`, `start_build`, `queue_program`) appears.
+- **`Requires:` entries.** All 60 resolve and none is earlier than its target (`check.py`, `requires.tsv`); no entry cites a row v4 renamed.
+- **Cross-tab ids.** No tab cites another tab's decision id; tabs link by section. The 27 cross-tab oracle citations all exist and test what they are cited for.
+- **Retired and deleted names.** `check.py` finds none in the twelve tabs, and neither do greps for `Repr`, `InstanceRepr`, `OpCx::checkpoint`, `SolveFailure`, old `AGT-O-<n>` ids, Loro, the evidence watermark, `grant_deviation`, `conditional_on`, the module-signature path, `share_external`, `notify_external` and `deprecate_package` (ECO's deprecation row is ECO 2).
+- **Lanes, fidelities and qualifiers.** `PoolLane` and `PriorityClass` agree in PLT, AGT, KLN, ING, ELX and UIX; only `Preview`, `Interactive` and `SignOff` name fidelities; result statuses, verdicts, `Severity`, grades, platform classes, zones, model and credibility levels and bound kinds match contract 5.
+- **Phases.** Every 13.4 first-table row has an owner capability row at its phase except FLX's conjugate heat transfer and electro-thermal coupling (FLX 13); every parity-floor row lands no later than its phase except exploded views (MEC 1); no tab puts a 13.2 deferral at phase 1; gate contributions name the right golden products.
+- **Signatures and Acts.** No tab copies the signature table; restated two-person rules match 5.4; only 7.6's physical-effect kinds appear; every `<group>.<name>` method cited exists in AGT's catalog.
+- **Shared numbers.** 13.3 targets, the 60 s rejoin, 8 h bench sessions, demand depth 10,000, α = 0.01 with 300 held-out cases, and the 1.3× FMA rule agree; the 10 ms safe point differs only in FLX (FLX 8).
+- **Forbidden phrasings.** "op", "kernel", "job", "macro", "plugin", "occurrence", "PR", "action" and "commit" appear only in their allowed senses (Git, `act.commit`, other products).
 
-**Judgment calls for the orchestrator.** These are decided below, but the other direction is defensible:
+**Judgment calls.** Each is decided below, but the other direction is defensible:
 
-1. **`store_machine_job`.** AGT moves the Act to phase 3 behind ECO's and MFG's phase 3 OPC UA path (AGT 1). The alternative moves the OPC UA job path to phase 2.
-2. **`CatalogSelection`.** ELX moves its row to phase 2, because GP3's bearings need it (ELX 3). The alternative moves ING's and MEC's rows to phase 3.
-3. **RoHS checks.** MFG moves its row to phase 3 behind KLN's compliance roll-up (MFG 4). The alternative moves KLN's roll-up to phase 2, which COV's phase 2 substance data would support.
-4. **`measure` and `sample` WIT interfaces.** ANV and FLX drop them, because contract 4 and ECO's D-ECO-7 route every engine read through `crucible:ops`, and KLN agrees (ANV 2, FLX 2).
-5. **3D mice on Linux.** Contract 12 makes PLT the owner. PLT's row is reworded to fit D-UIX-31 rather than reversing that decision (PLT 5).
+1. **The bracket's figures.** This brief takes ING's stresses (contract 6 makes ING the example's owner; its 94 MPa at 6 mm and about 210 MPa at 4 mm scale as bending should, and a hand estimate of 67 MPa nominal times a fillet factor near 1.4 agrees) and COV's 240 MPa basis, so the limit is 144 MPa. The alternative keeps COV's 118 MPa, which the Overview committed at `582cf4f` uses: then ING (three figures), AGT and UIX change instead of COV, and the Overview stays.
+2. **Ingot's limit codes** render in KLN's `kiln` family (ING 4). The alternative keeps `ing/63xx` as the diagnostic that reports KLN's Failure.
+3. **Critical distances** keep FLX's failure name, and FLX's row moves to phase 1 (FLX 3, COV 5). The alternative renames FLX's failure to COV's.
+4. **Exploded views.** MEC moves ordered explode steps to phase 1 for the parity floor (MEC 1). The alternative is a contract ruling that moves exploded views to the phase 2 floor, since both phase 1 golden products are single Parts.
+5. **`Site`** (KLN, ECO) wins over MFG's `ProductionSite` (MFG 1), though the latter avoids a near-collision with "site safety record".
+6. **Priority classes.** KLN's copy of AGT's table goes (KLN 9). The alternative keeps the table in KLN, which schedules, and has AGT point to it.
+7. **The `ui` failure family.** UIX follows AGT's registry (UIX 6). The alternative registers `uix` in AGT.
+8. **The quality connector.** ECO adds a `quality` world (ECO 7). The alternative drops KLN's reliance on it, since KLN's own quality records already meet the parity floor.
+9. **Duplicates kept.** D-ECO-26 restates D-PLT-31, and KLN's "Determinism suite" row restates PLT's; a consistency pass never cuts a decision or a capability, so both wait for the next capability audit.
 
-Two items need a name only the owner can choose: FLX's circuit-analysis operations (FLX 4), and AGT's methods for the language service, agent questions and the coverage map (AGT 7).
+**For the contract to rule on.**
 
-**Outside the twelve tabs** (plan step 6):
+1. **`standing_release` and the Act-kind list.** Contract 7.6 lists Act kinds without it, yet 7.6 and 5.4 treat it as an approved plan and AGT tables it as an Act kind while D-AGT-36 says the kinds are "contract 7.6's list and no more". Add it to the list, or call it a mode of `release_data`.
+2. **Reached limits.** After ING 4, KLN's `kiln/work_limit` and `kiln/memory_limit` serve operations and Ingot, but MFG defines `MfgError::WorkLimit { limit: base::WorkLimit, best_so_far }` with an undefined `base::WorkLimit`, and PLT and ECO say a Wasm `memory.grow` past the maximum returns −1 while KLN caches `kiln/memory_limit`. Contract 7.2 should say that a reached limit renders under `kiln/` and how a search returns its best result beside it.
+3. **Single-person mode.** Contract 5.4 can read as every single-person merge waiting 72 h, where CCR-AGT-14 proposed the delay for R3 and R4 merges; and an `Attested` verifier review exists only in the hosted crew or behind the model gateway, which arrive in phase 2, while 13.2 runs Crucible's own repository in single-person mode from phase 0. Say which merges wait, and what attests the verifier before phase 2.
+4. **`PlacementPolicy`.** Contract 5.6 says `repo` implements it; KLN puts it in `trust` (KLN lines 278, 1011), which owns labels, residency and control authorizations. Recommended: "which `trust` implements".
+5. **"Derived view" has two meanings.** Contract 2 defines a declassified view, while its Node row and 7.2 item 5 call a BOM a derived view; KLN and ELX use both senses. Name the computed node kind differently (for example "computed view").
+6. **13.4's "Also phased in" column** names tabs that do not phase the row (MEC for planar models, linear dynamics and symmetry reductions; FLX for fibre orientation, phase-transformation kinetics, battery swelling and abuse), omits ECO from "FMU export and SSP", and FMU import (phase 3 in FLX, ELX and ECO) has no shared row.
+7. **Exploded views at phase 1.** If MEC cannot ship ordered explode steps in phase 1, the phase 1 presentation row of 13.4's parity floor must drop exploded views to phase 2.
 
-- The Overview (`00-overview.md`) still has durations, headcounts and engineer-years (lines 267 to 370) and the old `side(outline.top)` example (line 106).
-- The Decisions log has no lines for round 3's new decisions (D-ING-26, D-ANV-32 to D-ANV-36, D-ECO-33 to D-ECO-37, D-PLT-41 to D-PLT-47 and others).
-- The Adversarial review (line 180) still states the E_A + E_B agreement rule that D-PLT-35 replaced.
+**Outside the twelve tabs** (plan step 4):
+
+- The Overview's trust walk-through (`00-overview.md` lines 137, 143 and 149) uses COV's 118 MPa, 10.2 MPa and 129.7 MPa; it follows whichever bracket figures the orchestrator settles (this brief: 94 MPa, 8.1 MPa model form, 103.6 MPa total against 144 MPa).
+- The Decisions log needs lines for the decisions this brief changes: D-KLN-37, D-FLX-37, D-COV-31, D-MFG-40, D-UIX-28, D-ECO-10 and D-ECO-42, and the *Why* lines of D-MEC-33 and D-ELX-27.
+- After the tabs land, re-run `python3 docs/tools/extract.py`, `python3 docs/tools/check.py --all -q` and `python3 docs/build/audit/links.py`.
 
 ## ING
 
-1. **[high] Seed quantum.** `### Builder blocks and sketches` (line 625)
-   - Now: "A released sketch drag rounds seeds to a quantum q, by default the larger of 1 µm and 2¹⁰ times the sketch's resolution ρ, in decimal millimetres."
-   - Must say: "A released sketch drag rounds seeds to MEC's quantum q (D-MEC-33), in decimal millimetres."
-   - Why: MEC owns the quantum. D-MEC-33 says "rounded to a quantum q: the larger of 2¹⁰ρ for the sketch and 10⁻⁶ of its diagonal", and MEC's open questions decline R8-24's 1 µm floor. For a 60 × 40 mm sketch, MEC's rule gives about 0.07 µm and ING's gives 1 µm. The edit saves 15 words.
-2. **[medium] `Aspect<K>` is MEC's `ShapeAspect`.** `### GD&T controls as types` (lines 458, 466, 469)
-   - Now: "`Query<Aspect<K>>` selects shape aspects whose kind is static when the producing feature declares it: `hole(…)` gives `Aspect<OfSize>`, extrude caps `Aspect<Planar>`, recognized imports `Aspect<Any>`." Also "// Query<Aspect<OfSize>>" and "start_cap is Aspect<Planar>".
-   - Must say: the same text with `ShapeAspect<K>`, `ShapeAspect<OfSize>`, `ShapeAspect<Planar>` and `ShapeAspect<Any>`.
-   - Why: contract 5 names the type `ShapeAspect` [MEC]. MEC's shared types define "`ShapeAspect` | … | A `Query` over faces, typed by kind (D-ING-6)", and its record field is `target: Query<ShapeAspect>`. Contract 10 allows one name per concept.
-3. **[medium] `general_tolerance` signature.** `` ### `Tol<T>` `` (line 397)
-   - Now: "MEC's Part-level `general_tolerance(standard, class)` record"
-   - Must say: "MEC's Part-level `part.general_tolerance(spec)` record (D-MEC-35)"
-   - Why: D-MEC-35: "A Part declares its general tolerance with `part.general_tolerance(spec)`".
-4. **[medium] Wrong MEC oracle for `pmi_target_resolved`.** `### Approximate values as inputs` (line 515)
-   - Now: "| `ING4001`, `ING4002`; `pmi_target_resolved` | ING-O-7, MEC-O-TL-1 | 1 |"
-   - Must say: "| `ING4001`, `ING4002`; `pmi_target_resolved` | ING-O-7, MEC-O-TL-6 | 1 |"
-   - Why: MEC's "PMI target check" row cites MEC-O-TL-6 at phase 1, whose pass criterion is the forwarded `4mm ± 0.1mm` split. MEC-O-TL-1 judges dialects and backs MEC's phase 2 conversion row.
-5. **[medium] A phase 1 oracle tests KLN's phase 3 BOM.** `## Oracles` (line 1324, ING-O-30)
-   - Now: "the 150% BOM equals enumeration on small fixtures; "
-   - Must say: delete the clause, since KLN-O-PLM-5 checks the 150% BOM.
-   - Why: KLN owns it. "This tab owns variant semantics and their oracle", and its row is "Variants and 150% BOM | … | KLN-O-PLM-5 | 3". ING-O-30 backs ING's phase 1 "Variant regions" row, and 13.4 forbids a row that precedes its prerequisite.
-6. **[medium] Wrong ANV oracle for solved points.** `### Patterns, loops and keys` (line 706)
-   - Now: "| ING-O-5, ING-O-10, ING-O-23, ANV-O-NAME-5 | 1 |"
-   - Must say: "| ING-O-5, ING-O-10, ING-O-23, ANV-O-SOLVE-1 | 1 |"
-   - Why: ANV-O-NAME-5 checks query fixes. ANV-O-SOLVE-1 checks constraint solving ("Krawczyk boxes contain reference solutions"), which is what "certified solved points" claims.
-7. **[low] Requirements the owner does not specify.** `### Ingot requires` (lines 1280, 1281)
-   - Now: "| ANV | Operations catalog with tangent rules;" → Must say: "| ANV | Operations catalog;"
-   - Now: "tangent and adjoint rules; `away_from` over several sets; basis enclosures as input parts" → Must say: "tangent and adjoint rules; basis enclosures as input parts"
-   - Why: ANV specifies no tangent rules. Its derivative service is `anvil::shape_velocity` (phase 2), which this row already lists. `away_from(sets, d)` is defined by ING itself (`### Checks`); FLX supplies only the default distances, which the row lists as "singular sets with default distances".
-8. **[low] Sketch re-solve target.** `## Oracles` (line 1317, ING-O-23)
-   - Now: "Every constraint type expressible; at least 99% re-solve within tolerance (target)"
-   - Must say: "Every constraint type expressible; re-solves meet MEC-O-SK-1's target"
-   - Why: MEC owns sketch solving, and its target is "SketchGraphs replay: 99.5% on the recorded branch" (MEC `## State of the art`).
-9. **[low] `vary` has no capability row.** `### Approximate values as inputs` (line 517)
-   - Now: "| Statistical combination | Explicit `rss(coverage:)` and `monte_carlo`; name-free symbol order |"
-   - Must say: "| Statistical combination | Explicit `rss(coverage:)`, `monte_carlo` and `vary`; name-free symbol order |"
-   - Why: MEC's phase 2 "3D rebuild path" reads "ING's `vary`", and MEC's ING row requires it. ING specifies it only in prose.
+1. **[high] A property read in a limit is an interval.** `` ### `Approx<T>` and the decision rule `` (line 383)
+   - Now: "returns the design value at a statistical basis as an exact number. The read may name the basis (`basis:`); otherwise COV's default applies, the specification minimum and else the B-basis value ([COV, Coverage model](04-coverage.md#coverage-model))."
+   - Must say: "returns the property's basis interval, from its lower to its upper basis value, as an exact `Range`, and the check must hold at both ends. The read may name the basis (`basis:`); otherwise COV's default applies, the specification limit and else B-basis ([COV, Two uses of a property](04-coverage.md#two-uses-of-a-property))."
+   - Why: COV owns `Material` (contract 5.6). D-COV-13 (COV line 668): a limit property "reads its design basis as an exact interval from the lower to the upper basis value. The check must hold at both ends"; COV's row to ING provides "property reads as exact basis intervals for limits". The old anchor resolves to no COV heading.
+2. **[high] The bracket's limit is 144 MPa.** `### Checks` (line 832)
+   - Now: "The limit is 0.6 × 241 MPa = 144.6 MPa, from the 6061-T6 specification minimum yield that COV's default basis selects"
+   - Must say: "The check holds at 0.6 × 240 MPa = 144 MPa, the conservative end of the basis interval in COV's 6061-T6 record ([COV, The bracket's check](04-coverage.md#the-brackets-check))"
+   - Why: COV owns the Material record. COV line 15: "a basis interval from 240 MPa, the specification minimum, to 276 MPa, so the limit is the interval 144 MPa to 165.6 MPa … here 144 MPa". This tab's stresses (94 MPa ± 1.5 MPa at 6 mm, about 210 MPa at 4 mm) stay; FLX, COV, AGT and UIX follow them in their edits below.
+3. **[medium] Two verdict reasons other tabs return are missing.** `` ### `Approx<T>` and the decision rule `` (line 394)
+   - Now: "| `Undecided { SingularPoint }`, `Undecided { MaximumAtExclusion }`, `Undecided { Flagged(flag) }` | A blocking flag from the producer, such as a peak on the boundary of an excluded neighbourhood |"
+   - Must say: the same row, followed by a new row: "| `Undecided { MissingData }`, `Undecided { CredibilityBelowMinimum }` | A compliance input is unknown (KLN, MFG), or the model's credibility level is below the policy package's minimum (COV) |"
+   - Why: contract 5.2 makes ING the verdict's owner. KLN line 760 and MFG lines 1002 and 1013 return `Undecided { MissingData }`; COV line 598 returns `Undecided { reason: CredibilityBelowMinimum }`. Neither reason is in this table.
+4. **[medium] Limit failures render in KLN's family.** `### Limits` (lines 695 to 703), the capability row at line 752, `### Diagnostic codes` (line 1291) and ING-O-EXEC-2 (line 1376)
+   - Now: "Outcome names follow KLN's catalog of limit outcomes." → Must say: "Each limit ends in a `Failure` from KLN's catalog of limit outcomes."
+   - Now, in the Failure column (lines 699 to 703): "`ing/6301 FuelExhausted`", "`ing/6302 StackExhausted`", "`ing/6303 MemoryLimit`", "`ing/6304 WorkLimit { kind: OperationCalls }`", "`ing/6305 WorkLimit { kind: ExpressionSize }`" → Must say: "`kiln/fuel_exhausted`", "`kiln/stack_exhausted`", "`kiln/memory_limit`", "`kiln/work_limit { kind: OperationCalls }`", "`kiln/work_limit { kind: ExpressionSize }`".
+   - Now (line 752): "`ing/63xx`; Abort `FuelCeilingExceeded`" → Must say: "KLN's limit `Failure`s; Abort `FuelCeilingExceeded`".
+   - Now (line 1291): "`ing/6203` empty Instance set; `ing/63xx` limits; `ing/6401` undecided branch" → Must say: "`ing/6203` empty Instance set; `ing/6401` undecided branch".
+   - Now (line 1376): "fails with `ing/6302` everywhere" → Must say: "fails with `kiln/stack_exhausted` everywhere".
+   - Why: KLN line 128: "One catalog of limit outcomes in `base-op` serves every tab", rendered `kiln/fuel_exhausted { used, limit }`, `kiln/stack_exhausted`, `kiln/memory_limit`, `kiln/work_limit { kind, limit }` (KLN lines 1212 to 1215). Contract 7.6 renders each typed `Failure` once, as `<owner family>/<snake_case>`; two codes for one Failure break that.
+5. **[medium] Aspect kinds link to a heading MEC does not have.** `### GD&T controls as types` (line 357)
+   - Now: "([MEC, Shared types](06-mechanical.md#shared-types))"
+   - Must say: "([MEC, Specification model](06-mechanical.md#specification-model))"
+   - Why: MEC's closed `ShapeAspect` kind table sits under `### Specification model` (MEC lines 889, 912 to 926); no "Shared types" heading exists.
+6. **[medium] The general tolerance links to the wrong MEC section.** `` ### `Tol<T>` `` (line 270)
+   - Now: "([MEC, Part features](06-mechanical.md#part-features))"
+   - Must say: "([MEC, Specification model](06-mechanical.md#specification-model))"
+   - Why: `part.general_tolerance(spec)` is D-MEC-35 (MEC line 949) under `### Specification model`.
+7. **[medium] Variation analysis links to the wrong MEC section.** `### Arithmetic on tolerances` (line 315)
+   - Now: "the sites behind `x` ([MEC, Interference and clearance](06-mechanical.md#interference-and-clearance))"
+   - Must say: "the sites behind `x` ([MEC, Stack-up and variation analysis](06-mechanical.md#stack-up-and-variation-analysis))"
+   - Why: zone and rebuild paths are D-MEC-22 (MEC line 1019) under `### Stack-up and variation analysis` (line 990).
+8. **[medium] Fastener stack contributions link to the wrong MEC section.** `### Geometric zones in a stack` (line 339)
+   - Now: "read these contributions in phase 1 ([MEC, Interference and clearance](06-mechanical.md#interference-and-clearance))"
+   - Must say: "read these contributions in phase 1 ([MEC, Stack-up and variation analysis](06-mechanical.md#stack-up-and-variation-analysis))"
+   - Why: one-dimensional chains and fixed and floating fastener conditions are rows of MEC's stack-up table (MEC lines 996 to 1011).
+9. **[medium] `mirrored: true` is a filter Anvil never provides.** `### Call sites and names` (line 467)
+   - Now: "and role queries on reflections accept `mirrored: true`"
+   - Must say: "and a reflection marks its entities with the aspect `Mirrored`"
+   - Why: ANV owns `anvil::resolve`, whose filters are "normal, type, area, adjacency, `bounded_by`" (ANV line 331); ANV line 303: "Reflections add the aspect `Mirrored` in place". No tab defines a `mirrored:` filter.
+10. **[medium] The guest SDK reaches `crucible:ops/flux` before Flux publishes it.** `## Rust features and Wasm components` (line 933)
+    - Now: "| `crucible:ops/anvil`, `crucible:ops/flux`, asynchronous |"
+    - Must say: "| `crucible:ops/anvil`; `crucible:ops/flux` from phase 2; asynchronous |"
+    - Why: FLX's "Flux operations from Wasm" row is phase 2 (FLX line 995); this tab's "Guest SDK" row is phase 1 (line 975).
+11. **[low] The conversion argument is `accuracy`.** `### Approximate values as inputs` (line 414)
+    - Now: "`body.convert(into: Mesh, tolerance: 0.01mm)`"
+    - Must say: "`body.convert(into: Mesh, accuracy: 0.01mm)`"
+    - Why: ANV line 925: "`anvil::convert(body, into, accuracy)` is the only conversion operation."
+12. **[low] The 150% BOM is KLN's, in phase 3.** `## State of the art` (line 1334)
+    - Now: "ahead in that variant existence is static, so the 150% BOM needs no enumeration"
+    - Must say: "ahead in that variant existence is static, so KLN's 150% BOM (phase 3) needs no enumeration"
+    - Why: KLN's "Variants and 150% BOM" row is phase 3 (KLN line 682); this row cites phase 1.
+13. **[low] Contract 5.3's integrity rule restated.** `### Free text` (line 853)
+    - Now: "Integrity therefore travels with the value, not with the node that holds it, so a merged supplier file gives trusted geometry and untrusted names. A node's label takes a text's integrity only when the node turns that text into a non-text value, such as embossed geometry or a parsed number ([contract section 5.3](../contract.md#53-labels))."
+    - Must say: "How that integrity reaches node labels is [contract section 5.3](../contract.md#53-labels)'s rule."
+    - Why: contract 5.3: "This paragraph is the only statement of the rule; tabs cite it." Saves about 45 words.
+14. **[high] Git is the storage, not an export.** `### Call sites and names` (line 459), `### Lossless tree and blocks` (line 1092) and ING-O-NAME-1 (line 1404)
+    - Now: "Live-session edits and Git export never enter a `CallSite`: exporting to Git, re-importing and rebuilding leaves every `EntityId` unchanged." → Must say: "Live-session block ids never enter a `CallSite`: cloning, pushing or mirroring through any Git host and rebuilding leaves every `EntityId` unchanged."
+    - Now: "and Git export all work on text" → Must say: "and Git storage all work on text"
+    - Now: "Golden products through Git export and re-import" → Must say: "Golden products cloned, pushed and mirrored through a second Git host"
+    - Why: contract 7.1 and 5.5 (v7.2 and v7.3, ruling FD-5): "A Crucible repository is an ordinary Git repository" and "Cloning, pushing or mirroring through any Git host and rebuilding leaves every `EntityId` unchanged."
 
 ## ANV
 
-1. **[high] Copy relabelling order.** `### Copies and placements` (line 350)
-   - Now: "the operand from the later transform in `CallSite` order is relabeled."
-   - Must say: "the operand from the later transform in ING's program order is relabeled."
-   - Why: ING owns the order. ING `### The Ingot IR and Kiln` says "Each call records its program-order index … Anvil's copy relabelling reads the same index", and ING's copy rule says "in program order". A `CallSite` is an identity, with no order defined on it.
-2. **[high] `measure` host interface.** `### Rust surface and WIT interfaces` (line 86)
-   - Now: "| `crucible:geom/build`, `measure` | Builders validated by `anvil::build`; mass properties, distance, classification and deviation with bounds | `invalid(violations)`, `work-limit`, `not-separated` |"
-   - Must say: "| `crucible:geom/build` | Builders validated by `anvil::build`; measures through `crucible:ops/anvil` (contract 4) | `invalid(violations)`, `work-limit` |"
-   - Why: contract 4 lets Wasm components "reach engine data only through `crucible:ops` and handles derived from their inputs", with every read a recorded dependency. ECO keeps the WIT index, where `crucible:geom` is "`types`, `build`", and D-ECO-7 rejects "`measure` and `sample` host interfaces (round 2)". KLN: "Measuring and sampling go through `crucible:ops` (contract 4)."
-3. **[medium] The Ingot requirement row.** `### Anvil requires` (line 994)
-   - Now: "| Ingot | Text-derived `CallSite`s; `QueryPlan`s; wrong-kind role filters as compile errors;"
-   - Must say: "| Ingot | Text-derived `CallSite`s; the program-order index; `QueryPlan`s; wrong-kind role filters as compile errors (`ING5002`);"
-   - Why: ING provides ANV "program order for copy relabelling" and names the error.
-4. **[medium] A wrong-kind role is a compiler error.** `### Role vocabulary` (line 335) and the capability table after `### Imported and non-B-rep entities` (line 447)
-   - Now: "ING's language service rejects a role filter on the wrong entity kind." → Must say: "ING's compiler rejects a role filter on the wrong entity kind (`ING5002`)."
-   - Now: "A wrong-kind role filter is a compile error (ING)" → Must say: "A wrong-kind role filter fails to compile with `ING5002` (ING)"
-   - Why: ING says "a wrong-kind role fails with `ING5002`" (its Queries table and ING-O-11). `INGnnnn` codes are compiler errors; the language service raises `ING-L-*` lints.
-5. **[medium] D-AGT-8 cited for something it does not decide.** `### Query resolution` (line 394)
-   - Now: "`query_stability` ranks the fixes (D-AGT-8)."
-   - Must say: "`query_stability` ranks the fixes, as it ranks `inspect.suggest_query` candidates (D-AGT-8)."
-   - Why: D-AGT-8 says "`inspect.suggest_query` ranks candidates by ANV's sampled stability analysis". The `ResolveError` fixes are ANV's own (contract 5 `Query`).
-6. **[medium] A closure-hash exception the contract does not allow.** `### Behavior versions` (line 54)
-   - Now: "Kiln refuses a released version whose closure hash changed; a security exception needs the founder's approval and identical corpus outputs."
-   - Must say: "Kiln refuses a released version whose closure hash changed; a security fix ships as a new operation version (contract 4)."
-   - Why: contract 4 states the refusal with no exception, and KLN owns registration (D-KLN-2: "refuses a changed one").
-7. **[low] Concave-edge singularity is Flux's exponent rule.** `## Measurement, analysis and simulation services` (line 833) and `### Anvil requires` (line 993)
-   - Now: "Flux sets the angle above which a concave edge is singular." → Must say: "Flux decides which concave edges are singular (D-FLX-39)."
-   - Now: "sizing and metric Fields; the singular concave angle" → Must say: "sizing and metric Fields; the concave-edge singularity rule (D-FLX-39)"
-   - Why: D-FLX-39 flags a `Concave` edge "when its leading Williams exponent λ₁ is below 0.9" and rejects one fixed angle.
-8. **[low] Provided rows omit what other tabs require.** `### Anvil provides`
-   - Now (line 983): "`query_stability` reports; measures and geometry diffs |" → Must say: "`query_stability` reports; measures, sections and geometry diffs |". AGT requires "measures, sections and geometry diffs", and round 2's follow-up ruling (consistency.md section 5, ANV row) asked for it.
-   - Now (line 975): "closure hashes and two-stage keys; `Failure`s, never Aborts |" → Must say: "closure hashes and two-stage keys; deterministic outcomes as `Failure`s |". ANV's own rows make device loss, cancellation and memory exhaustion Aborts, as KLN's D-KLN-6 does.
-   - Now (line 978): "| COV | Implicit and lattice Bodies; mid-surfaces and member axes; per-entity tolerances | `Body` |" → Must say: the same row with "; curvature and thickness queries" before the Types cell. COV requires them.
-   - Now (line 981): "`anvil::planar` with centre–radius arcs and conservative snapping; `fold`; `convex_decompose` | `Body` |" → Must say: "… `fold`; `convex_decompose`; `text_outline` | `Body` |". ELX requires `anvil::text_outline`.
-   - Now (line 977): "meshing and adaptation by canonical number; `shape_velocity`; `implicit_from_field` |" → Must say: "…; `implicit_from_field`; `common_refinement` (phase 4) |". FLX requires it.
-9. **[medium] Change requests still written as pending.** `## Contract change requests` (lines 1104, 1105)
-   - Now: "- CCR-ANV-7 and CCR-ANV-8: accepted in contract v4.1." → Must say: "- CCR-ANV-7 and CCR-ANV-8: accepted in contract v4.1 (sections 13.3 and 5)."
-   - Now: the bullet beginning "- **CCR-ANV-9, `DisplayPackage` identity.**" → Must say: "- CCR-ANV-9, `DisplayPackage` identity: accepted with CCR-UIX-7 in contract v6.1 (section 5, `DisplayPackage`)."
-   - Why: contract 16 gives 13.3 and 5. Contract 17 rules "CCR-ANV-9, CCR-UIX-7 `DisplayPackage` identity | Accepted together (5)". The edit saves about 40 words.
+1. **[medium] A `Preview` result is not a `Proxy`.** `### Fidelity` (line 1066)
+   - Now: "GPU `f32` evaluation; results may show as `Proxy`"
+   - Must say: "GPU `f32` evaluation; results are `Ready(Preview)`"
+   - Why: contract 5.6 defines `Proxy` as "a dependent shown by affine extrapolation from its last value while it recomputes"; a computed `Preview` value is `Ready(Fidelity)` (UIX line 85 renders it so).
+2. **[medium] The Interfaces row to FLX gives mid-surfaces and adaptation the wrong phase.** `## Interfaces with other subsystems` (line 1274)
+   - Now: "| `Body`, `Field`, `FaceBound`, `EdgeBound` | 1; 2 (meshing, `shape_velocity`); 4 (`common_refinement`) |"
+   - Must say: "| `Body`, `Field`, `FaceBound`, `EdgeBound` | 1; 2 (mid-surfaces, swept-member axes, meshing, `shape_velocity`); 3 (metric adaptation); 4 (`common_refinement`) |"
+   - Why: this tab's rows: `anvil::mid_surface` 2 (line 762), `member_axes` "1 (lattices), 2 (swept members)" (line 763), `adapt_mesh` 3 (line 872). FLX reads them at those phases (FLX lines 1231, 1233).
+3. **[low] The Interfaces row to ING claims phase 0 for phase 1 items.** `## Interfaces with other subsystems` (line 1271)
+   - Now: "| `Body`, `EntityId`, `HistoryRecord`, `ResolveError`, `OpError` | 0 |"
+   - Must say: "| `Body`, `EntityId`, `HistoryRecord`, `ResolveError`, `OpError` | 0; 1 (`query_stability`, constraint solves, `text_outline`) |"
+   - Why: `anvil::query_stability` (line 414), `solve_constraints` (line 1056) and `text_outline` (line 750) are phase 1.
+4. **[low] The Interfaces row to UIX phases `offset_faces` at 2.** `## Interfaces with other subsystems` (line 1279)
+   - Now: "| `DisplayPackage`, `Body` | 1; 2 (`cluster_dag`, face edits) |"
+   - Must say: "| `DisplayPackage`, `Body` | 1; 2 (`cluster_dag`, face edits other than `offset_faces`) |"
+   - Why: `anvil::offset_faces` is phase 1 (line 720), and UIX's push-pull uses it in phase 1 (UIX line 520).
+5. **[low] The receiver profile is ECO's `parasolid`.** `### Exchange form and receiver profiles` (line 966), ANV-O-NF-2 (line 1314), `## Open questions` (line 1389)
+   - Now: "Named profiles ship with Crucible (`Parasolid`, at a tolerance of 5 × 10⁻⁹ m)" → Must say: "Named profiles ship with Crucible (ECO's `parasolid`, at a tolerance of 5 × 10⁻⁹ m)"
+   - Now: "exported under the `Parasolid` profile" → Must say: "exported under the `parasolid` profile"
+   - Now: "until then GP1 exports under the `Parasolid` profile" → Must say: "until then GP1 exports under the `parasolid` profile"
+   - Why: ECO owns the named profiles (D-ECO-38, ECO line 113: "starting with `parasolid` at 5 × 10⁻⁹ m"; ECO line 40: `receivers::parasolid`).
+6. **[low] Duplicate search is KLN's, phase 2.** `## State of the art` (line 1250)
+   - Now: "`GeometryId` for exact duplicates, phase 0; similarity search is KLN's, phase 2"
+   - Must say: "`GeometryId`, phase 0; KLN's duplicate and similarity search, phase 2"
+   - Why: KLN's "Classification and shape-similarity search" row finds exact duplicates by `GeometryId` in phase 2 (KLN line 636).
+7. **[low] Three abbreviations used before they are spelled out.** `### The Body value` (line 51), `### Query resolution` (line 356), `### WIT packages and contract crates` (line 1198)
+   - Now: "CAx-IF practice allows those only on exact geometry" → Must say: "CAx Implementor Forum (CAx-IF) practice allows those only on exact geometry"
+   - Now: "changes the extent a fillet or GD&T target means" → Must say: "changes the extent a fillet or GD&T (geometric dimensioning and tolerancing) target means"
+   - Now: "Anvil owns the WIT package `crucible:geom`" → Must say: "Anvil owns the WIT (WebAssembly Interface Types) package `crucible:geom`"
+   - Why: contract 11 spells out every abbreviation at first use in each tab.
+8. **[medium] CCR-ANV-10 is accepted.** `## Contract change requests` (line 1393)
+   - Now: the bullet beginning "- **CCR-ANV-10, blend stages in contract 7.1.**"
+   - Must say: "None."
+   - Why: contract 18 accepts it (7.1 now lists convexity change along an edge in stage 1, and partial-length, capped and cliff ends in later stages); the stage table in `### Blends` already matches.
+9. **[medium] Git is the storage, not an export.** ANV-O-SITE-1 (line 1297)
+   - Now: "Golden products exported to Git, re-imported and rebuilt keep every `EntityId`"
+   - Must say: "Golden products cloned, pushed and mirrored through a second Git host and rebuilt keep every `EntityId`"
+   - Why: contract 5.5 and 7.1 (v7.3, ruling FD-5). Lines 238 and 279 ("Git round trips") already read correctly.
 
 ## FLX
 
-1. **[high] DFN lands in phase 4.** `` ### Compilation and `local_solve` `` (line 310)
-   - Now: "| Parameter-domain spaces | `Interval`, `Sphere`, products, `dξ` | `FormError::Conformity` | FLX-O-FORM-5 | 4 |"
-   - Must say: the same row ending "| FLX-O-FORM-5 | 4, 5 (DFN) |"
-   - Why: 13.4 is binding: "Battery cells: Doyle–Fuller–Newman (P2D) | 5 | None | FLX". FLX-O-FORM-5 demands "SPMe and P2D DFN voltage within 1 mV of PyBaMM", so as written DFN ships in phase 4. FLX's own Phasing puts DFN cells in phase 5.
-2. **[high] `sample` host interface.** `### WIT interfaces` (lines 75, 81)
-   - Now: "Flux owns `crucible:field` (interfaces `types`, `build`, `sample`)" → Must say: "Flux owns `crucible:field` (interfaces `types` and `build`; sampling is `flux::field_sample` through `crucible:ops/flux`)"
-   - Now: "| `crucible:field` WIT package | `types`, `build`, `sample`, generated from the Rust types |" → Must say: "| `crucible:field` WIT package | `types` and `build`, generated from the Rust types |"
-   - Why: the same reasons as ANV 2. FLX's catalog already has `field_sample`, and ECO's index lists `crucible:field` as "`types`, `build`".
-3. **[high] Bolted-joint forms are provided but never specified.** `### Calibrated estimates` (line 207), plus a new capability row under `### Contact, constraints and fracture`
-   - Now: "Reduction patches and step halving add classes in phase 2"
-   - Must say: "Reduction patches, step halving and bolted-joint forms add classes in phase 2". Also add a phase 2 capability row for bolted-joint forms (preloaded bolt elements and joint springs for COV's VDI 2230 model), with a FLX oracle.
-   - Why: FLX's MEC row (line 917) provides "bolted-joint forms", but that row is FLX's only mention of bolts. MEC's D-MEC-30 table needs "Bolted joints | `Estimated` plus a policy allowance | Bolted-joint forms | 2", and COV's "Bolted and bonded joints" model is phase 2. FLX owns forms and calibration classes (contract 7.1).
-4. **[medium] Circuit-analysis operations have no names.** `## Scope and architecture`, operations table (line 29)
-   - Now: "| Lumped and multibody | `compile_network`, `solve_dae`, `solve_multibody`, `linearize_multibody`, `solve_rod` |"
-   - Must say: the same row, also naming the operations behind ELX's operating point, DC sweep, AC and noise, and pole-zero analyses. FLX chooses whether these are new names or existing ones such as `solve_nonlinear` and `solve_harmonic`. ELX's rows under `## Analog and mixed-signal simulation` then cite them.
-   - Why: contract 2 puts every operation in Anvil or Flux, and ELX's D-ELX-13 says "Crucible's circuit simulator is a set of Rust Flux operations". FLX's catalog names none of them. FLX owns operation names.
-5. **[medium] PLT's agreement rule restated wrongly.** `### Verification, validity and agreement` (line 231)
-   - Now: "with equal resolved plans and adaptive marks, only the algebraic, floating-point and temporal-control parts plus a floor count."
-   - Must say: "with equal resolved plans, adaptive marks and steps, only the algebraic and floating-point parts plus a floor count."
-   - Why: PLT owns the rule. D-PLT-35: "With the same resolved `SolvePlan`, adaptive marks and steps … The tolerance is then both classes' algebraic and floating-point parts plus a floor".
-6. **[medium] An Anvil failure that does not exist.** `` ### Compilation and `local_solve` `` (line 309)
-   - Now: "| Spline and manifold spaces | NURBS and THB spaces; sheet and wire spaces | `NotParameterizable` from Anvil |"
-   - Must say: "| Spline and manifold spaces | NURBS and THB spaces; sheet and wire spaces | `UnpairedFaces` or `NotPrismatic` from Anvil |". If NURBS-space extraction needs its own failure, ANV adds it to its catalog first.
-   - Why: ANV defines no `NotParameterizable`. Its sheet and wire sources fail with `UnpairedFaces { faces, reason }` (`anvil::mid_surface`) and `NotPrismatic { region }` (`anvil::member_axes`).
-7. **[medium] `OutsideEnvelope` names two concepts.** `### Rust API` (line 69), `### Verification, validity and agreement` (line 229), and the reduced-model text (lines 799, 814)
-   - Now: "OutsideEnvelope { parameter: ParamId, range: (f64, f64) }," → Must say: "OutsideParameterBox { parameter: ParamId, range: (f64, f64) },". Rename it the same way in "queries outside it fail with `OutsideEnvelope { parameter, range }` unless the caller requests a full solve." and in "| `OutsideEnvelope { parameter, range }`; `TopologyChange` | FLX-O-ROM-1 | 3 |".
-   - Now: "`ValidityError::OutsideEnvelope { variable, bound, escalations }`" → Must say: "`ValidityError::OutsideEnvelope { variable, bound, escalate_to }`"
-   - Why: COV owns `ValidityError` and calls `OutsideEnvelope` "the one failure COV and FLX both name", with the field `escalate_to: Vec<ModelRef>`. A reduced model's parameter box is a different concept (contract 10).
-8. **[low] A stale COV oracle id.** `## Oracles` (line 963)
-   - Now: "| FLX-O-ERR-9 | Validity zones (merged with COV-O-ENV-2) |"
-   - Must say: "| FLX-O-ERR-9 | Validity zones (COV's zone-semantics row cites it) |"
-   - Why: COV no longer defines COV-O-ENV-2; its "Zone semantics" row cites FLX-O-ERR-9.
-9. **[low] Rows that cite later ANV operations.**
-   - `### General operations for non-variational methods` (line 467). Now: "| Fitted continuous FEM | Curved Anvil meshes to p ≤ 8; hex-dominant | `InvalidElement { cell, jacobian_min }` with an `untangle` fix | FLX-O-DISC-1 | 2 |" → Must say: the same row ending "| FLX-O-DISC-1 | 2, 4 (hex-dominant) |". ANV phases `anvil::hex_dominant` "3 (sweep), 4 (hex-dominant)".
-   - `### Storage` (line 143). Now: "| Conservative for fluxes, consistent for states | `NotSameInterface` from Anvil | FLX-O-FIELD-2 | 1 |" → Must say: "… | FLX-O-FIELD-2 | 1, 4 (interface overlays) |". `NotSameInterface` comes from `anvil::common_refinement`, which is phase 4.
-   - `### Regularized goals and singular points` (line 186, D-FLX-39). Now: "`Ambiguous` edges are flagged, with `recognize_aspects` as fix." → Must say: "`Ambiguous` edges are flagged, with `recognize_aspects` as fix from phase 2." ANV's `anvil::recognize_aspects` is phase 2.
-10. **[low] 13.4 rows FLX never phases.** `## Phasing` (lines 1037, 1038)
-    - Now: "FMU export and SSP, SPMe forms," → Must say: "FMU export and SSP, SPMe forms, cell swelling and stack pressure,"
-    - Now: "GP9 crash with erosion; DFN cells;" → Must say: "GP9 crash with erosion; DFN cells; battery abuse mechanics (6);"
-    - Why: 13.4 lists FLX under "Also phased in" for both rows ("Battery cells: swelling and stack pressure | 4", "Battery abuse mechanics … | 6").
-11. **[low] The ELX row omits a 13.4 capability FLX owns.** `### What Flux provides` (line 919)
-    - Now: "layered sheets; electromagnetic solvers; conjugate heat transfer; parameter-domain forms;"
-    - Must say: "layered sheets; electromagnetic solvers; conjugate heat transfer; electro-thermal coupling; parameter-domain forms;"
-    - Why: 13.4 makes FLX the owner (phase 4), and ELX's row reads "Electro-thermal coupling | Monolithic Newton with continuation (FLX)".
-12. **[medium] Change requests still written as pending.** `### Eigenvalue problems` (line 587), `## Open questions` (line 1047), `## Contract change requests` (lines 1058, 1059)
-    - Now: "and wait for CCR-FLX-11." → Must say: "and contract section 5 now admits them as `Guaranteed` bounds (CCR-FLX-11)."
-    - Now: "- R7-05: `Guaranteed` eigenvalue lower bounds wait for CCR-FLX-11." → Must say: "- R7-05: `Guaranteed` eigenvalue lower bounds are admitted by contract section 5 (CCR-FLX-11)."
-    - Now: the bullet beginning "- CCR-FLX-10, boundary layers:" → Must say: "- CCR-FLX-10, boundary layers: accepted in contract v6.1 (section 7.1)."
-    - Now: the bullet beginning "- CCR-FLX-11, eigenvalue bounds:" → Must say: "- CCR-FLX-11, eigenvalue bounds: accepted in contract v6.1 (section 5, `ErrorBound`)."
-    - Why: contract 17: "CCR-FLX-10 boundary layers | Accepted (7.1)" and "CCR-FLX-11 eigenvalue bounds | Accepted (5 `ErrorBound`)". If FLX ships these bounds, it states the phase, no earlier than fitted tetrahedra (phase 2, 13.4).
+1. **[high] A `Preview` check is `Undecided { Indicator }`.** `### Validity zones and cross-class agreement` capability table (line 213) and `### Explicit dynamics` capability table (line 487)
+   - Now: "`Undecided { reason: PreviewOnly }` for every check" → Must say: "`Undecided { Indicator }` for every check"
+   - Now: "`Undecided { reason: PreviewOnly }` for any check" → Must say: "`Undecided { Indicator }` for any check"
+   - Why: ING owns verdicts and their reasons (contract 5.2). ING line 391: "`Undecided { Indicator }` | A part is only an `Indicator`: every `Preview` result". No tab defines `PreviewOnly`.
+2. **[high] A limit property reads as an interval; a solve input carries `ToleranceLimit`.** `### Budgets and guarantees` (line 117)
+   - Now: "reads that value as an exact definitional number with no budget part (COV owns this rule). A property that drives the solve, such as Young's modulus or conductivity, arrives as an enclosure from its statistical basis. Its input part is `Estimated { Statistical { method: basis, α } }`"
+   - Must say: "reads its basis as an exact interval, holds at both ends and adds no budget part (COV owns this rule). A property that drives the solve, such as Young's modulus or conductivity, arrives as its basis interval. Its input part is `Estimated { Statistical { method: ToleranceLimit, α } }`"
+   - Why: D-COV-13 (COV line 668): a limit reads "an exact interval from the lower to the upper basis value. The check must hold at both ends"; a solve input carries "its basis interval as `Estimated { Statistical { method: ToleranceLimit, α } }`".
+3. **[high] Critical-distance goals are phase 1.** `### Validity zones and cross-class agreement` capability table (line 205)
+   - Now: "`CriticalDistanceMismatch { calibrated, requested }` | FLX-O-ERR-12 | 2 |"
+   - Must say: "`CriticalDistanceMismatch { calibrated, requested }` | FLX-O-ERR-12 | 1 |"
+   - Why: this tab's phase 1 class `elasticity.peak` covers "critical-distance goals" (line 157), its Interfaces row to ING offers them in phase 1 (line 1420), and COV's "Critical distances" row (COV line 453) and phase 1 durability use them. The failure name stays this tab's, since `tcd` raises it; COV follows (COV 5).
+4. **[high] The derivative retention tier is `StepState`.** `## Gradients and optimization` (line 870), `## Execution and extension` (line 981) and the "Adjoints" capability row (line 901)
+   - Now: "stored in Kiln's `Checkpoint` retention tier by (`NodeKey`, step), so an objective-only change reuses them" → Must say: "stored in Kiln's `StepState` retention tier by (`NodeKey`, step), so an objective-only change reuses them"
+   - Now: "is stored in Kiln's `Checkpoint` retention tier by (`NodeKey`, step), so a resumed solve continues bit-identically" → Must say: "is stored in Kiln's `StepState` retention tier by (`NodeKey`, step), so a resumed solve continues bit-identically"
+   - Now: "| `CheckpointMissing` triggers recomputation |" → Must say: "| None: missing step state is recomputed (KLN) |"
+   - Why: contract 7.1 (ruling CCR-KLN-12) names the tier `StepState`; "checkpoint" now names only transparency-log heads. KLN's row reads "None: an evicted checkpoint is recomputed", so no failure exists to name. "CAMS checkpointing" (line 870) is the algorithm's published name and stays.
+5. **[medium] The bracket's discretization part is ± 1.5 MPa.** `### The answer and its budget` (line 37)
+   - Now: "| Discretization | ± 1.1 MPa |"
+   - Must say: "| Discretization | ± 1.5 MPa |"
+   - Why: ING owns the canonical walk-through (contract 6): ING line 838 "`SignOff`, 6 mm: 94 MPa ± 1.5 MPa, confirmed by one refinement"; COV line 13 cites "a discretization bound of 1.5 MPa (FLX)"; UIX line 812 shows ± 1.5 MPa.
+6. **[low] The reason lists `ModelForm`.** `### The answer and its budget` (line 46)
+   - Now: "`Undecided { reason: Unquantified([model form]) }`"
+   - Must say: "`Undecided { reason: Unquantified([ModelForm]) }`"
+   - Why: ING line 837 and COV lines 32 and 124 write `Unquantified([ModelForm])`.
+7. **[medium] `Proxy` only where the change is affine.** `### What happens while the engineer works` (line 52), D-FLX-37 (line 591) and the "Interactive stage budgets" row (line 600)
+   - Now: "Results show as `Proxy` during the drag." → Must say: "During the drag, results show as `Proxy` where the change is affine on them, otherwise `Stale`."
+   - Now: "physics results show as `Proxy` until the full update arrives in phases 1 and 2" → Must say: "physics results show as `Proxy` where the change is affine on them, otherwise `Stale`, until the full update arrives in phases 1 and 2"
+   - Now: "A budget miss streams the coarse result as `Proxy`" → Must say: "A budget miss shows dependents as `Proxy` or `Stale` until the update arrives (KLN)"
+   - Why: contract 5.6 defines `Proxy` as affine extrapolation from the last value, and contract 13.3's drag row says "later dependents show as `Proxy` where the change is affine on them, otherwise `Stale`" (KLN line 191 agrees). A computed coarse result is a value, not a `Proxy`.
+8. **[medium] Safe points run on monotonic time.** `## Execution and extension` (line 982)
+   - Now: "`OpCx::safe_point` is polled at least every 10 ms of CPU time"
+   - Must say: "`OpCx::safe_point` is polled at least every 10 ms of monotonic time"
+   - Why: KLN owns `OpCx` (contract 5.6). D-KLN-57 (KLN line 140): "due every 10 ms of monotonic time on the operation's thread"; PLT lines 182 and 248 agree.
+9. **[medium] The general operations are Flux's.** `### General operations for non-variational methods` (line 538)
+   - Now: "COV's general operations serve particles, ray tracing, boundary elements and ELX's placer"
+   - Must say: "Flux's general operations serve COV's particle methods, ray tracing, boundary elements and ELX's placer"
+   - Why: contract 7.1 ("Flux also provides … the general operations that non-variational methods need"); D-COV-11 (COV line 581): hot loops run "on general Flux operations".
+10. **[medium] Symmetry comes from MEC's declarations.** `### Per-region models` (line 385) and `### Reduction by symmetry` (line 398)
+    - Now: "| Certified symmetry analysis and section |" → Must say: "| MEC's declared symmetry; `anvil::section` |"
+    - Now: "are detected by `mark_reduction` from Anvil's certified analysis or declared with" → Must say: "are detected by `mark_reduction` from MEC's declared symmetries or declared with"
+    - Why: ANV specifies no symmetry analysis. MEC line 346: "A `mirror` and a complete `circular` pattern record their plane or axis as a declared symmetry. Flux may use it"; MEC's Interfaces row to FLX lists "declared symmetries". `anvil::section` is ANV's phase 1 operation (ANV line 764).
+11. **[medium] Manufacturing constraints read MFG's process profiles from phase 2.** `### Topology optimization` (line 876)
+    - Now: "and MFG's process profiles parameterize manufacturing constraints."
+    - Must say: "and manufacturing constraints take their limits as arguments, read from MFG's process profiles from phase 2."
+    - Why: MFG's row to FLX offers process profiles for manufacturing-constraint forms in phase 2 (MFG line 1142); this tab's "Manufacturing constraints" row ships additive and unrestricted constraints in phase 1 (line 905).
+12. **[medium] Name the circuit Newton class ELX relies on.** `### Calibrated estimates` (line 164)
+    - Now: "Later phases add classes for reduction, step halving, modal truncation, bolted joints and solution verification."
+    - Must say: "Later phases add classes for reduction, step halving, modal truncation, bolted joints, solution verification and circuit Newton residuals (`mna_newton`, on ELX's corpus)."
+    - Why: FLX owns calibration classes (contract 7.1). ELX lines 702, 738 and 1279 rely on `mna_newton`, "measured on ELX's simulation corpus by FLX's calibration machinery", which this tab never names.
+13. **[medium] Owner rows for three 13.4 capabilities.** `## Coupling, homogenization and co-simulation` capability table, after the "Monolithic and partitioned coupling" row (line 847)
+    - Now: "| Monolithic and partitioned coupling | Product-space forms; Aitken and interface quasi-Newton; conservative transfer | `CouplingDiverged { residual_history }` | FLX-O-COUP-1 | 1 (one way), 2, 3, 4, 5 per coupling |"
+    - Must say: the same row, followed by two new rows: "| Conjugate heat transfer | Robin partitioned, or monolithic on a shared octree with wall refinement | `CouplingDiverged { residual_history }` | FLX-O-COUP-1 | 3 (laminar, natural convection), 4 (turbulent) |" and "| Electro-thermal coupling | Joule heating with temperature-dependent resistivity; monolithic Newton with continuation | `Runaway { power }` at the turning point | FLX-O-COUP-1 | 4 |". Add to FLX-O-COUP-1's pass criterion a conjugate-heat case and a self-heating strip case.
+    - Why: contract 13.4 makes FLX the owner of laminar conjugate heat transfer (3), turbulent conjugate heat transfer (4) and electro-thermal coupling (4), and "the owner's capability table specifies each row". This tab phases them only in the method catalog (lines 1291 and 1292) and prose (line 821). ELX 10 adds a `Requires:` entry on the new electro-thermal row.
+14. **[medium] Interfaces rows give wrong phases or omit what others use.** `## Interfaces with other subsystems` (lines 1419 to 1427)
+    - Now (ING): "plans and form checks; the `kernels::expr` symbolic layer | `Expr<T>`, `SolvePlan` | 0 |" → Must say: "plans and form checks; the `kernels::expr` symbolic layer | `Expr<T>`, `SolvePlan` | 0; 1 (plans, `modes`); 2 (`continue_in`) |". `flux::plan` and eigen-solvers are phase 1 (lines 428, 677), arc length phase 2 (line 1266).
+    - Now (ANV): "| ANV | `field` and `kernels`; `Sampler`s with error and gradient bounds; `geometry_density`; reduction marking; sizing and metric Fields | `Field` | 1 |" → Must say: "| ANV | `field` and `kernels`; `Sampler`s with error and gradient bounds; `geometry_density`; reduction marking; sizing and metric Fields | `Field` | 0 (`field`, `kernels`); 1; 2 (sizing and metric Fields) |". ANV uses the kernel IR in phase 0 (ANV line 825); sizing and metric Fields are phase 2 (line 597).
+    - Now (COV): "EHL film Fields; rotor ladder; explicit-dynamics functionals and ensembles | `Field` | 2 |" → Must say: "EHL film Fields; rotor ladder; explicit-dynamics functionals and ensembles | `Field` | 2; 3 (EHL, drop functionals); 4 (rotor ladder); 5 (crash ensembles) |". Contract 13.4 and this tab's rows (lines 494, 556, 557).
+    - Now (MEC, phase 1): "strut stress for strut-strength checks; idealizations; influence coefficients | `Field` | 1 |" → Must say: "strut stress for strut-strength checks; idealizations; density topology optimization with additive and unrestricted constraints for `std::mech::generate` | `Field` | 1 |". Influence coefficients are phase 2 (line 937); MEC's generative design requires "FLX Density topology optimization" at phase 1 (MEC line 462).
+    - Now (MEC, phase 2): "tied interfaces; manufacturing constraints for `std::mech::generate`; shell and ply optimization | `Field`, `Assembly` | 2 |" → Must say: "tied interfaces; influence coefficients; milling, two-axis cutting and casting constraints for `std::mech::generate`; shell and ply optimization | `Field`, `Assembly` | 2; 4 (rods); 6 (ply optimization) |". `flux::solve_rod` is phase 4 (line 815), plies phase 6 (line 906).
+    - Now (MFG): "| MFG | Modal analysis; additive distortion and weld joint loads; thermo-elasto-plasticity; filling flow with wall resolution; topology optimization with manufacturing constraints; GCI on warpage | `Field`, `Body` | 1 |" → Must say: "| MFG | Modal analysis; topology optimization with manufacturing constraints; additive distortion and weld joint loads; thermo-elasto-plasticity; rigid multibody contact for assembly stability; filling flow with wall resolution; GCI on warpage | `Field`, `Body` | 1 (modal, topology optimization); 2; 3 (filling, GCI) |". This tab's rows (lines 214, 813, 848, 850); MFG D-MFG-17 relies on "Flux rigid-body contact" (MFG line 865).
+15. **[low] Phasing puts no-gate rows under golden products.** `## Phasing` (lines 1558 to 1560)
+    - Now: "GP3: fitted tetrahedra with mortar contact, cyclic modal analysis, linear dynamics, rigid multibody" → Must say: "GP3: fitted tetrahedra with mortar contact, rigid multibody"
+    - Now: "additive distortion; 10M-DOF `SignOff` solves" → Must say: "linear dynamics and cyclic modal analysis; additive distortion; 10M-DOF `SignOff` solves"
+    - Now: "layered sheets, Helmholtz solvers, circuit DAEs, FDTD, FMU import, solver decks, EHL, 50M-DOF and flow throughput rows" → Must say: "layered sheets, circuit DAEs, FDTD, FMU import, 50M-DOF and flow throughput rows. Also Helmholtz solvers, solver decks and EHL"
+    - Now: "S-parameter goals, the plane-pair cavity model, FMU export and SSP," → Must say: "S-parameter goals, FMU export and SSP,"; and end the phase 4 cell with ". Also the plane-pair cavity model"
+    - Why: contract 13.4's first gates: linear dynamics "None; COV rotordynamics and vibration", symmetry reductions "None; parity floor", Helmholtz solvers "None; COV linear acoustics", EHL and the plane-pair cavity model "None"; imported decks are a parity-floor row with no gate.
+16. **[low] "Snapshot" names a rendered image only.** `### Method catalogs` (line 1327) and `## Reduced models and surrogates` capability table (line 966)
+    - Now: "| Snapshots (proper orthogonal decomposition); DEIM" → Must say: "| Solution samples (proper orthogonal decomposition); DEIM"
+    - Now: "| Snapshot bases; certified or residual bounds |" → Must say: "| Bases from solution samples; certified or residual bounds |"
+    - Why: contract 2 defines Snapshot as "a rendered image of a `ViewState` under a `RenderProfile`".
+17. **[low] Basis intervals, not enclosures.** "Property-basis propagation" capability row (line 210)
+    - Now: "| Property-basis propagation | Basis enclosures into the input part"
+    - Must say: "| Property-basis propagation | Basis intervals into the input part"
+    - Why: D-COV-13 names the basis an interval and rejects "one guaranteed enclosure for both uses".
+18. **[medium] CCR-FLX-12 is accepted.** `## Contract change requests` (line 1571)
+    - Now: the bullet beginning "- **CCR-FLX-12, shared rows for rotors, lubrication and board cavities.**"
+    - Must say: "None."
+    - Why: contract 18 adds the three rows to 13.4 (elastohydrodynamic lubrication 3, plane-pair cavity model 4, rotor aerodynamics 4, owner FLX); this tab's rows (lines 549, 556, 557) already carry those phases.
 
 ## COV
 
-1. **[high] Calibration classes differ from FLX's.** `### Error budgets and model form` (line 64), `### Package contents` (line 569), `## Phasing` (line 891), `## Open questions` (line 909)
-   - Now: "Phase 1 needs three classes, each with 300 held-out samples from FLX's corpus (FLX "Calibrated estimates"). `elasticity/regularized_peak` covers immersed linear elasticity at p = 2 to 6 at both fidelities, for GP1 and GP2 stress. `lattice/strut_stress` and `lattice/buckling_factor` cover the beam lattice's strut stresses and its eigenvalue-DWR buckling factor."
-   - Must say: "Phase 1 needs FLX's four classes (FLX "Calibrated estimates"), each with 300 held-out samples: `elasticity.peak` and `elasticity.eigen` for immersed linear elasticity at p = 2 to 6, and `lattice.strut_stress` and `lattice.buckling` for the beam lattice's strut stresses and buckling factors."
-   - Now: "calibration: ["elasticity/regularized_peak"]," → Must say: "calibration: ["elasticity.peak"],"
-   - Now: "three calibration classes; strut buckling envelopes" → Must say: "four calibration classes; strut buckling envelopes"
-   - Now: "R7-16: three phase 1 classes, not five" → Must say: "R7-16: four phase 1 classes, not five"
-   - Why: FLX lists the classes (contract 7.1: "FLX lists them"): `elasticity.peak`, `elasticity.eigen`, `lattice.strut_stress` and `lattice.buckling`. COV drops `elasticity.eigen`, which 13.4's phase 1 modal and buckling row needs. COV's slashed names also read as `<family>/<code>` error codes.
-2. **[high] Boiling uses VOF before 13.4's phase 5.** `### Heat transfer` (line 309)
-   - Now: "| Nusselt film analytic | 4 · Nat |"
-   - Must say: "| Nusselt film analytic | 4, 5 (VOF, 13.4) · Nat |"
-   - Why: COV owns the 13.4 row "Free-surface and multiphase flow beyond mould filling | 5". This row's L3 method is "VOF with phase change", and FLX's finite volume row says "5 (beyond filling)".
-3. **[medium] Two producers for the input part.** `### Error budgets and model form` (line 44)
-   - Now: "COV fills the input part from Material uncertainty and the model-form part from validation of the 3D physics and constitutive model."
-   - Must say: "COV supplies the Material uncertainty that Flux propagates into the input part, and fills the model-form part from validation of the 3D physics and constitutive model."
-   - Why: contract 5 gives each source one producer. FLX's `### Budgets and guarantees` says Flux produces every part except model form, from "`std::uq` bounds; property-basis enclosures". COV's own D-COV-13 says Flux carries the enclosure "into solves as an input part".
-4. **[medium] `std::uq` behaviour differs from its owner's.** `### Uncertainty` (line 675)
-   - Now: "`std::uq` propagates input error by first-order adjoint sensitivities, switching at `SignOff` to seeded quasi-Monte Carlo when second-order terms exceed 10% of first-order ones (target)."
-   - Must say: "`std::uq` propagates input error by FLX's worst-case rule (D-FLX-35): adjoint-linearized bounds plus a Lanczos remainder, with `NonlinearResponse` above 20% asking for a statistical method."
-   - Why: FLX owns `std::uq`, which COV requires from FLX. D-FLX-35: "`NonlinearResponse` fires when the remainder exceeds 20% of the linear term". The FLX row "asks for a statistical method" and never switches on its own.
-5. **[medium] Cohesive zones phased before Flux's hooks.** `### Solid mechanics` (line 259)
-   - Now: "| DCB and ENF | 2 · Nat |"
-   - Must say: "| DCB and ENF | 2 (bolts), 3 (cohesive) · Nat |"
-   - Why: FLX: "Fracture hooks carry COV's models: J-integrals (phase 2), cohesive zones (3)". 13.4 forbids a row earlier than a capability it names.
-6. **[low] Coverage rows that name later FLX methods carry only their first phase.** 13.4's prerequisite rule applies to each method a row names.
-   - `### Solid mechanics` (line 251). Now: "| NAFEMS LE1 92.7 MPa, LE10 −5.38 MPa, LE11 −105 MPa [S3][S4]; GP1, GP2 | 1 · Nat |" → Must say: "… | 1 (octree), 2 (IGA, finite cell, frame networks) · Nat |". FLX phases spline spaces, the finite cell method and `compile_network` at 2.
-   - `### Dynamics and stability` (line 267). Now: "| NAFEMS free vibration [S2][S5] | 1 · Nat |" → Must say: "… | 1, 2 (Craig–Bampton) · Nat |". FLX: "Modal superposition; Craig–Bampton | … | 2".
-   - `### Heat transfer` (line 305). Now: "| NAFEMS T2 to T4 [S2][S5] | 1 · Nat |" → Must say: "… | 1 (FEM), 2 (IGA, networks), 3 (moment matching) · Nat |". FLX: "Krylov moment matching | … | 3".
-   - `### Fluids` (line 328). Now: "| Porous channel | 3 · Nat |" → Must say: "| Porous channel | 3, 4 (lattice Boltzmann) · Nat |". FLX: "Lattice Boltzmann | … | 4".
-   - `### Error budgets and model form` (line 71). Now: "| `None` keeps discretization `Indicator` | COV-O-VER-4 | 1 |" → Must say: "… | COV-O-VER-4 | 1, 3 (`Gci`) |". FLX: "Solution verification | Calibrated three-level GCI … | FLX-O-ERR-8 | 3".
-7. **[low] `Undecided` reason not in ING's rule.** `### Acceptance and review` (lines 603, 621)
-   - Now: "checks on models below it are `Undecided { reason: EvidenceBelowPolicy }`." and "| `min_evidence_level` per repository | `Undecided { reason: EvidenceBelowPolicy }` |"
-   - Must say: `Undecided { reason: Flagged(EvidenceBelowPolicy) }` in both places.
-   - Why: ING owns `Truth` and the decision rule (contract 5). ING's outcome table has no `EvidenceBelowPolicy`; its blocking-flag outcome is "`Undecided { Flagged(flag) }`".
-8. **[low] The MFG row omits ratings MFG consumes.** `### What COV provides` (line 815)
-   - Now: "| MFG | Process models and envelopes; state Fields; strut-scale Materials from its calibration; environmental records |"
-   - Must say: the same row with "; gear, bearing and shaft ratings" before the Types cell.
-   - Why: MFG consumes "gear, bearing and shaft ratings" from COV, and COV owns them in 13.4.
-9. **[low] Wrong MEC open question.** `## Open questions` (line 903)
-   - Now: "which needs the licensed editions (MEC open question 2)."
-   - Must say: "which needs the licensed editions (MEC open question 1)."
-   - Why: MEC's open question 1 is "Standards data licences"; question 2 lists declined findings.
-10. **[low] Change request without its section.** `## Contract change requests` (line 917)
-    - Now: "None. CCR-COV-9 (model level and evidence level in the glossary) was accepted in contract v5."
-    - Must say: "None. CCR-COV-9 (model level and evidence level in the glossary) was accepted in contract v5 (section 2)."
+1. **[high] FLX has six phase 1 classes.** `### Who fills which part` (line 117)
+   - Now: "Phase 1 needs FLX's four classes, each with 300 held-out samples: `elasticity.peak` and `elasticity.eigen` for immersed linear elasticity at p = 2 to 6, and `lattice.strut_stress` and `lattice.buckling` for the beam lattice's strut stresses and buckling factors."
+   - Must say: "Phase 1 needs FLX's six classes, each with 300 held-out samples: `elasticity.peak`, `elasticity.peak.interactive`, `elasticity.frequency` and `elasticity.buckling` for immersed linear elasticity at p = 2 to 6, and `lattice.strut_stress` and `lattice.buckling` for the beam lattice's strut stresses and buckling factors."
+   - Why: FLX lines 157 to 162 list six classes; FLX's phase 1 gate says "The six calibration classes" (line 1557). `elasticity.eigen` no longer exists.
+2. **[medium] The phase 1 gate repeats the old count.** `## Phasing` (line 1215)
+   - Now: "four calibration classes;"
+   - Must say: "FLX's six phase 1 calibration classes;"
+   - Why: as above.
+3. **[high] The bracket's stress is ING's 94 MPa.** `### The bracket's check` (lines 13, 17, 21, 23), `### When the answers change` (line 31), `## Model form: how far tests say a model can be wrong` (line 105) and `### The bracket's model-form bound` (line 164)
+   - Now: "Flux reports the regularized peak at the web-root fillet as 118 MPa" → Must say: "Flux reports the regularized peak at the web-root fillet as 94 MPa"
+   - Now: "Three more questions decide whether 118 MPa may be compared with 144 MPa at all." → Must say: "Three more questions decide whether 94 MPa may be compared with 144 MPa at all."
+   - Now: "which at 118 MPa is 10.2 MPa" → Must say: "which at 94 MPa is 8.1 MPa"
+   - Now: "The check's total is then 118 + 1.5 + 10.2 = 129.7 MPa against a limit of 144 MPa." → Must say: "The check's total is then 94 + 1.5 + 8.1 = 103.6 MPa against a limit of 144 MPa."
+   - Now: "here 1.6 times to 16.3 MPa" → Must say: "here 1.6 times to 12.9 MPa"
+   - Now: "the bracket's 10.2 MPa" (line 105) → Must say: "the bracket's 8.1 MPa"
+   - Now: "At the bracket's 118 MPa the part is therefore 10.2 MPa" → Must say: "At the bracket's 94 MPa the part is therefore 8.1 MPa"
+   - Why: ING owns the canonical walk-through (contract 6) and its figures are self-consistent: 94 MPa ± 1.5 MPa at 6 mm (ING line 838) and about 210 MPa at 4 mm, the (6/4)² bending scaling. This tab's 8.6% relative transfer gives 0.086 × 94 = 8.1 MPa, inflated 1.6 times to 12.9 MPa. This tab's 240 MPa basis and 144 MPa limit stand, and ING follows them (ING 2).
+4. **[high] Eigenvalue bounds are two-sided.** `### Dynamics and stability` (line 341) and the modal analysis row of `#### Dynamics and stability` (line 874)
+   - Now: "Flux bounds each eigenvalue on the unsafe side (FLX)." → Must say: "Flux bounds each eigenvalue on both sides, since an immersed discretization may err either way (FLX)."
+   - Now: "eigenvalue bounds on the unsafe side" → Must say: "two-sided eigenvalue bounds"
+   - Why: D-FLX-41 (FLX line 656) applies the bound "two-sided", with the one-sided reading only on fitted conforming discretizations; MEC's D-MEC-30 rejects one-sided bounds on immersed models.
+5. **[high] The critical-distance failure is FLX's.** D-COV-34 (line 371), `### The parity map` capability table (line 453), Reference `### Failures` (line 848), COV-O-MAT-11 (line 1206)
+   - Now: "A check that asks for another method fails with `CriticalDistanceMethodMismatch { calibrated, requested }`." → Must say: "A check that asks for another method fails with FLX's `CriticalDistanceMismatch { calibrated, requested }`."
+   - Now: "| Method recorded per Material; the method's own operator | `CriticalDistanceMethodMismatch { calibrated, requested }` |" → Must say: "| Method recorded per Material; the method's own operator (FLX) | `CriticalDistanceMismatch { calibrated, requested }` |"
+   - Now: "`BatchesNotPoolable`, `CriticalDistanceMethodMismatch { calibrated, requested }`, `MissingStandard { code, edition }`" → Must say: "`BatchesNotPoolable`, `MissingStandard { code, edition }`"
+   - Now: "a mismatched method fails with `CriticalDistanceMethodMismatch`" → Must say: "a mismatched method fails with `CriticalDistanceMismatch`"
+   - Why: FLX's `tcd` goal raises the failure (FLX lines 131 and 205, FLX-O-ERR-12), so it renders `flux/critical_distance_mismatch`; one failure keeps one name. FLX moves its row to phase 1 (FLX 3), so this row's phase 1 holds.
+6. **[medium] The Interfaces row to ING names the wrong type.** `## Interfaces with other subsystems` (line 1143)
+   - Now: "property reads as exact basis intervals for limits | Ingot packages, `Approx<Q>` |"
+   - Must say: "property reads as exact basis intervals for limits | Ingot packages, `Range<Q>` |"
+   - Why: D-COV-13 makes the read an exact interval with no budget part; `Approx<T>` carries an `ErrorBudget` (contract 5.1), while ING provides "`Range` as interval" (ING lines 234, 1361).
+7. **[medium] The Interfaces row to FLX reverses the general operations and omits `flux-op-material`.** `## Interfaces with other subsystems` (line 1142)
+   - Now: "property scatter for solve inputs; the operations non-variational methods need"
+   - Must say: "property scatter for solve inputs; the method logic non-variational methods run on Flux's general operations; the `flux-op-material` operation family, owned with FLX"
+   - Why: contract 7.1 gives the general operations to Flux, and D-COV-11 (line 581) keeps only method logic here. This tab's Reference lists `flux-op-material` (line 797), which contract 12 allows, but no Interfaces row tells FLX.
+8. **[medium] The Interfaces row to MEC puts phase 2 and 5 content at 1.** `## Interfaces with other subsystems` (line 1147)
+   - Now: "constitutive draping (13.4) | `Material`, `PhysicsModel` | 1 |"
+   - Must say: "constitutive draping (13.4) | `Material`, `PhysicsModel` | 1; 2 (contact, joint and dynamics models; ratings); 5 (constitutive draping) |"
+   - Why: this tab's rows: ratings 2 (line 454), contact 2 (line 866), linear dynamics 2 (line 341), constitutive draping 5 (line 465).
+9. **[low] The Interfaces row to MFG puts later content at 1.** `## Interfaces with other subsystems` (line 1148)
+   - Now: "phase-transformation kinetics; environmental records; gear, bearing and shaft ratings | `Field`, `ValidityEnvelope`, `EnvironmentalRecord` | 1 |"
+   - Must say: "phase-transformation kinetics; environmental records; gear, bearing and shaft ratings | `Field`, `ValidityEnvelope`, `EnvironmentalRecord` | 1; 2 (environmental records, ratings); 4 (phase-transformation kinetics) |"
+   - Why: contract 13.4 phases ratings at 2 and kinetics at 4; environmental records are phase 2 (line 788).
+10. **[medium] Rotor aerodynamics is FLX's capability.** `### Rotors and aircraft` (line 425)
+    - Now: "**Decision D-COV-31:** Rotor aerodynamics is a ladder of three COV packages."
+    - Must say: "**Decision D-COV-31:** Rotor aerodynamics, FLX's capability in phase 4 (13.4), is a ladder of three rungs with COV envelopes."
+    - Why: contract 13.4 (ruling CCR-FLX-12) makes FLX the owner, also COV and ELX; FLX line 526: "All three arrive in phase 4, and COV records their envelopes"; FLX line 556 is the owner row. This tab's row (line 460) already covers only envelopes.
+11. **[low] Phasing puts no-gate rows under golden products.** `## Phasing` (lines 1216 to 1218)
+    - Now: "weld distortion from coupons at C3; inherent strain for metal powder bed fusion; environmental records with generic factors" → Must say: "weld distortion from coupons at C3. Also inherent strain for metal powder bed fusion and environmental records with generic factors"
+    - Now: "laminar conjugate heat transfer, linear acoustics and drop functionals; warpage and drop models at C3" → Must say: "laminar conjugate heat transfer and drop functionals; warpage and drop models at C3. Also linear acoustics"
+    - Now: "dynamometer and thermal tests; phase-transformation kinetics" → Must say: "dynamometer and thermal tests. Also phase-transformation kinetics"
+    - Why: contract 13.4's first gates: additive inherent strain "None; MFG's metal powder bed fusion compensation", Helmholtz solvers "None; COV linear acoustics", phase-transformation kinetics "None; transient weld simulation".
 
 ## KLN
 
-1. **[high] The two-person list lacks AGT's items.** `### Identity and authorization` (D-KLN-41, line 716) and `## Open questions` (line 1020)
-   - Now: "auto-merge policy; recipient records; Approvals covering several future transfers; oracle and protected-path changes; purges."
-   - Must say: "auto-merge policy; recipient records; `standing_release` plans (D-AGT-33); AGT's `allow_raw_external` and training opt-in; oracle and protected-path changes; purges."
-   - Now: "a standing-release class is AGT's to define (D-AGT-30), so this tab names only an Approval covering several future transfers."
-   - Must say: "D-KLN-41 lists AGT's `standing_release` (D-AGT-33)."
-   - Why: KLN owns the one list ("one list serves every tab"), and AGT owns the items. D-AGT-27: "`api` enforces KLN's one two-person list (D-KLN-41), which includes this tab's items: client and endpoint clearance, standing releases, `allow_raw_external` and training opt-in". Contract 7.6 now names `standing_release`. D-AGT-30 decides `release_data`, not standing releases.
-2. **[high] Dotted error code.** The capability tables after `### Failures and Aborts` (line 133) and `### Audit and encryption` (line 756), plus `## Open questions` (line 1021)
-   - Now: "| Label propagation | Join per node; hits return values only | `label.write_down` at `api` |" → Must say: "… | `label/write_down` at `api` |"
-   - Now: "| Labels and declassification | Confidentiality lattice; integrity by provenance; module labels | `label.write_down` |" → Must say: "… | `label/write_down` |"
-   - Now: "Events added; the code form is AGT's, and contract 7.6 still writes `label.write_down` (CCR-KLN-9)." → Must say: "Events added; contract 7.6 now writes `label/write_down` (CCR-KLN-9)."
-   - Why: contract 7.6 (v6.1): "Error codes take the form `<family>/<code>`", with `label/write_down` as the example.
-3. **[medium] The front-end key includes the compiler release.** `### Graph model` (line 69)
-   - Now: "| Front-end stage | Source content hash, language behavior version, compiler release, imported interface hashes (ING) |"
-   - Must say: "| Front-end stage | Source content hash, language behavior version, imported interface hashes; diagnostics add the compiler release (ING) |"
-   - Why: ING owns the front end. ING `### The Ingot IR and Kiln` says the front end "is keyed by its source hash, the language behavior version and its imports' interface hashes", with diagnostics "also keyed by the compiler release", so IIR is shared across releases.
-4. **[medium] Budget error name.** `### Cost and budgets` (lines 181, 192)
-   - Now: "an estimate above what remains returns `BudgetExceeded` with cheaper options." → Must say: "an estimate above what remains returns `budget/exceeded` with cheaper options."
-   - Now: "| `BudgetExceeded`; `BudgetExhausted` |" → Must say: "| `budget/exceeded`; `BudgetExhausted` |"
-   - Why: AGT owns the error namespace. AGT: "A failed reservation returns `budget/exceeded` with cheaper options", in contract 7.6's `<family>/<code>` form.
-5. **[medium] UIX's per-user view store is never specified.** `### Changes and refs` (line 386) and `### What this tab provides` (line 903)
-   - Now: "and agent branches (`agents/<agent>/<branch>`)." → Must say: "and agent branches (`agents/<agent>/<branch>`). Personal views and layouts live in a per-user store outside Changes (UIX)."
-   - Now: "live documents, locks, span provenance, where-used |" → Must say: "live documents, locks, span provenance, where-used, the per-user view store |"
-   - Why: UIX (D-UIX-1 text): "Personal views and layouts live in a per-user store that `repo` keeps outside Changes (KLN)". UIX's phase 1 workspace layout needs it, UIX's KLN row requires it, and `repo` is KLN's. KLN never mentions the store.
-6. **[medium] The definitional attribute list predates CCR-MEC-1.** `### Revisions and lifecycle states` (line 529)
-   - Now: "(GD&T, datums, `HoleSpec`, `ThreadSpec`, `Weld`, finish, plies, region materials)"
-   - Must say: "(contract 5's definitional attributes)"
-   - Why: contract 5 (v6.1) lists "size tolerances and GD&T, general tolerances, ISO 13715 edge callouts, datums, `HoleSpec`, `ThreadSpec`, `Weld`, surface texture and finish, ply and laminate records, region materials". KLN's copy omits four of them.
-7. **[medium] KLN claims every event type.** `` ### `api` methods and events `` (D-KLN-34, line 829)
-   - Now: "this tab defines event types and a per-repository `sequence` attribute."
-   - Must say: "this tab defines repository, lifecycle and evaluation event types (AGT the `act.*` types) and a per-repository `sequence` attribute."
-   - Why: ECO owns the envelope (D-ECO-12) and says "KLN defines repository, lifecycle and evaluation types, AGT the Act types". AGT defines `act.prepared`, `act.approved`, `act.denied` and `act.committed`.
-8. **[low] `release_data` is a family, not a class.** `` ### `api` methods and events `` (line 827)
-   - Now: "| Act classes `release`, `grant_deviation`, `release_data` and `run_rig_test` |"
-   - Must say: "| Act classes `release`, `grant_deviation` and `run_rig_test`, and the `release_data` family |"
-   - Why: D-AGT-30 ("one Act family, `release_data { … }`") and KLN's own D-KLN-40. AGT's class table has no `release_data` class.
-9. **[low] `crucible:host/parallel` has one function.** `### WIT interfaces` (line 49)
-   - Now: "`parallel` offers deterministic map and reduce in input order (PLT)"
-   - Must say: "`parallel` offers `map-chunks`, a deterministic map with outputs in input order (PLT)"
-   - Why: PLT specifies the interface, whose only function is `map-chunks`.
-10. **[low] The reason allowances ship in phase 1 contradicts COV and MEC.** `### Change orders` (line 612)
-    - Now: "phase 1 needs it, because GP1's checks are conditional on model form."
-    - Must say: "phase 1 ships it with COV's catalogue (D-COV-24), though GP1's and GP2's proof loads supply their checks' model form."
-    - Why: COV owns model form. D-COV-3 says "gauged proof loads replace allowances with measured model form". MEC: "Phase 1 releases therefore need no allowance for those quantities."
-11. **[low] `SignOff` physics row.** `### Progressive results` (line 169)
-    - Now: "| Converged; `Guaranteed` where proven |"
-    - Must say: "| `Guaranteed` where proven, else calibrated `Estimated` |"
-    - Why: FLX owns physics fidelities. FLX's `SignOff` bounds are "`Guaranteed` where proven, else calibrated `Estimated`". KLN's wording reads as if `SignOff` needs proofs.
-12. **[low] "ECO" also abbreviates engineering change order.** `### Change orders` (line 595) and `## State of the art` (line 875)
-    - Now: "| Engineering change order (ECO) |" → Must say: "| Engineering change order |"
-    - Now: "ECR, ECO and ECN workflows with effectivity" → Must say: "Change request, order and notice workflows with effectivity"
-    - Why: every tab uses "ECO" for the interop tab, and contract 2 allows no other codenames.
-13. **[low] First-article records claimed by two rows.** `### What this tab provides` (line 904)
-    - Now: "orders, MCOs, first-article records, parts policy; the approver directory MFG's gateway pins"
-    - Must say: "orders, MCOs, the `Proven` gate on MFG's first-article records, parts policy; the approver directory MFG's gateway pins"
-    - Why: MFG's design section specifies the record (`## Quality records: SPC, MSA, FAI and PPAP`, MFG-O-QUAL-2) and provides it to KLN. KLN's own text credits the content "(MFG)" and owns only the state change (D-KLN-38).
-14. **[low] Software bill of materials formats.** `### Traceability and compliance` (line 645)
-    - Now: "`Software` Items carry a CycloneDX 1.7 software bill of materials per release"
-    - Must say: "`Software` Items carry a CycloneDX 1.7 or SPDX 3.0 software bill of materials per release (ELX)"
-    - Why: ELX specifies Software items: "SPDX 3.0 or CycloneDX 1.7".
-15. **[low] Late-bound fields MEC does not define.** `### Revisions and lifecycle states` (line 535)
-    - Now: "MEC's title blocks and markings"
-    - Must say: "MEC's title-block fields"
-    - Why: MEC: "Title-block fields, revision text, dates and approvers are late-bound release fields". MEC defines no markings.
-16. **[low] The COV row omits `min_evidence_level`.** `### What this tab provides` (line 902)
-    - Now: "| COV | Evidence records by watermark; label joins; policy allowances; Waivers |"
-    - Must say: "| COV | Evidence records by watermark; label joins; policy allowances and `min_evidence_level`; Waivers |"
-    - Why: COV requires it from `repo`, and policy records are KLN's (contract 5).
-17. **[medium] Change requests still written as pending.** `## Contract change requests` (lines 1027 to 1029)
-    - Now: "- CCR-KLN-6 to CCR-KLN-8 (Evidence records without geometry, Item, merge verdict order): accepted in contract v5." → Must say: the same line ending "accepted in contract v5 (sections 2, 2 and 7.1 `repo`)."
-    - Now: the bullet beginning "- CCR-KLN-9, error-code form (7.6)." → Must say: "- CCR-KLN-9, error-code form: accepted with CCR-AGT-12 and CCR-ECO-11 in contract v6.1 (section 7.6)."
-    - Now: the bullet beginning "- CCR-KLN-10, catalog parts in `ItemDefinition` (5)." → Must say: "- CCR-KLN-10, catalog parts in `ItemDefinition`: accepted in contract v6.1 (section 5, `ItemDefinition`)."
-    - Why: contract 16 and 17. The edit saves about 55 words, which pays for items 1, 3, 5 and 7.
+1. **[high] The derivative retention tier is `StepState`.** `## Derivatives` (lines 244 to 254) and KLN-O-DERIV-1 (line 1336)
+   - Now: "Transient solves save their step checkpoints as CAS objects keyed by (`NodeKey`, step) in the `Checkpoint` retention tier, which eviction drops first. A resumed solve or adjoint is bit-identical whether its checkpoints were kept, reloaded or recomputed." → Must say: "Transient solves save their step state as CAS objects keyed by (`NodeKey`, step) in the `StepState` retention tier, which eviction drops first (contract 7.1). A resumed solve or adjoint is bit-identical whether its step state was kept, reloaded or recomputed."
+   - Now: "with step checkpoints in their own retention tier." → Must say: "with step state in its own retention tier."
+   - Now: "and checkpoints that are cheap to recompute must yield memory to ordinary values" → Must say: "and step state that is cheap to recompute must yield memory to ordinary values"
+   - Now: "checkpoints stored as ordinary values" → Must say: "step state stored as ordinary values"
+   - Now: "| Step checkpoints | `Checkpoint` retention tier keyed by (`NodeKey`, step) | None: an evicted checkpoint is recomputed |" → Must say: "| Step state | `StepState` retention tier keyed by (`NodeKey`, step) | None: evicted step state is recomputed |"
+   - Now: "adjoints resumed from evicted checkpoints are bit-identical" → Must say: "adjoints resumed from evicted step state are bit-identical"
+   - Why: contract 7.1 now names the tier `StepState` (ruling CCR-KLN-12), so "checkpoint" names only transparency-log heads (lines 547, 831, 886 stay).
+2. **[medium] CCR-KLN-11 and CCR-KLN-12 are accepted.** `## Contract change requests` (lines 1416, 1417)
+   - Now: the two bullets beginning "- **CCR-KLN-11, approval delegation.**" and "- **CCR-KLN-12, the derivative retention tier.**"
+   - Must say: "None."
+   - Why: contract 18 adds the approval-delegation row to 5.4 and renames the tier in 7.1.
+3. **[medium] Delegation signers follow contract 5.4's row.** `### Review routes and delegation` (line 723)
+   - Now: "Delegation covering physical-effect Acts or `controls` needs two people"
+   - Must say: "Delegation covering physical-effect Acts or `controls` needs two people, one an export officer (contract 5.4)"
+   - Why: contract 5.4's approval-delegation row: "two people, one an export officer, when the scope covers physical-effect Acts or `controls` payloads".
+4. **[medium] `auth` and `label` are AGT's families.** `### Failures and Aborts` (line 126)
+   - Now: "this tab's families are `kiln`, `cas`, `repo`, `plm`, `trust`, `auth`, `label`, `evidence` and `share`, registered with AGT"
+   - Must say: "this tab's families are `kiln`, `cas`, `repo`, `plm`, `trust`, `evidence` and `share`, registered with AGT; it also raises codes in AGT's `auth` and `label` families"
+   - Why: contract 7.6: "AGT keeps the family registry"; AGT lists `auth` (line 1254) and `label` (line 1263) as its own.
+5. **[medium] The override error is AGT's `edit/override_site_unknown`.** `### The operation contract` capability table, "Literal overrides" (line 164)
+   - Now: "an override that names no site is rejected by `api` as `edit/unknown_site`"
+   - Must say: "an override that names no site is rejected by `api` as `edit/override_site_unknown`"
+   - Why: AGT owns the `edit` family; AGT lines 234 and 1194 name `edit/override_site_unknown`.
+6. **[medium] The per-call assertion failure is `auth/assertion_required`.** `### Privacy` capability table, "Local credentials" (line 905)
+   - Now: "`auth/user_presence_required`"
+   - Must say: "`auth/assertion_required`"
+   - Why: AGT owns the `auth` family (line 1254), and its "Local credentials" row fails with `auth/assertion_required` (AGT lines 138, 229).
+7. **[medium] Three Interfaces rows omit ING.** `## Interfaces with other subsystems` (lines 1303, 1306, 1307)
+   - Now: "| ANV, FLX, COV, MFG, ELX | The operation contract and registry;" → Must say: "| ING, ANV, FLX, COV, MFG, ELX | The operation contract and registry;"
+   - Now: "| ANV, FLX, PLT | Grades and class acceptance;" → Must say: "| ING, ANV, FLX, PLT | Grades and class acceptance;"
+   - Now: "| COV, FLX, MFG | Evidence records pinned by `CheckId`;" → Must say: "| ING, COV, FLX, MFG | Evidence records pinned by `CheckId`;"
+   - Why: ING's limits follow this tab's limit catalog (ING line 695) and its reverse mode uses `Differentiable` (line 743); ING's guest SDK is generated from `crucible:host` (ING lines 928, 935); ING's checks read policy allowances and its gate counts Waivers (ING lines 824 to 828).
+8. **[medium] The operation registry states the version statuses ANV and PLT use.** `### The operation contract` capability table (line 170)
+   - Now: "| `OpImpl`, `DynOp`, `OpRegistry`, `OpCx` in `base-op`; explicit registration lists |"
+   - Must say: "| `OpImpl`, `DynOp`, `OpRegistry`, `OpCx` in `base-op`; explicit registration lists; per-version status `Current`, `Deprecated`, `Retired` or `Yanked` |"
+   - Why: ANV's registry row relies on "KLN's registry; status `Current`, `Deprecated`, `Retired` or `Yanked`" (ANV line 1140), and PLT's merge queue on "`Current` and `Deprecated` operation versions" (PLT line 902).
+9. **[low] The priority-class table copies AGT's.** `### Scheduling and cancellation` (line 181 and the table at lines 183 to 189)
+   - Now: "Kiln picks PLT's `PoolLane` from the request's `PriorityClass` (AGT)."
+   - Must say: "Kiln runs each request on the pool lane its `PriorityClass` maps to and preempts at node boundaries as [AGT, Priority classes](09-agents.md#priority-classes) states." Delete the five-row table that follows.
+   - Why: contract 5.6 makes `PriorityClass` AGT's, and AGT's table (lines 285 to 291) holds the classes, lanes and preemption; PLT restates the mapping in one line (PLT line 170). This copy already drifts: its `Ci` row says "Both above" where AGT says "The classes above". Saves about 60 words.
+10. **[low] The single-host sandbox sentence restates PLT's install.** `### Placement and the single host` (line 280)
+    - Now: "It runs Proposal CI in Firecracker where KVM exists [Firecracker start] and in gVisor otherwise, refuses Proposal CI when neither works, and runs the trusted builder as a separate OS user."
+    - Must say: "PLT's install runs Proposal CI in a microVM sandbox and the trusted builder as its own OS user."
+    - Why: PLT owns deployment (D-PLT-51); D-PLT-44 (PLT line 702) states exactly this. Drop the `[Firecracker start]` Sources row if nothing else cites it.
+11. **[low] Only the attestation service is packaged by PLT.** `### Crates` (line 1014)
+    - Now: "The attestation service, the live-session relay and the hardware runner (KLN, packaged by PLT)"
+    - Must say: "The attestation service, the live-session relay and the hardware runner (KLN; PLT packages the attestation service)"
+    - Why: contract 12: "`attestation` (KLN, packaged by PLT)" but "`relay` and `rig-runner` (KLN)".
+12. **[low] Contract 5.3's integrity rule restated.** `### Three parts of a label` (line 922)
+    - Now: "- **Integrity** never blocks a read or a write. Merging the Change that introduced a pin, an Asset or a source span clears it on typed values: a merged supplier STEP import yields trusted geometry and numbers, while its part names stay `ExternalText`, and a new Asset revision starts untrusted."
+    - Must say: "- **Integrity** follows contract 5.3's rule; a new Asset revision starts untrusted."
+    - Why: contract 5.3: "This paragraph is the only statement of the rule; tabs cite it." This section's own lead (line 918) says so.
+13. **[low] "Policy" alone.** `### Authorization` (line 876) and `### Items` (line 581)
+    - Now: "Only these two things are called policy." → Must say: delete the sentence.
+    - Now: "so a policy update never changes the verdict of an unchanged Change" → Must say: "so a policy package update never changes the verdict of an unchanged Change"
+    - Why: contract 2, Policy package: never call it "policy" alone.
+14. **[low] Five abbreviations used before they are spelled out.** `### Collection, tiers and replication` (line 379), `### Items` (line 575), `### Revisions and lifecycle states` (line 629), `### Signature records` (line 823), `### Supplier packages and derived views` (line 977)
+    - Now: "local disk or OPFS, the team server" → Must say: "local disk or the browser's origin private file system (OPFS), the team server"
+    - Now: "release package (STEP AP242 with PMI, drawings" → Must say: "release package (STEP AP242 with product and manufacturing information (PMI), drawings"
+    - Now: "revision labels on release tags, `InWork` and `Released`, and the EBOM." → Must say: "revision labels on release tags, `InWork` and `Released`, and the engineering BOM (EBOM)."
+    - Now: "People sign through WebAuthn with a device-bound approval credential" → Must say: "People sign through WebAuthn (Web Authentication) with a device-bound approval credential"
+    - Now: "drawings with QIF 3.0 inspection plans" → Must say: "drawings with Quality Information Framework (QIF) 3.0 inspection plans"
+    - Why: contract 11 spells out every abbreviation at first use in each tab.
+15. **[high] Git is the storage format, and any host can be home.** `### Git export` (lines 419 to 421), its capability row (line 448), KLN-O-GIT-1 (line 1353), `### Span provenance` (line 425) and `### Readers who are not cleared` (line 928)
+    - Now: "### Git export" → Must say: "### Git storage and hosts"
+    - Now: "Git is an export, not the storage format. `crucible export git` writes Ingot text and `ingot.lock`, and because `CallSite`s derive from text alone, re-importing leaves every `EntityId` unchanged." → Must say: "A Crucible repository is an ordinary Git repository ([contract 7.1](../contract.md#repo-plm-and-trust)), so people clone, branch and push it with their own tools. `repo` writes each Change as one commit through gitoxide, with a `Crucible-Object` trailer holding its `ObjectId`; signature records live under `refs/crucible/`, large Assets are Git LFS pointers the CAS serves, and computed results stay in the CAS. Any Git host can be home: on protected branches Kiln is a required status check, and it signs a release only when every merge in the released history carries its signature records. Because `CallSite`s derive from text alone, cloning, pushing or mirroring through any host and rebuilding leaves every `EntityId` unchanged."
+    - Now: "| Git export | Ingot text and `ingot.lock`; identities unchanged on re-import | `repo/export_unrepresentable` for content Git cannot hold, such as an unresolved conflict | KLN-O-GIT-1 | 1 |" → Must say: "| Git storage and hosts | Changes as commits with `Crucible-Object` trailers; signature records under `refs/crucible/`; LFS Assets; Kiln as a required status check on any host; conflicted Changes as extra trees, never on a protected branch | A release whose history holds a merge without its signature records is refused, naming the merge | KLN-O-GIT-1 | 1 |" (this tab names the `repo/` failure code)
+    - Now: "| KLN-O-GIT-1 | Git round trip | Export, re-import and rebuild keep every `EntityId` and `GeometryId` on every golden product |" → Must say: "| KLN-O-GIT-1 | Git storage and hosts | Cloning, pushing and mirroring through a second Git host and rebuilding keep every `EntityId` and `GeometryId` on every golden product; a merge pushed past a host's branch protection blocks the release |"
+    - Now: "through a language-server connection, a file or Git import, or any other channel" → Must say: "through a language-server connection, a file import, a push from a Git client or any other channel"
+    - Now: "Any node joining an undeclassified output is unreadable to them." → Must say: "Any node joining an undeclassified output is unreadable to them. Git has no per-path read control, so such a module lives in its own repository, which the product repository references by commit; an organization whose readers are all cleared keeps one repository (contract 7.1)."
+    - Why: contract 7.1, 2 and 12 (versions 7.2 and 7.3, ruling FD-5 of 12 October 2026) make Changes Git commits stored through gitoxide, let any Git host be home with Kiln as a required status check, record conflicts as extra trees, and split repositories only per reader. KLN owns `repo`, so it also checks that `### Changes and refs` (ref names map to Git refs), `### What a clean merge means` (conflicts) and the Reference `### Repository objects` agree with Git storage, and states any further consequence in its own words. Contract 7.1's anchor is `#repo-plm-and-trust`.
 
 ## MEC
 
-1. **[high] GD&T is not an attribute carried through operations.** `### Specification model` (D-MEC-27, lines 742 and 744)
-   - Now: "and GD&T and PMI attributes use Anvil's split policy `Fail`." → Must say: "and no GD&T or PMI item travels through operations as an attribute (D-ANV-32)."
-   - Now: "ANV keeps `Note::AttributeSplit` on the operation, and MEC owns the failure." → Must say: "ANV writes the resolved targets into the definition part, and MEC owns the failure."
-   - Why: contract 5 tags design attributes [ANV] and puts a forwarded tolerance on "an anchored aspect query, re-resolved on the final Part". ANV: "Size tolerances, GD&T and datums are not carried through operations." The decision keeps its round 3 marker.
-2. **[medium] Instance sets phased before ING's.** `### Mate inference and assembly-level features` (line 508)
-   - Now: "| `instance`, `assembly`, Instance sets, `#[configuration]` existence | `ResolveError` on a mate frame; `ING2601` | MEC-O-AS-1 | 1 |"
-   - Must say: the same row ending "| MEC-O-AS-1 | 1, 2 (Instance sets) |"
-   - Why: ING owns Instance sets: "| Instance sets | … | ING-O-30 | 2 |". 13.4: a row naming another tab's capability is no earlier than the owner's row. MEC's own Fasteners row is phase 2.
-3. **[medium] Changing internal operations is not a major version.** `### Roles, queries and fixes` (line 59)
-   - Now: "A std feature that changes its internal operations therefore takes a major version (ING)."
-   - Must say: "A std feature that changes its internal operations therefore releases as a labelled output-changing minor version (ING, D-ECO-14)."
-   - Why: ING owns what breaks. Its table says changing "the entity names a public feature produces on the package's test designs" is "Minor, labelled output-changing (D-ECO-14)".
-4. **[medium] `Weld` carries the quality level; the Part carries the execution class.** `### Shared types` (line 45) and `## Interfaces with other subsystems` (line 973)
-   - Now: "`Weld` with its execution class, surface texture" → Must say: "`Weld` with its quality level, weldment `execution_class`, surface texture"
-   - Now: "`Weld` with execution class; edge callouts;" → Must say: "`Weld` with quality level; weldment `execution_class`; edge callouts;"
-   - Why: round 2's ruling: MEC "records the weld quality level on `Weld`". MEC's own text: "A `Weld` records … the imperfection quality level … A weldment Part records `execution_class`". MFG requires "`Weld` with quality level and execution class".
-5. **[medium] FLX's calibration class ids.** `## Design checks` (lines 895 to 897)
-   - Now: "| Elasticity regularized peak, aggregated CutFEM, p = 2 to 6 |" → Must say: "| `elasticity.peak` |"
-   - Now: "| Beam-lattice localized strut stress |" → Must say: "| `lattice.strut_stress` |"
-   - Now: "| Linear buckling factor, eigenvalue DWR, beam lattice; an octree variant |" → Must say: "| `lattice.buckling`; `elasticity.eigen` |"
-   - Why: FLX owns the classes and names them in its "Phase 1 class" table. COV 1 aligns COV to the same ids.
-6. **[medium] A phase 1 oracle tests KLN's phase 3 BOM.** `## Oracles` (MEC-O-PF-12, line 1013)
-   - Now: "`#[configuration]` gives the expected 150% BOM"
-   - Must say: "each `#[configuration]` variant builds as declared; KLN-O-PLM-5 checks the 150% BOM"
-   - Why: the same reason as ING 5. KLN's 150% BOM row is phase 3, and MEC-O-PF-12 backs a phase 1 row.
-7. **[medium] Interface rows omit what ANV and ING require.** `## Interfaces with other subsystems` (lines 968, 969)
-   - Now: "| Constraint semantics; definitional attribute classes |" → Must say: "| Constraint semantics; definitional attribute classes; `FeatureRole` aliases; PMI as anchored aspect queries with `pmi_target_resolved`; the Assembly identity encoding |"
-   - Now: "`std::standards::iso286`; `default_distribution`; general tolerances |" → Must say: "`std::standards::iso286`; `default_distribution`; general tolerances; `pmi_target_resolved`; `std::mech::refgeom`; `fasten` returning an Instance set; name-free Part and Assembly encodings |"
-   - Why: ANV's "Anvil requires" row and ING's "Ingot requires" row ask for exactly these. MEC specifies each in its design sections (D-MEC-27, `std::mech::refgeom`, contract 5's Assembly `GeometryId` [MEC]).
-8. **[low] Wrong merge condition.** `### Interference and clearance` (line 452) and `## Interfaces with other subsystems` (line 970)
-   - Now: "KLN's merge condition 5 reuses these classes." → Must say: "KLN's merge condition 4 reuses these classes."
-   - Now: "approved parts; merge condition 5 |" → Must say: "approved parts; merge conditions 4 and 5 |"
-   - Why: KLN's condition 4 is "**Interference.** A `Hard` interference (positive volume, in MEC's classes)". The designed-contact exemption covers "conditions 4 and 5".
-9. **[low] Wrong ANV failure name.** `### Machine elements` (line 376)
-   - Now: "| `TopologyChange { faces }`; `RuleConflict { set }` |"
-   - Must say: "| `TopologyChangeRejected`; `RuleConflict { set }` |"
-   - Why: ANV's `move_faces`, `replace_faces` and `delete_faces` fail with `TopologyChangeRejected`. `TopologyChange` is `anvil::shape_velocity`'s failure.
-10. **[low] Attributes are keyed by canonical number.** `### Shared types` (line 39)
-    - Now: "| Manufacturing intent | Definitional attributes keyed by `EntityId` |"
-    - Must say: "| Manufacturing intent | Definitional attributes by canonical entity number |"
-    - Why: contract 5: definitional attributes "are encoded name-free by canonical entity number". MEC's own line 45 says so.
-11. **[low] D-ANV-30 does not decide cut modes.** `### Mate inference and assembly-level features` (line 504)
-    - Now: "while `AfterAssembly` is a manufacturing operation in the MBOM (D-ANV-30)."
-    - Must say: "while `AfterAssembly` is a manufacturing operation in the MBOM; created ids carry the Instance path (ANV)."
-    - Why: D-ANV-30 decides copy relabelling. ANV's `### Copies and placements` says "assembly-level features prefix ids with the Instance path".
-12. **[low] Edit plans are UIX's.** `### Drawings` (D-MEC-36, line 833)
-    - Now: "writes model source through ING's edit plans."
-    - Must say: "writes model source through UIX's edit plans (D-UIX-15)."
-    - Why: D-UIX-15: "Gestures edit source through ranked edit plans". ING provides only the ranking ("Derivatives serve UIX's edit plans").
-13. **[low] Biomechanics models are COV's.** `## Human factors` (line 911)
-    - Now: "strength and musculoskeletal loading need Flux biomechanics models"
-    - Must say: "strength and musculoskeletal loading need COV's biomechanics models"
-    - Why: COV's `### Biomechanics and human factors` holds those models, and FLX says COV owns physics models.
-14. **[medium] Change request still written as pending.** `## Contract change requests` (line 1107)
-    - Now: "- **CCR-MEC-1.** Contract 5's list of definitional attributes adds general tolerances (D-MEC-35) and edge callouts to ISO 13715. Both change what is made, so changing either must mark the Item modified, and the contract's list is explicit."
-    - Must say: "- CCR-MEC-1, general tolerances and ISO 13715 edge callouts as definitional attributes: accepted in contract v6.1 (section 5)."
-    - Why: contract 17: "CCR-MEC-1 definitional attributes | Accepted (5)". The edit saves about 20 words.
+1. **[high] Ordered explode steps land in phase 1.** `## Assemblies` capability table, "Exploded views" (line 646); `## Phasing` (line 1506); `## Interfaces with other subsystems` (line 1391)
+   - Now: "| `CollidesDuringStep { step, pair }` (warning) | MEC-O-AS-5 | 2, 3 (automatic) |" → Must say: "| `CollidesDuringStep { step, pair }` (warning) | MEC-O-AS-5 | 1, 3 (automatic) |"
+   - Now: "push-pull, basic mates, GD&T" → Must say: "push-pull, basic mates, explode steps, GD&T"
+   - Now: "context queries for Edit in context; `auto_drawing`; revision markers | `Field`, `Sketch`, `Context` | 1, 2 |" → Must say: "context queries for Edit in context; exploded-view steps; `auto_drawing`; revision markers | `Field`, `Sketch`, `Context` | 1, 2 |"
+   - Why: contract 13.4's phase 1 parity floor (owner UIX) includes exploded views, and UIX's phase 1 rows build them from `explode(asm, steps)` (UIX lines 282, 324, 382). Instances and mates are already phase 1 here (lines 635, 637); `explode_auto` stays phase 3. UIX 8 adds the matching `Requires:` entry.
+2. **[high] Non-size sites keep their nominal under `Mmc` and `Lmc`.** `### Stack-up and variation analysis` capability table, "Geometry at a tolerance point" (line 1033)
+   - Now: "`NotOfSize { site }` for `Mmc` or `Lmc` on a site without a size"
+   - Must say: "Non-size sites keep their nominal under `Mmc` and `Lmc` and are listed in the report (ING)"
+   - Why: ING owns `realize:` and decides (ING line 345): "A site that is not a feature of size keeps its nominal under `Mmc` and `Lmc`, and the Evaluation report lists it."
+3. **[medium] Calibration classes follow FLX's names.** `### What may decide a check` (lines 1176 to 1179, 1184)
+   - Now: "| Static stress on regularized peaks in solids (GP1) | `Estimated` | `elasticity.peak` |" → Must say: "| Static stress on regularized peaks in solids (GP1) | `Estimated` | `elasticity.peak`; `elasticity.peak.interactive` at `Interactive` |"
+   - Now: "`lattice.buckling`; `elasticity.eigen` for buckling factors" → Must say: "`lattice.buckling`; `elasticity.buckling`"
+   - Now: "`elasticity.eigen` for frequencies" → Must say: "`elasticity.frequency`"
+   - Now: "Frequencies, whose operator is fixed, are a separate entry of the eigen class." → Must say: "Frequencies, whose operator is fixed, use their own class, `elasticity.frequency`."
+   - Why: FLX owns calibration classes; its phase 1 table (FLX lines 157 to 162) has `elasticity.peak.interactive`, `elasticity.frequency` and `elasticity.buckling`, and no `elasticity.eigen`.
+4. **[medium] The drape failure is ANV's kind.** `## Composites design` capability table, "Kinematic drape" (line 806)
+   - Now: "`ShearLimitExceeded { ply, region, max }`"
+   - Must say: "`ExcessiveShear { region, angle }`"
+   - Why: the row requires `anvil::drape_kinematic`, whose failure is `ExcessiveShear { region, angle }` (ANV line 761); ANV-O-NAME-7 requires feature failure kinds to equal ANV's plus MEC's marked feature-level kinds.
+5. **[medium] Late-bound fields enter the definition as placeholders.** `### Drawings` (line 1072)
+   - Now: "Title-block fields, revision text, dates and approvers are late-bound release fields, excluded from the Item's definition digest"
+   - Must say: "Title-block fields, revision text, dates and approvers are late-bound release fields, which enter the Item's definition digest only as placeholders"
+   - Why: KLN owns `ItemDefinition` (contract 5.6: "Late-bound fields stay placeholders"); KLN line 607 says the same.
+6. **[medium] Interfaces rows omit what ANV, ELX and MFG read.** `## Interfaces with other subsystems` (lines 1381, 1388, 1389)
+   - Now: "feature-level failure kinds; the Assembly `GeometryId` encoding | `FeatureError`, `HoleSpec`, `ThreadSpec`, `CoordSys` |" → Must say: "feature-level failure kinds; the Assembly `GeometryId` encoding; the `Continuity` enum | `FeatureError`, `HoleSpec`, `ThreadSpec`, `CoordSys`, `Continuity` |". ANV line 477: "`Continuity` is MEC's order enum".
+   - Now: "plies, harness geometry, balloons; the drawing library for in-process drawings; the `realize` point of each export |" → Must say: "plies, harness geometry, balloons, `BendRule` and `BendTable`, preload ranges, mates for machine, robot and fixture Assemblies; the drawing library for in-process drawings; the `realize` point of each export |". MFG reads them (MFG lines 131, 397, 403, 804, 812, 869).
+   - Now: "| ELX | Enclosure geometry and checks; mates; interface records for board outlines and keep-outs; routes, bundle and formboard geometry; fastener selection | `Assembly`, `Route`, `CoordSys` | 1, 3 |" → Must say: "| ELX | Enclosure geometry and checks; mates; gear records for drivetrain elements; interface records for board outlines and keep-outs; routes, bundle and formboard geometry; fastener selection | `Assembly`, `Route`, `CoordSys` | 1, 2 (gear records), 3, 4 (formboard) |". ELX's "Drivetrain elements" row (ELX line 191, phase 2) reads MEC's gear records; MEC's formboard row is phase 4 (line 852).
+7. **[low] Tie kinds are FLX's `Bonded` and `NoSeparation`.** `### Interference and clearance` (line 543)
+   - Now: "each listed for confirmation as bonded or frictionless"
+   - Must say: "each listed for confirmation as `Bonded` or `NoSeparation`"
+   - Why: D-FLX-52 (FLX line 714): ties are "`Bonded` by default … and `NoSeparation`"; frictionless contact with separation is a separate nonlinear path.
+8. **[low] An instruction-capable canvas taints the context.** `### Reference images` (line 171)
+   - Now: "which marks its context as untrusted ([AGT](09-agents.md))"
+   - Must say: "which sets its context `instruction_tainted` ([AGT](09-agents.md))"
+   - Why: contract 7.6 and AGT line 440: reading an instruction-capable image sets `instruction_tainted`.
+9. **[low] The drag priority class is AGT's.** `### Solver` (line 196)
+   - Now: "at PLT's `Drag` priority"
+   - Must say: "at the `Drag` priority class, on PLT's `Drag` lane"
+   - Why: contract 5.6: `PriorityClass` [AGT]; PLT owns only `PoolLane` (contract 12).
+10. **[low] The scan-to-CAD failures are ANV's.** `### SubD and scans` capability table, "Scan to CAD" (line 705)
+    - Now: "`FitRejected { region, rms }`"
+    - Must say: "`FitFailed { residual }`; `NotConverged { rms }`"
+    - Why: the row rests on `anvil::fit` and `anvil::align`, whose failures are `FitFailed { residual }` and `NotConverged { rms }` (ANV lines 895, 1055).
+11. **[low] Continuity thresholds copied from ANV.** `### Continuity and surfaces` (line 665)
+    - Now: "Default thresholds: G0 within the edge's own tolerance, G1 within 10⁻⁶ rad, G2 within 10⁻⁴ relative curvature difference and G3 within 10⁻³ relative difference."
+    - Must say: "The default threshold per order is ANV's, and each check may override it." Cut the next sentence of the paragraph too, which restates the length threshold and the override.
+    - Why: ANV states the defaults for `analyze_continuity` (ANV line 744, row line 1045).
+12. **[low] The definition tolerance is KLN's formula.** `### Identity of Parts and Assemblies` (line 1257)
+    - Now: "KLN's definition tolerance is the geometry change below which an Item keeps its revision."
+    - Must say: "KLN's definition tolerance, the geometry change below which an Item keeps its revision, reads the Part's tightest or general tolerance and its resolution ρ ([KLN](05-kiln-repo-plm.md))." Delete the rest of the paragraph.
+    - Why: KLN owns the formula (KLN line 613: "the larger of 10ρ … and the smaller of 0.1 µm and 1% of the Item's tightest tolerance").
+13. **[low] Flux's symmetric reductions are phase 2.** `### Patterns, mirror and hulls` (line 346)
+    - Now: "Flux may use it for symmetric, antisymmetric and cyclic-sector reductions, after checking that the loads respect it"
+    - Must say: "Flux may use it for symmetric, antisymmetric and cyclic-sector reductions from phase 2 (contract 13.4), after checking that the loads respect it"
+    - Why: contract 13.4: symmetry, antisymmetry and cyclic-sector reductions, phase 2, owner FLX, also MEC.
+14. **[low] Git stores the text.** D-MEC-33's *Why:* (line 209)
+    - Now: "belong in the text that `crucible export git` carries"
+    - Must say: "belong in the text Git stores"
+    - Why: contract 7.1 (v7.3, ruling FD-5): a Crucible repository is an ordinary Git repository; `crucible export git` no longer exists.
 
 ## MFG
 
-1. **[high] 3MF Toolpath writer phase.** `## Printers, 3MF and print transfer` (lines 461, 452)
-   - Now: "| Further 3MF extensions | Toolpath (2); Boolean, Volumetric and Secure Content (3), through ECO's writer | Written only where the target declares support | MFG-O-AM-10 | 2, 3 |"
-   - Must say: "| Further 3MF extensions | Boolean, Volumetric and Secure Content (3), and Toolpath once a machine partner accepts it (3), through ECO's writer | Written only where the target declares support | MFG-O-AM-10 | 3 |"
-   - Now: "the Toolpath extension, updated on 17 September 2026, is still a draft" → Must say: "the Toolpath extension is at 1.0.0 in ECO's catalog". The editor re-opens the 3MF specification page before citing the date.
-   - Why: ECO owns every writer, its version and its phase (round 2 ruling). ECO's 3MF row: "Toolpath 1.0.0 … 3 (others; Toolpath once MFG's partner accepts it)". MFG's own PBF scan-vector work is phase 4.
-2. **[high] The OPC UA allowlist precedes its transport.** `## Approval, transfer and physical safety` (line 141)
-   - Now: "| Wire-level transfer verification | Manifest allowlists enforced in the gateway core; the OPC UA method allowlist | Other requests dropped and reported | MFG-O-SAFE-3 | 2 |"
-   - Must say: "| Wire-level transfer verification | Manifest allowlists enforced in the gateway core (2); the OPC UA method allowlist (3) | Other requests dropped and reported | MFG-O-SAFE-3 | 2, 3 |"
-   - Why: MFG's own "MTConnect and OPC UA adapters" row is phase 3 (MFG-O-FAC-2), and ECO's OPC UA for Machine Tools row is phase 3. This pairs with AGT 1.
-3. **[medium] D-MFG-30 contradicts D-COV-27.** `## Scope, layering and core types` (line 20)
-   - Now: "A parameter that depends on machine, mould, tooling or process window, such as melt-to-mould heat transfer, is MFG process data citing COV's model id."
-   - Must say: "A property of the material in a stated condition stays COV's even when the condition names a process or machine; a parameter of material and equipment together, such as melt-to-mould heat transfer, is MFG process data citing COV's model id." End the decision with "(revised in round 3)".
-   - Why: `Material` is [COV] in contract 5. D-COV-27: "A property of the material in a stated condition is a COV `Material` property, even when the condition names a process and machine." MFG's "process window" clause would hand per-machine strut Materials to MFG, while MFG itself says COV builds them.
-4. **[medium] RoHS phased before KLN's compliance roll-up.** `## Sustainability and compliance` (line 692)
-   - Now: "from COV's declared substances (2);"
-   - Must say: "from COV's declared substances (3);". The row's Phase cell becomes "3".
-   - Why: KLN owns the check over rolled-up compositions ("This tab owns compositions rolled up from `Material` versions"), and its "Compliance checks" row is phase 3. MFG supplies the substance rules. No phase 2 gate needs RoHS. This is judgment call 3 in the summary.
-5. **[medium] Hele-Shaw is MFG's, not Flux's.** `### What MFG consumes` (line 748) and `### What MFG provides` (line 763)
-   - Now: "level-set flow and Hele-Shaw" → Must say: "level-set flow with wall resolution"
-   - Now: "coupon data for inherent strain, weld joints and as-built struts; process data under D-MFG-30 |" → Must say: "coupon data for inherent strain, weld joints and as-built struts; process data under D-MFG-30; the Hele-Shaw solver (D-MFG-15) |"
-   - Why: MFG owns injection moulding (13.4), decides Hele-Shaw (D-MFG-15) and verifies it (MFG-O-MOLD-3). COV requires "the Hele-Shaw solver" from MFG. FLX provides MFG only "filling flow with wall resolution".
-6. **[low] Springback from Flux arrives in phase 5.** `## Sheet cutting, nesting and press brake` (D-MFG-8, line 291)
-   - Now: "springback from Flux or measurement."
-   - Must say: "springback from measurement, and from Flux once sheet forming lands (phase 5, contract 13.4)." End the decision with "(revised in round 3)".
-   - Why: 13.4: "Sheet forming simulation and springback compensation | 5 | None | MFG", while press-brake allowances keep phase 2.
-7. **[low] Quality level is recorded on `Weld`.** `## Welding, joining and composites` (line 521)
-   - Now: "MFG derives the quality level, NDT extent and ISO 3834 part from it"
-   - Must say: "MFG derives the NDT extent and ISO 3834 part from it and checks each `Weld`'s quality level (MEC) against it"
-   - Why: round 2's ruling and MEC's text put the quality level on `Weld` (see MEC 4).
-8. **[low] Ply nesting phase is ambiguous.** `## Welding, joining and composites` (line 535)
-   - Now: "Plate machining (3); MEC plies nested with grain; ordered plies with projector data (4)"
-   - Must say: "Plate machining (3); MEC plies nested with grain and ordered, with projector data (4)"
-   - Why: MEC owns composite laminates at phase 4 (13.4), so no ply work can read as phase 3.
-9. **[medium] Change requests without their ruling or section.** `## Contract change requests` (lines 927, 928) and `## Open questions` (line 919)
-   - Now: "- CCR-MFG-7, controller capture: contract 13.2's reference-shop agreement adds time on each family's physical controls in program-test mode (R10-29). Without it no post family can qualify." → Must say: "- CCR-MFG-7, controller capture: accepted in contract v6.1 (section 13.2)."
-   - Now: "- Earlier: CCR-MFG-5 and CCR-MFG-6 were accepted in contract v5, and the machine gateway request in v6 (contract 12)." → Must say: "- Earlier: CCR-MFG-5 and CCR-MFG-6 were accepted in contract v5 (sections 2 and 7.6; 7.1), and the machine gateway request in v6 (section 12)."
-   - Now: "R10-29's capture time in the reference-shop agreement is CCR-MFG-7." → Must say: "R10-29's capture time is in contract 13.2's reference-shop agreement (CCR-MFG-7)."
+1. **[high] The production-site record is KLN's `Site`.** `## Factory connection and digital twin`, D-MFG-40 (line 966) and the "Production sites" row (line 984); `## Interfaces with other subsystems` (line 1146)
+   - Now: "keyed by (EBOM configuration point, `ProductionSite`), where a `ProductionSite` is a policy-package record" → Must say: "keyed by (EBOM configuration point, `Site`), where a `Site` is KLN's policy-package record"
+   - Now: "| Production sites | MBOM, routings and work centres keyed by (EBOM configuration point, `ProductionSite`);" → Must say: "| Production sites | MBOM, routings and work centres keyed by (EBOM configuration point, `Site`);"
+   - Now: "| KLN | MBOM rules and routings per production site; nonconformance records linked to corrective actions; as-built records | Records | 2 |" → Must say: "| KLN | MBOM rules and routings per `Site`; nonconformance records linked to corrective actions; as-built records | Records | 2; 3 (sites, corrective-action links, as-built records) |"
+   - Why: KLN owns BOM views and policy packages: KLN line 665 keys MBOM views by "(configuration point, `Site`), a policy-package record naming the plant and its ERP mapping", and ECO uses `Site` (ECO lines 494, 513, 1128). This tab's own rows put production sites, corrective-action links and as-built records in phase 3 (lines 924, 984, 986).
+2. **[high] The gateway failure AGT returns has no `MfgError` variant.** `### Failures` (line 1040)
+   - Now: "    DncSessionPreArmed  { machine: MachineSerial },"
+   - Must say: the same line, followed by "    GatewayUnreachable  { machine: MachineSerial },"
+   - Why: AGT's `read.machine_data` fails with `mfg/gateway_unreachable` (AGT lines 1181, 1269), and this tab owns the `mfg` family (line 1021: "Every `MfgError` variant renders as `mfg/<snake_case>`"). The gateway's other failures are already `MfgError` variants.
+3. **[medium] State the `realize:` point the process hand-off chooses.** `### The model a user meets` (line 102)
+   - Now: "Process profiles declare the representations their hand-off accepts."
+   - Must say: "Process profiles declare the representations their hand-off accepts and the `realize:` point their exports use, `Mid` for machining by default, recorded in the export record."
+   - Why: ING line 347 and MEC line 962 both say "MFG's process hand-off chooses the point, `Mid` for machining by default"; this tab never states it.
+4. **[medium] Two links name headings that do not exist.** `### As-built struts for GP2` (line 677) and `## Quality records: SPC, MSA, FAI and PPAP` (line 916)
+   - Now: "([COV, Validity envelopes as data](04-coverage.md#validity-envelopes-as-data))" → Must say: "([COV, Dynamics and stability](04-coverage.md#dynamics-and-stability))"
+   - Now: "[KLN, Change control, signatures and compliance](05-kiln-repo-plm.md#change-control-signatures-and-compliance)" → Must say: "[KLN, Revisions and lifecycle states](05-kiln-repo-plm.md#revisions-and-lifecycle-states)"
+   - Why: the strut-strength rule is D-COV-30 under COV `### Dynamics and stability` (COV line 339); `Proven` is a lifecycle state in KLN's `### Revisions and lifecycle states` table (KLN line 624).
+5. **[medium] Interfaces rows give wrong phases or omit what others read.** `## Interfaces with other subsystems` (lines 1138, 1140, 1144, 1147, 1149)
+   - Now: "| MEC | Process profiles (Cp, Cpk, accepted representations); DfAM, manufacturability and assembly checks; cost models | `Check`, `Field`, packages | 1 |" → Must say: "| MEC | Process profiles (Cp, Cpk, accepted representations); DfAM, manufacturability and assembly checks; cost models | `Check`, `Field`, packages | 1; 2 (Cp and Cpk, assembly checks) |". Line 922 declares Cp and Cpk in phase 2; design for assembly is phase 2 (line 875).
+   - Now: "| MEC | Press-brake allowance data; the harness manufacturing package; in-process drawings | Packages, drawings | 2 |" → Must say: "| MEC | Press-brake allowance data; in-process drawings; the harness manufacturing package | Packages, drawings | 2; 4 (harness package) |". The "Harness manufacturing package" row is phase 4 (line 859).
+   - Now: "| ELX | Rule packs by class; package choice; panels, stencils, test programs; fabrication feedback | `Check`, packages | 3 |" → Must say: "| ELX | Fabricator capability records (`fab::…`: laminates, via spans, spacing and HDI limits); rule packs by class; package choice; panels, stencils, test programs; fabrication feedback | `Check`, packages | 3 |". ELX reads them (ELX lines 399, 486, 562); line 842 makes them this tab's.
+   - Now: "`request_quote` and `publish_passport` payloads; `MfgError` fixes | Act plans | 2 |" → Must say: "`request_quote` and `publish_passport` payloads; `MfgError` fixes | Act plans | 2; 3 (`publish_passport`) |". Passports are phase 3 (line 1011; AGT line 928).
+   - Now: "| UIX | DfAM and carbon Fields, cost lines | `Field`, records | 1 |" → Must say: "| UIX | DfAM and carbon Fields, cost lines | `Field`, records | 1; 2 (carbon) |". Embodied carbon is phase 2 (line 1006).
+6. **[low] The approval page and its outcomes are copied from contract 7.6.** `### What the person approving sees and can do` (lines 522 to 532)
+   - Now: "MFG fills each physical-effect plan with the fields contract 7.6 requires of the approval page:" and the five bullets after it → Must say: "MFG fills each physical-effect plan with the fields contract 7.6 requires of the approval page, from the device serial to the steps the person at the device must take."
+   - Now: the paragraph beginning "The approver has three outcomes (contract 7.6)." → Must say: "The approver has the three outcomes of [AGT, Three outcomes](09-agents.md#three-outcomes). A shop lead who returns a program because of a feed in workingstep 3 gets a corrected plan back the same hour; only resubmitting the identical digest is refused."
+   - Why: contract 7.6 lists the page contents and the outcomes, and AGT owns the page (AGT line 969) and the outcome table (line 971). The copy also misstates "deny as suspicious": it blocks re-preparing a plan to the same recipients, not the recipients. Saves about 90 words.
+7. **[low] The bench session is copied from contract 7.6.** `### Prove-out and the minimum ceremony` (line 544)
+   - Now: the paragraph beginning "Repeated sends during prove-out use `bench_session` (contract 7.6), one AAL3 Approval for a run of transfers."
+   - Must say: "Repeated sends during prove-out use `bench_session`, one AAL3 Approval over the machine, the gateway and one program Item lineage ([AGT, Physical effects](09-agents.md#physical-effects))."
+   - Why: contract 7.6 ("Bench sessions") and AGT line 1024 state every clause.
+8. **[low] Forming simulation is this tab's.** `## Sheet cutting, nesting and press brake` (line 403)
+   - Now: "springback from measurement, and from Flux once sheet forming lands in phase 5 (contract 13.4)"
+   - Must say: "springback from measurement, and from this tab's forming simulation once it lands in phase 5 (contract 13.4)"
+   - Why: contract 13.4: "Sheet forming simulation and springback compensation | 5 | None | MFG"; this tab's rows 785 to 787 carry it.
+9. **[low] Inherent strain requires FLX's sequence row.** `### Distortion and compensation` capability table (line 704)
+   - Now: "Requires: FLX Element activation"
+   - Must say: "Requires: FLX Additive distortion sequence"
+   - Why: line 687 says "FLX owns inherent-strain prediction, phase 2 in contract 13.4, as a declared sequence"; the owner row is FLX's "Additive distortion sequence" (FLX line 849, phase 2). Element activation is one step of it.
+10. **[low] Abbreviations used before they are spelled out.** `### The model a user meets` (line 102), `## Programs, regeneration and agents` (line 492), `## Factory connection and digital twin` (line 954)
+    - Now: "which shops' CAM and CMM software read" → Must say: "which shops' CAM and coordinate measuring machine (CMM) software read"
+    - Now: "adds geometry, GD&T and kinematics to the program" → Must say: "adds geometry, GD&T (geometric dimensioning and tolerancing) and kinematics to the program"
+    - Now: "so this section connects machines, ERP and MES, and keeps per-serial records" → Must say: "so this section connects machines, enterprise resource planning (ERP) and manufacturing execution systems (MES), and keeps per-serial records"
+    - Why: contract 11 spells out every abbreviation at first use in each tab.
 
 ## ELX
 
-1. **[high] Piezo actuators precede Flux's and COV's piezo models.** `### Sensors and drives` (line 651) and `### Electric machines` (line 637)
-   - Now: "| Actuators | Force maps and lumped equivalents | As machine maps | ELX-O-MCH-2 | 4 |" → Must say: "| Actuators | Force maps and lumped equivalents (4); piezo stacks (5) | As machine maps | ELX-O-MCH-2 | 4, 5 |"
-   - Now: "piezo stacks use Flux's piezoelectric model with a Butterworth-Van Dyke lumped equivalent." → Must say: "piezo stacks use Flux's piezoelectric model with a Butterworth-Van Dyke lumped equivalent from phase 5."
-   - Why: FLX: "Piezoelectric and electrostatic MEMS | … | 5". COV's piezoelectric devices row is "5 · Nat". 13.4 forbids a row earlier than a capability it names.
-2. **[medium] A lumped DC motor before electrical DAEs.** `### Sensors and drives` (lines 654, 643)
-   - Now: "| Drivetrain coupling | ELX's drivetrain elements with ideal sources or a lumped DC motor in one Network | Port domain mismatch is a compile error | ELX-O-NET-3 | 2 |" → Must say: "| Drivetrain coupling | ELX's drivetrain elements with ideal sources (2) or a lumped DC motor (3) in one Network | Port domain mismatch is a compile error | ELX-O-NET-3 | 2, 3 |"
-   - Now: "ELX's drivetrain elements let GP3's gearbox and a lumped motor form one drivetrain from phase 2." → Must say: "ELX's drivetrain elements let GP3's gearbox and ideal sources form one drivetrain from phase 2, with a lumped motor from phase 3."
-   - Why: FLX: "`flux::solve_dae` | … | 2 (mechanical, thermal), 3 (electrical)". ELX's own electrical element library is phase 3.
-3. **[medium] `CatalogSelection` is needed at GP3.** `### Creating and migrating catalog parts` (line 284)
-   - Now: "| `CatalogSelection` | Pure over pinned definitions and offers; re-resolves when arguments change; recorded as `resolved:` once the layout is released | `SelectionError::NoCatalogMatch` with nearest candidates; `SelectionChangesLandPattern` | ELX-O-CAT-3 | 3 |"
-   - Must say: the same row ending "| ELX-O-CAT-3 | 2 (selection over pinned definitions), 3 (offers, land patterns, layout release) |"
-   - Why: ELX owns the type (D-ELX-3). 13.4 lands a capability at the first gate that needs it. That gate is GP3 in phase 2: ING's "Catalog selections" row and `bearing_62xx` example, and MEC's "Approved-parts selection", are both phase 2. This is judgment call 2 in the summary.
-4. **[medium] Datasheet extraction runs quarantined.** `### Creating and migrating catalog parts` (line 272)
-   - Now: "The datasheet is untrusted text, so the context is `instruction_tainted` and the values `data_untrusted` (contract sections 5 and 7.6); a human approves."
-   - Must say: "AGT's quarantined `std::agents::extract` reads the datasheet, so the values are `data_untrusted` and the agent's context stays clean (D-AGT-25); a human approves."
-   - Why: AGT owns context labels and extraction: "`std::agents::extract` runs a model with no tools and no other context that fills a templated Ingot record, schema-validated, range-checked and `data_untrusted`". AGT's ELX row provides "datasheet extraction, labelled `data_untrusted`".
-5. **[low] A dotted name for KLN's check.** `### Creating and migrating catalog parts` (line 286)
-   - Now: "`policy.unapproved_part` fails unless a Waiver names the part"
-   - Must say: "KLN's parts-policy check fails unless a Waiver names the part"
-   - Why: KLN owns the check ("Parts policy | … | Policy check fails without a Waiver | KLN-O-PLM-11"). Waivers name `CheckId`s, and the dotted form reads as an `api` method (contract 7.6).
-6. **[low] Benches are KLN's physical-test runners.** `### Hardware-in-the-loop and flashing` (line 696)
-   - Now: "bench adapters are external programs talking to `api`."
-   - Must say: "benches run as KLN's enrolled physical-test runners (D-KLN-35) talking to `api`."
-   - Why: contract 7.1: "Physical tests are Acts that run on hardware rigs". KLN owns runner enrolment and the TPM-signed Evidence record (D-KLN-35, `apps/rig-runner` in contract 12).
-7. **[medium] Change request without its section.** `## Contract change requests` (line 1058)
-   - Now: "None. CCR-ELX-8, the battery swelling and abuse rows, was accepted in contract v5."
-   - Must say: "None. CCR-ELX-8, the battery swelling and abuse rows, was accepted in contract v5 (section 13.4)."
+1. **[medium] Two links name headings that do not exist, and one copies KLN's report.** `### Choosing parts` (line 337) and `### Creating and migrating catalog parts` (line 358)
+   - Now: "([KLN, BOM views and where-used](05-kiln-repo-plm.md#bom-views-and-where-used)). The report lists the Items and effectivity, alternates found by re-running each `CatalogSelection` without the part, and a last-time-buy quantity when ERP demand is available." → Must say: "([KLN, Where-used](05-kiln-repo-plm.md#where-used))."
+   - Now: "([AGT, Quarantined extraction](09-agents.md#quarantined-extraction-and-external-hosts))" → Must say: "([AGT, Quarantined extraction](09-agents.md#quarantined-extraction))"
+   - Why: the nightly obsolescence check and its report are D-KLN-55 under KLN `### Where-used` (KLN lines 667, 671); AGT's heading is `### Quarantined extraction` (AGT line 822).
+2. **[medium] Three failure codes belong to other families.** `### Typed failures` (lines 1142, 1148, 1149) and the "Transient" row of `### Reliability prediction and derating` (line 737)
+   - Now: "| `elx/net_merge` (`Conflict::NetMerge`) | A merge that unions nets distinct on both sides | Resolve the conflicting `connect`s on one branch |" → Must say: delete the row.
+   - Now: "| `elx/step_too_small` | A transient that cannot advance | Check the device and nodes named |" → Must say: delete the row.
+   - Now: "`StepTooSmall` with time, device and nodes" → Must say: "FLX's `StepTooSmall { t }`, with the device and nodes named"
+   - Now: "| `elx/untranslated` | A Modelica construct outside the subset | Keep the FMU, or rewrite the construct |" → Must say: delete the row.
+   - Why: `Conflict::NetMerge` is KLN's merge-driver enum (KLN lines 1166 to 1173, row line 500); `StepTooSmall { t }` is `flux::solve_dae`'s failure (FLX line 811), rendered `flux/step_too_small`; `Untranslated { construct }` is ECO's Modelica reader failure (ECO line 232). Contract 7.6 renders each typed Failure once, in its owner's family. Lines 156 and 195 already name `Conflict::NetMerge` correctly.
+3. **[medium] The SysML v2 and ReqIF codecs are ECO's.** `### Crates, packages and WIT` (line 1087)
+   - Now: "the Verilog-A front end, the SysML v2 and ReqIF codecs |"
+   - Must say: "the Verilog-A front end |"
+   - Why: ECO owns the translators (ECO lines 870, 954), and contract 12 puts translators in `io/`; this tab's ownership table gives "every `io/` reader and writer" to ECO (line 104).
+4. **[low] Automatic test-point Proposals are MFG's test strategy.** `### Test points and the manufacturing handoff` (line 567)
+   - Now: "adds probe access, and an automatic Proposal adds test points to nets without access."
+   - Must say: "adds probe access, and MFG's test-access analysis proposes test points for nets without access."
+   - Why: MFG owns test strategy (MFG line 842) and specifies the Proposal ("Test access and programs", MFG line 857, MFG-O-PCB-6).
+5. **[medium] Rotor aerodynamics is FLX's, phase 4.** `### Sensors, drives and loads` (line 777)
+   - Now: "The map comes from FLX and COV's rotor aerodynamics: blade-element momentum theory at L1, and rotating-domain flow at L3 in phase 4 ([COV, Aerospace](04-coverage.md#aerospace))."
+   - Must say: "The map comes from FLX's rotor aerodynamics, phase 4 in contract 13.4: blade-element momentum theory at L1 up to rotating-domain flow at L3 ([FLX, Fluids and free surfaces](03-flux.md#fluids-and-free-surfaces))."
+   - Why: contract 13.4 (ruling CCR-FLX-12): rotor aerodynamics, phase 4, owner FLX, also COV and ELX; FLX line 526 holds the ladder; the link pointed at COV's coverage matrix rather than the owner.
+6. **[medium] The plane-pair cavity model is phase 4.** `### Power integrity` (line 615) and `## Phasing` (line 1314)
+   - Now: "comes from Flux's plane-pair cavity model ([FLX, Electromagnetics](03-flux.md#electromagnetics))." → Must say: "comes from Flux's plane-pair cavity model, phase 4 in contract 13.4 ([FLX, Electromagnetics](03-flux.md#electromagnetics))."
+   - Now: "conjugate heat transfer, Helmholtz solvers, electro-thermal coupling, RLCG and full-wave extraction, FMU export and SSP, and every battery cell row" → Must say: "conjugate heat transfer, Helmholtz solvers, electro-thermal coupling, RLCG and full-wave extraction, the plane-pair cavity model, rotor aerodynamics, FMU export and SSP, and every battery cell row"
+   - Why: contract 13.4 lists ELX under "Also phased in" for both v7.1 rows; "every other tab states the phase in one line and cites this section".
+7. **[low] The DFN pointer cites the wrong FLX section.** `### Cell models` (line 940)
+   - Now: "DFN cells use Flux's parameter-domain forms ([FLX, Fields](03-flux.md#fields)), and pack-scale models"
+   - Must say: "DFN cells use Flux's parameter-domain forms in phase 5 (contract 13.4; [FLX, One symbolic layer and compilation](03-flux.md#one-symbolic-layer-and-compilation)), and pack-scale models"
+   - Why: parameter-domain forms are D-FLX-38 (FLX line 282) under `### One symbolic layer and compilation`; contract 13.4 puts DFN at phase 5.
+8. **[low] The reason carries a list.** `### Analyses and their error budgets` (line 708)
+   - Now: "`Undecided { reason: Unquantified(ModelForm) }`"
+   - Must say: "`Undecided { reason: Unquantified([ModelForm]) }`"
+   - Why: contract 5.6: "`Undecided { reason: Unquantified(sources) }`"; ING line 837 writes `Unquantified([ModelForm])`.
+9. **[low] Flashing and bench sessions restate contract 7.6.** `### Flashing` (lines 901 and 905)
+   - Now: the step beginning "4. **Clients.** Client flashing runs only in code that verifies the Approval." → Must say: "4. **Clients.** Client flashing runs only in code that verifies the Approval ([AGT, Physical effects](09-agents.md#physical-effects)); on a rig under `unattended_safe`, `run_rig_test` covers it."
+   - Now: the paragraph beginning "A `bench_session` is one AAL3 Approval that covers a bench for at most 8 h (contract section 7.6)." → Must say: "A `bench_session` covers a bench under one AAL3 Approval ([AGT, Physical effects](09-agents.md#physical-effects)); for boards it names the probe, one Software item lineage and the board's hazard acknowledgements."
+   - Why: contract 7.6 ("Firmware", "Bench sessions") and AGT lines 1024 and 1025 state every clause. Saves about 110 words.
+10. **[medium] Rows that use FLX capabilities carry `Requires:` entries.** Capability tables (lines 649, 653, 656, 657, 968, 973, 1031). Append to the cell named:
+    - Line 649, Contract cell ending "full-wave for unmodelled discontinuities": ". Requires: FLX Frequency-domain electromagnetics"
+    - Line 653, Contract cell ending "plane-pair cavity model with capacitor, via and regulator elements": ". Requires: FLX Plane-pair cavity model"
+    - Line 657, Contract cell ending "fitted to passive SPICE subcircuits used as Network elements": ". Requires: FLX RLCG extraction"
+    - Line 968, Contract cell ending "to voltage, temperature and concentration Fields": ". Requires: FLX Parameter-domain spaces"
+    - Line 973, Contract cell ending "DFN cells in pack thermal": ". Requires: FLX Parameter-domain spaces"
+    - Line 1031, Contract cell ending "array factors over scan angle": ". Requires: FLX Periodic structures and arrays"
+    - Line 656, Now: "| Monolithic Newton with continuation (FLX) |" → Must say: "| Copper self-heating on FLX's monolithic coupling. Requires: FLX Electro-thermal coupling |"
+    - Why: contract 13.4: "A capability row that names another tab's capability carries a `Requires:` entry naming that row." Every target exists at the same or an earlier phase except "Electro-thermal coupling", which FLX's edit adds (see the rules on cross-tab `Requires:` entries).
+11. **[low] Bare "component".** `### Drawing what the code connected` (line 254)
+    - Now: "The component routes short connections as wires"
+    - Must say: "`autodraw` routes short connections as wires"
+    - Why: contract 2: a Wasm component is never a bare "component"; D-ELX-37 names it `schematic.autodraw`.
+12. **[low] Abbreviations used before they are spelled out.** `### Choosing parts` (line 332) and `### Crates, packages and WIT` (line 1090)
+    - Now: "the design, the ERP system and the assembly BOM disagree" → Must say: "the design, the enterprise resource planning (ERP) system and the assembly BOM disagree"
+    - Now: "The WIT package `crucible:electronics` holds the worlds" → Must say: "The WIT (WebAssembly Interface Types) package `crucible:electronics` holds the worlds"
+    - Why: contract 11.
+13. **[low] Git stores the text.** D-ELX-27's *Why:* (line 229)
+    - Now: "text-derived `CallSite`s and Git export"
+    - Must say: "text-derived `CallSite`s and Git storage"
+    - Why: contract 7.1 (v7.3, ruling FD-5).
 
 ## AGT
 
-1. **[high] `store_machine_job` precedes its OPC UA path.** `## Acts and approvals` (lines 880, 940)
-   - Now: "| `store_machine_job` | Physical effect | OPC UA job `Store` only | Revocable before start | 2 |" → Must say: the same row ending "| 3 |"
-   - Now: "These classes ship with MFG's transfers in phase 2, and `flash_device` with ELX's Software items in phase 3." → Must say: "These classes ship with MFG's transfers in phase 2, `store_machine_job` with the OPC UA path in phase 3, and `flash_device` with ELX's Software items in phase 3."
-   - Why: ECO owns the codec and its phase: "OPC UA for Machine Tools | … | R; jobs only by `store_machine_job` | Machine state | 3". MFG's OPC UA adapters are phase 3. Under 13.4 an Act cannot precede its transport. The CAM programmer role (line 482) can prepare it only from phase 3. This is judgment call 1 in the summary.
-2. **[high] `Authenticator` serves every client.** `## Acts and approvals` (line 890)
-   - Now: "so PLT's `Authenticator` serves only Crucible's own cloud."
-   - Must say: "so every client, Crucible's cloud included, approves in this browser session, which PLT's `Authenticator` opens (D-PLT-41)."
-   - Why: PLT owns `Authenticator`: it "opens the approval page of contract 7.6 for one request id … It never handles a credential". D-PLT-41: "Every client approves in a browser on the approval origin". The current wording implies in-app WebAuthn for the cloud.
-3. **[medium] Preemption restated against KLN's table.** `### Scheduling on Kiln workers` (lines 601, 602)
-   - Now: "| `Interactive` | Sessions where a human is waiting, drag streams included | Never preempted |" → Must say: "| `Interactive` | Sessions where a human is waiting, drag streams included | Only by drags, at node boundaries (KLN) |"
-   - Now: "| `Agent` | Agent sessions | By `Interactive`, at Op boundaries |" → Must say: "| `Agent` | Agent sessions | By `Interactive`, at node boundaries (KLN) |"
-   - Why: AGT owns `PriorityClass` values, and Kiln owns scheduling ("Kiln owns Op scheduling"). KLN's table preempts non-drag `Interactive` work by drags "at node boundaries", and `Agent` by "Both above, at node boundaries".
-4. **[medium] Interface rows name the drag methods and the stability analysis.** `### What AGT provides` (lines 1088, 1090, 1092) and `### What AGT requires` (line 1103)
-   - Now: "| ING | `SourcePatch` application; drag streams under `LiteralSite` overrides;" → Must say: "| ING | `SourcePatch` application; `evaluate.subscribe` and `edit.stream` under `LiteralSite` overrides;"
-   - Now: "| UIX | `inspect.render`, `inspect.ask_render`; drag streams;" → Must say: "| UIX | `inspect.render`, `inspect.ask_render`; `evaluate.subscribe` and `edit.stream`;"
-   - Now: "| ELX | `flash_device`; datasheet extraction, labelled `data_untrusted`; budget caps for long tool runs |" → Must say: "| ELX | `flash_device`; `edit.stream` and `edit.apply`; datasheet extraction, labelled `data_untrusted`; budget caps for long tool runs |"
-   - Now: "the stability analysis reporting `RankSwap`;" → Must say: "`anvil::query_stability` reporting `RankSwap`;"
-   - Why: ING, UIX and ELX require these methods by name, and AGT's catalog defines them (phase 1). ANV names the analysis `anvil::query_stability` (D-ANV-34, phase 1).
-5. **[medium] KLN's review record and Asset identity.** `## Method catalog` (line 339) and `### The Proposal object` (lines 635, 638)
-   - Now: "| `propose.review` † | Verdict, findings → `Review` |" → Must say: "| `propose.review` † | Verdict, findings → KLN's `ReviewVerdict` |"
-   - Now: "pub reviews: Vec<Review>," → Must say: "pub reviews: Vec<ReviewVerdict>,"
-   - Now: "pub snapshots: Vec<AssetId>," → Must say: "pub snapshots: Vec<ObjectId>,"
-   - Why: KLN defines "`Comment`, `ReviewVerdict` | Review records on a Proposal", and UIX agrees. `AssetId` exists nowhere else; Assets are content-addressed (contract 2).
-6. **[medium] The render request rebuilds `ViewState`.** `### Snapshots and Field overlays` (line 381)
-   - Now: "pub style: Style,                    // Shaded | HiddenLine | Wire | XRay"
-   - Must say: "pub style: DisplayStyle,             // UIX's: Shaded, HiddenLine, Wireframe, XRay …". Also add one sentence after the code block: "The server resolves each request to a UIX `ViewState`, so a Snapshot is a `ViewState` under a `RenderProfile` (contract 2)."
-   - Why: contract 5 makes `ViewState` [UIX] the one camera, visibility, section and Field-display record "used by the UI, agents, snapshots". Contract 2 defines a Snapshot from it. UIX's style type is `DisplayStyle`, with `Wireframe`.
-7. **[medium] Methods other tabs need that the catalog lacks.** `## Method catalog` (lines 286, 296, 301). The method names are AGT's choice.
-   - After "| `read.symbols` | Query → path, kind, signature, doc URI | — | AGT-O-16 | 1 |", add a Read method that carries ING's LSP 3.17 requests (completion, hover, inlay hints, semantic tokens, code actions) at a Change, phase 1. ING says "The UI and agents reach it through `api`", UIX's phase 1 code panel needs it, and D-AGT-1 maps every UI command to one method.
-   - After "| `read.catalog` | Filters → catalog part summaries |", add a Read method for COV's coverage map and limit records, phase 0. COV's "Coverage map" row (phase 0) promises "`api` Read methods", and AGT requires the map from COV.
-   - After "| `session.status` | Handle → head, grant, context label, usage, open Evaluations | `session/expired` | AGT-O-1 | 0 |", add a Session method for a typed question to the delegating human, and name the events the agent panel reads. UIX requires "agent events" and "questions" from AGT ("Agents ask through typed question cards whose answers return as typed data"), and AGT defines neither.
-8. **[medium] The canonical bracket description misreads ING's decision rule.** `### Sections and descriptions` (line 417)
-   - Now: "Checks: 1 of 1 `Pass` at `Interactive`. Regularized peak von Mises stress away from the clamp: 112 MPa ± 9 MPa (`Estimated`) against 165.6 MPa, margin 27% at the bound."
-   - Must say: "Checks: 1 of 1 provisional `Pass` at `Interactive`, conditional on model form. Regularized peak von Mises stress away from the clamp and loaded face: 112 MPa ± 20 MPa (`Estimated`) against 144 MPa, margin 8% at the bound."
-   - Why: ING owns the rule and the worked example: "a limit of 144 MPa to 165.6 MPa", and "`Interactive`: 112 MPa ± 20 MPa … a provisional `Pass { conditional_on: [model form] }`". Contract 6's region excludes "the clamp and the loaded face".
-9. **[low] Invalid query syntax.** `### Geometry queries` (line 365)
-   - Now: "`part.faces(normal: +z, area > 100mm2)`"
-   - Must say: "`part.faces(normal: +z, area: 100mm2..)`"
-   - Why: ING owns the syntax ("`area: 100mm2..`"), and contract 6 requires examples to follow Ingot's grammar.
-10. **[low] Lane, credential and CLI names.** `### Drag streams` (line 181), `## Method catalog` (line 326), `### What AGT requires` (line 1111)
-    - Now: "runs them on PLT's interactive pool lane." → Must say: "runs them on PLT's `Interactive` pool lane."
-    - Now: "a frame stream on the interactive lane" → Must say: "a frame stream on Kiln's drag lane"
-    - Now: "| PLT | Transport, `cli` exit codes, `Usage` measurement; keychain; the stdio MCP sandbox; the interactive pool lane; browser sessions and `Authenticator` |" → Must say: "| PLT | Transport, `Usage` measurement; `CredentialStore`; the stdio MCP sandbox; the `Interactive` pool lane; browser sessions and `Authenticator` |". Add "CLI exit codes;" to the ECO row.
-    - Why: PLT defines `enum PoolLane { Interactive, Foreground, Background }` and maps "AGT's interactive `PriorityClass` to `Foreground`", so a lowercase "interactive lane" is ambiguous. PLT's credentials type is `CredentialStore`. ECO specifies the exit codes ("Exit codes are 0 success, 1 Check failures, …"); PLT never does.
-11. **[low] OPC UA method count.** `## Acts and approvals` (line 936)
-    - Now: "The other eight job methods are uncallable [S69]."
-    - Must say: "Every other job method is uncallable [S69]."
-    - Why: MFG owns the allowlist: "ISA-95 Job Control defines eleven job-order methods". Eleven less the four named leaves seven.
-12. **[low] The `panel` world is UIX's.** `### Native SDKs and WIT` (line 257)
-    - Now: "`crucible:api` serves ECO's panel, tool and connector worlds"
-    - Must say: "`crucible:api` serves UIX's `panel` world and ECO's tool and connector worlds"
-    - Why: round 2's ruling: "UIX owns them: … worlds `panel`, `canvas2d`".
-13. **[low] UIX calls it the Proposal view.** `### Human review and separation of duties` (line 674) and `### What AGT requires` (line 1106)
-    - Now: "UIX's review view" → Must say: "UIX's Proposal view"
-    - Now: "| UIX | The renderer `apps/headless-render` links, with `RenderProfile`; the review view;" → Must say: "… with `RenderProfile`; the Proposal view;"
-    - Why: UIX's capability row and its AGT row name it "the Proposal view".
-14. **[medium] Change requests still written as pending.** `## Acts and approvals` (line 912), `## Open questions` (lines 1162, 1163), `## Contract change requests` (lines 1171 to 1174)
-    - Now: "since Acts have no risk class (CCR-AGT-11)." → Must say: "since Acts have no risk class (contract 7.6)."
-    - Now: "so the bootstrap is CCR-AGT-13." → Must say: "so contract 13.2 runs the `WorkItem` record over Git until then (CCR-AGT-13)."
-    - Now: "CCR-AGT-10 asks contract section 7.6 to say so." → Must say: "contract section 7.6 says so (CCR-AGT-10)."
-    - Now: the four bullets beginning "- **CCR-AGT-10.** Standing releases.", "- **CCR-AGT-11.** AAL3 for Acts.", "- **CCR-AGT-12.** Error codes." and "- **CCR-AGT-13.** Build-program bootstrap." → Must say: "- **CCR-AGT-10.** Standing releases: accepted in contract v6.1, section 7.6." / "- **CCR-AGT-11.** AAL3 for Acts: accepted in contract v6.1, section 7.6." / "- **CCR-AGT-12.** Error codes: accepted with CCR-KLN-9 and CCR-ECO-11 in contract v6.1, section 7.6." / "- **CCR-AGT-13.** Build-program bootstrap: accepted in contract v6.1, section 13.2."
-    - Why: contract 17 rules on all four. The edit saves about 110 words, which pays for items 6 and 7.
+1. **[high] Budget exhaustion is KLN's `BudgetExhausted` Abort.** `### Budgets and admission` (line 268) and the "Admission and metering" row (line 335)
+   - Now: "exhaustion aborts it at its last checkpoint." → Must say: "exhaustion is KLN's Abort `BudgetExhausted`, reported with the last safe point reached."
+   - Now: "`budget/exceeded`; a budget Abort keeps the checkpoint" → Must say: "`budget/exceeded`; KLN's Abort `BudgetExhausted`"
+   - Why: KLN owns work budgets (KLN line 227: "Exhausting it is the Abort `BudgetExhausted`, reported with the last safe point reached"), and contract 7.2 says no node that observed an Abort writes anything. "Checkpoint" now names only transparency-log heads (contract 7.1).
+2. **[high] The widened bracket's figures.** `### Widening the bracket` (line 25)
+   - Now: "74 MPa ± 7 MPa (`Estimated`) against a limit of 166 MPa"
+   - Must say: "72 MPa ± 9 MPa (`Estimated`) against a limit of 144 MPa"
+   - Why: 166 MPa is 0.6 × 276 MPa, the non-conservative end of COV's basis interval; COV line 15: the check "must hold at the interval's conservative end, here 144 MPa". The web-root bending stress scales with 1/width, so ING's `Interactive` 96 MPa ± 12 MPa at 60 mm (ING line 837) becomes 72 MPa ± 9 MPa at 80 mm.
+3. **[high] Single-person mode covers merge approvals.** `### Human review and separation of duties` (line 584) and `### Independent verifier` (line 509)
+   - Now: "each with a fresh approval credential bound to the call (contract 5.4)." → Must say: "each with a fresh approval credential bound to the call; in single-person mode the one person approves after an `Attested` verifier review, and the merge takes effect after contract 5.4's delay."
+   - Now: "The review is `Attested` only under a different delegating human, in the hosted crew or behind the model gateway" → Must say: "The review is `Attested` only in the hosted crew or behind the model gateway, under a different delegating human except in single-person mode (contract 5.4)"
+   - Why: contract 5.4 (ruling CCR-AGT-14): single-person mode "approves merges into a protected branch with a fresh approval credential after an `Attested` verifier review; the record takes effect after 72 h". As written, a one-person organization could never get an `Attested` review. See the contract items on the delay's scope and on attestation before phase 2.
+4. **[medium] CCR-AGT-14 is accepted.** `## Contract change requests` (line 1385)
+   - Now: the bullet beginning "- **CCR-AGT-14. Single-person merge approvals.**"
+   - Must say: "None."
+   - Why: contract 18 accepts it into 5.4.
+5. **[high] Failure codes no owner defines.** `### Method catalog` (lines 1203, 1204) and `### Error families` (lines 1267, 1269)
+   - Now: "`flux/study_invalid`; zones flag, never hide" → Must say: "`flux/study_error`; zones flag, never hide"
+   - Now: "| `flux`, `cov` | FLX, COV | `study_invalid`, `symmetry_broken`; validity failures |" → Must say: "| `flux`, `cov` | FLX, COV | `study_error`, `symmetry_broken`; validity failures |"
+   - Now: "| Setup → toolpaths, collisions, removal, cycle time | `mfg/setup_invalid` |" → Must say: "| Setup → toolpaths, collisions, removal, cycle time | `mfg/unreachable`, `mfg/infeasible`, `mfg/missing_data` |"
+   - Now: "`mfg/gateway_unreachable`, `mfg/setup_invalid`, `mfg/dnc_session_pre_armed`" → Must say: "`mfg/gateway_unreachable`, `mfg/plan_unapproved`, `mfg/dnc_session_pre_armed`"
+   - Why: FLX's study failure is `StudyError { missing, fix }` (FLX line 90), rendered `flux/<snake_case>` (line 1125). `MfgError` (MFG lines 1024 to 1041) has `Unreachable`, `Infeasible`, `MissingData` and `PlanUnapproved` but no `SetupInvalid`; MFG adds `GatewayUnreachable` (MFG 2). The `ui` family for UIX stays as registered; UIX follows it.
+6. **[medium] Register KLN's other families.** `### Error families` (line 1268)
+   - Now: "| `kiln`, `repo`, `plm`, `trust` | KLN |"
+   - Must say: "| `kiln`, `cas`, `repo`, `plm`, `trust`, `evidence`, `share` | KLN |"
+   - Why: contract 7.6: AGT keeps the registry. KLN declares `cas`, `evidence` and `share` "registered with AGT" (KLN line 126) and raises `cas/corrupt`, `evidence/calibration_expired` and `share/quota_exceeded` (KLN lines 389, 806, 990).
+7. **[medium] `self_approve_transfer` is enabled by a widening Cedar change.** `### Physical effects` (line 1026)
+   - Now: "off by default and enabled by the site's safety officer, lets the person who prepared a transfer approve it with AAL3"
+   - Must say: "off by default and enabled by a widening Cedar change that names the site's safety officer, lets the person who prepared a transfer approve it with AAL3"
+   - Why: MFG owns the policy: MFG line 546, "enabling it is a widening Cedar change signed under contract 5.4, and the record names the site's safety officer"; contract 5.4 gives a widening Cedar change to two people.
+8. **[medium] The export Act carries outside web-view links.** `### Act kinds` (line 924)
+   - Now: "| `export` | Data release | A repository archive or release bundle; a Git mirror, a branch shared with another organization or a message to a connector | Irreversible; sharing revocable going forward | 1 (archive, bundle), 2 (others) |"
+   - Must say: "| `export` | Data release | A repository archive, release bundle or web-view link; a Git mirror, a branch shared with another organization or a message to a connector | Irreversible; sharing revocable going forward | 1 (archive, bundle, web-view link), 2 (others) |"
+   - Why: UIX's phase 1 shareable web views (parity floor, contract 13.4) create outside links "by a `release_data` Act naming the recipients" (D-UIX-38, UIX lines 354, 387); D-AGT-36 makes sharing with another organization an `export` Act, but its effects and phase omit web views.
+9. **[medium] Interfaces rows give wrong phases.** `## Interfaces with other subsystems` (lines 1323, 1327, 1328)
+   - Now: "| `Budget`, `PriorityClass`, `Proposal` | 1 |" → Must say: "| `Budget`, `PriorityClass`, `Proposal` | 0 (`PriorityClass`); 1 |". KLN uses `PriorityClass` in phase 0 (KLN lines 231, 1401).
+   - Now: "`bench_session`; `read.machine_data`; the CAM programmer | `ActPlan` | 2 |" → Must say: "`bench_session`; `read.machine_data`; the CAM programmer | `ActPlan` | 2; 3 (`publish_passport`, `store_machine_job`) |". This tab's Act table (lines 928, 934).
+   - Now: "datasheet extraction, labelled `data_untrusted`; budget caps for long tool runs | API method, `Proposal` | 1 |" → Must say: "datasheet extraction, labelled `data_untrusted`; budget caps for long tool runs | API method, `Proposal` | 1; 2 (extraction) |". Quarantined extraction is phase 2 (lines 824, 852).
+10. **[low] The OPC UA allowlist is MFG's.** `### Physical effects` (line 1023)
+    - Now: "- **OPC UA.** Crucible calls `Store` only in `store_machine_job`, and `Cancel`, `Clear` and `RevokeStart` only on its own unstarted jobs; every other job-control method is uncallable [OPC 10031-4]."
+    - Must say: "- **OPC UA.** `store_machine_job` calls only the job methods MFG allows ([MFG, Acts, payloads and wire-level rules](07-manufacturing.md#acts-payloads-and-wire-level-rules))."
+    - Why: MFG owns the gateway's wire rules (MFG line 584, MFG-O-SAFE-3). Drop the `[OPC 10031-4]` Sources row if nothing else cites it.
+11. **[low] Abbreviations used before they are spelled out.** `### One catalog` (line 80) and `### Role catalog` (line 486)
+    - Now: "MCP tools, SDK methods, WIT functions, UI commands" → Must say: "MCP tools, SDK methods, WIT (WebAssembly Interface Types) functions, UI commands"
+    - Now: "| Drawing and MBD author |" → Must say: "| Drawing and model-based definition author |"
+    - Why: contract 11.
 
 ## UIX
 
-1. **[medium] The join table is the face table.** `### Display data` (line 210), `### Large assemblies and picking` (line 243), the capability table after `### Snapshots` (line 313), `### What UIX requires` (line 916)
-   - Now: "The renderer maps them to `EntityId`s through the Body's name table, keyed by the Body's `ObjectId`." / "maps to the design's `EntityId` through the name table." / "Name-free `DisplayPackage`s joined to the name table;" / "`anvil::cluster_dag` from phase 2; the Body's name table;"
-   - Must say: "face table" in place of "name table" in each.
-   - Why: contract 5 `DisplayPackage` [ANV, UIX] joins canonical numbers to `EntityId`s "through the Body's face table". ANV's `anvil::tessellate` row and ANV's UIX row say "face table". ANV's line 124 uses "name table" for derived artifacts in general.
-2. **[medium] Forward-mode derivatives are phase 2.** `### From gesture to Ingot edit` (line 413)
-   - Now: "ING's forward-mode derivatives solve for the free literal from phase 1."
-   - Must say: "ING's forward-mode derivatives solve for the free literal from phase 2."
-   - Why: ING owns derivatives: "| Derivatives | Dependence and provenance ranking (1); forward and reverse modes (2) |". If UIX needs this in phase 1, ING moves forward mode instead.
-3. **[medium] `Authenticator` opens the approval session.** `## Open questions` (line 1008)
-   - Now: "so no approval runs in the app's process or through PLT's `Authenticator`."
-   - Must say: "so no approval runs in the app's process; PLT's `Authenticator` only opens that session (D-PLT-41)."
-   - Why: PLT: "`Authenticator` opens the approval page … It never handles a credential", and "only UIX's approval flow may call `Authenticator`".
-4. **[medium] 3D mice use PLT's `NavDeviceEvent`.** `### Devices` (D-UIX-31, line 677), `### Localization and units` (line 724), `### What UIX requires` (line 924)
-   - Now: "through PLT's `DeviceIo` on every desktop OS" / "| 3D mice | HID through `DeviceIo`; WebHID in Chromium |" / "clipboard flags, `DeviceIo`, hardware profile"
-   - Must say: `NavDeviceEvent` in place of `DeviceIo` in each.
-   - Why: PLT owns `platform-api`. It reads "6-DoF devices | `NavDeviceEvent` from HID", and "`DeviceIo` opens serial and USB ports outside evaluation for MFG's machine gateway and ELX's bench adapters".
-5. **[medium] A render is instruction-capable, not `instruction_tainted`.** The capability table after `### Snapshots` (line 308)
-   - Now: "A render showing geometry or appearance from an untrusted Asset is `instruction_tainted`, and agents"
-   - Must say: "A render is instruction-capable when imported appearance or any visible Body derives from an untrusted node (D-AGT-26), and agents"
-   - Why: AGT owns the labels. D-AGT-26 and contract 7.6 make a Snapshot "instruction-capable". `instruction_tainted` is the context flag that reading one sets, and a merged Asset's geometry is trusted (contract 5 `Labels`).
-6. **[low] Bode charts arrive after ELX's phase 3 AC analysis.** `## Field views` (lines 370, 380) and `### What UIX provides` (line 905)
-   - Now: "| Bode, Smith and eye diagrams | Fields over frequency, and folded time | 4 |" → Must say: "… | 3 (Bode), 4 |"
-   - Now: "| UIX-O-FIELD-1 | 2 (waveforms); 4 |" → Must say: "| UIX-O-FIELD-1 | 2 (waveforms); 3 (Bode); 4 |"
-   - Now: "waveform, Smith and eye charts" → Must say: "waveform, Bode, Smith and eye charts"
-   - Why: ELX's AC, noise and loop-stability rows are phase 3 (GP5), and ELX requires "waveform, Bode, Smith and eye charts" from UIX. 13.4 lands a capability at the first gate that needs it.
-7. **[low] Credential enrolment comes from PLT.** `### What UIX requires` (lines 920, 924)
-   - Now: "the approval page's content; credential enrolment; `session.control`" → Must say: "the approval page's content; `session.control`". Add "credential enrolment" to the PLT row after "the approval browser session and `crucible://` callback".
-   - Why: PLT specifies "WebAuthn | Approval and enrollment in a browser session (D-PLT-41)". AGT specifies no enrolment.
-8. **[low] No hosted agent before phase 2.** `### Agents` (line 542), `### Handles, push-pull and sketching` (line 453), `## Design system and onboarding` (line 777)
-   - Now: "goes to the default agent, and the palette says so first." / ""Constrain fully" asks an agent for an `EditPlan` preview." / "Unknown term: the palette offers the agent"
-   - Must say: "goes to the hosted crew (phase 2), and the palette says so first." / ""Constrain fully" asks the hosted crew (phase 2) for an `EditPlan` preview." / "Unknown term: the palette offers the crew (phase 2)"
-   - Why: AGT's "Hosted crew | `apps/crew` … | AGT-O-15 | 2", and contract 13.2 defers it. Phase 1 agents run in external MCP hosts, which the server cannot prompt.
-9. **[low] The results example disagrees with ING's numbers.** `### Studies and results` (line 593)
-   - Now: "beyond 8 mm from the clamp: `Pass`, margin 18% (`Estimated`, ±4%)"
-   - Must say: "beyond 8 mm from the clamp and loaded face: conditional `Pass` at `SignOff`, margin 17% at the bound (`Estimated`, ±1.5 MPa)"
-   - Why: ING's `SignOff` row is "118 MPa ± 1.5 MPa" → "`Pass { conditional_on: [model form] }`" against 144 MPa, and contract 6's region excludes the loaded face.
-10. **[medium] Change requests still written as pending.** `### GPU capability tiers` (line 187), `## Open questions` (line 1011), `## Contract change requests` (lines 1019, 1020)
-    - Now: "a measured capacity in the graphics popover (CCR-UIX-8)." → Must say: "a measured capacity in the graphics popover (contract 13.3)."
-    - Now: "- R8-18 and R12-28, applied in this tab. The contract's own wording is CCR-UIX-7 and CCR-UIX-8." → Must say: "- R8-18 and R12-28, applied in this tab and in contract 5 and 13.3 (CCR-UIX-7, CCR-UIX-8)."
-    - Now: the bullet beginning "- **CCR-UIX-7, name-free `DisplayPackage` (contract 5).**" → Must say: "- CCR-UIX-7, name-free `DisplayPackage`: accepted with CCR-ANV-9 in contract v6.1 (section 5)."
-    - Now: the bullet beginning "- **CCR-UIX-8, `compute_raster` capacity (contract 13.3).**" → Must say: "- CCR-UIX-8, `compute_raster` capacity: accepted in contract v6.1 (section 13.3)."
-    - Why: contract 17 rules on both. The edit saves about 70 words, which UIX's 19 words of room need for items 5 and 6.
+1. **[high] Transients animate from phase 2.** `### What the studio makes` (line 283) and the capability row (line 383)
+   - Now: "| Field and deformed-shape animation | Deformation under load, mode shapes and transients, scaled and labelled | 1 |" → Must say: "| Field and deformed-shape animation | Deformation under load and mode shapes, scaled and labelled; transients from phase 2 | 1 |"
+   - Now: "| Deformation, mode shapes and transients with stated scale | Frame cache evicted: recomputed with progress | UIX-O-ANIM-1 | 1 |" → Must say: "| Deformation, mode shapes and transients with stated scale | Frame cache evicted: recomputed with progress. Requires: FLX Mode shapes | UIX-O-ANIM-1 | 1; 2 (transients) |"
+   - Why: FLX's time integrators are phase 2 (FLX line 676); this tab's Field views phase transients at 2 (line 786). FLX's "Mode shapes" row is phase 1.
+2. **[high] `store_machine_job` is phase 3.** `### Phones, devices and exports` capability table (line 271)
+   - Now: "Printer code missing, wrong or stale: no start; main-origin flash attempt: refused | UIX-O-APPR-1 | 2; 3 (`flash_device`) |"
+   - Must say: "Printer code missing, wrong or stale: no start; main-origin flash attempt: refused. Requires: AGT Physical-effect Acts | UIX-O-APPR-1 | 2; 3 (`store_machine_job`, `flash_device`) |"
+   - Why: AGT's Act table: `store_machine_job` phase 3 (AGT line 934).
+3. **[high] The drag oracle uses PLT's statistic.** `## Oracles`, UIX-O-DRAG-1 (line 1270) and UIX-O-PERF-1 (line 1264)
+   - Now: "Late- and early-edit scripts meet contract 13.3's drag row at p95" → Must say: "Late- and early-edit scripts meet contract 13.3's drag row at p90"
+   - Now: "Benchmark and held-out scenes meet contract 13.3's rows and this tab's budgets at p95" → Must say: "Benchmark and held-out scenes meet contract 13.3's rows at PLT's statistic per row and this tab's budgets at p95"
+   - Why: PLT owns 13.3's benchmark files and percentiles (contract 13.3): "Drag preview | … | Warm; p90" (PLT line 1146), selection and input to photon at p99 (PLT lines 1139, 1153).
+4. **[high] Label-aware egress includes `controls`.** D-UIX-28 (line 992), the "Label-aware egress" row (line 1028) and UIX-O-PRIV-2 (line 1294)
+   - Now: "**Decision D-UIX-28:** Above `internal`, nothing the UI sends outside the organization carries content" → Must say: "**Decision D-UIX-28:** Above `internal` or with any `controls`, nothing the UI sends outside the organization carries content"
+   - Now: "| Nothing with content leaves above `internal` |" → Must say: "| Nothing with content leaves above `internal` or with `controls` |"
+   - Now: "Above `internal`, notifications, push, crash uploads and bundles hold no content" → Must say: "Above `internal` or with `controls`, notifications, push, crash uploads and bundles hold no content"
+   - Why: PLT owns egress (contract 7.8); D-PLT-38 (PLT line 830): "Content labelled above `internal` or with non-empty `controls` follows one egress rule".
+5. **[medium] Locks fail with KLN's `repo/lock_held`.** `## Collaboration` capability table (line 892) and UIX-O-OFFLINE-1 (line 1297)
+   - Now: "Agent edit to a locked block: `LockHeld` on the timeline" → Must say: "Agent edit to a locked block: `repo/lock_held` on the timeline. Requires: KLN Live sessions"
+   - Now: "an agent edit to a locked block shows `LockHeld`" → Must say: "an agent edit to a locked block shows `repo/lock_held`"
+   - Why: KLN line 553: "Presence and locks | … | `repo/lock_held`".
+6. **[medium] The lint family is AGT's registered `ui`.** `### Presentation files` (line 302) and the "Readouts" row (line 379)
+   - Now: "raises the lint `uix/literal_number_in_caption`" → Must say: "raises the lint `ui/literal_number_in_caption`"
+   - Now: "Typed number in a caption: `uix/literal_number_in_caption`" → Must say: "Typed number in a caption: `ui/literal_number_in_caption`"
+   - Why: contract 7.6: AGT keeps the family registry, and AGT registers `ui` for UIX (AGT line 1269).
+7. **[medium] The bracket's readout uses ING's figures.** `### Studies and results` (line 812)
+   - Now: "margin 17% at the bound (`Estimated`, ±1.5 MPa)"
+   - Must say: "94 MPa ± 1.5 MPa (`Estimated`) against 144 MPa"
+   - Why: ING owns the walk-through: "`SignOff`, 6 mm: 94 MPa ± 1.5 MPa" (ING line 838) against the 144 MPa limit (COV line 15). 17% matches neither.
+8. **[medium] Exploded views require MEC's steps, and `explode_auto` is phase 3.** `### Rendered images and the audit` capability table (line 382)
+   - Now: "| MEC's explode steps with trail lines and eased motion | Step unresolved after a rebuild: `explode_auto` steps offered |"
+   - Must say: "| MEC's explode steps with trail lines and eased motion | Step unresolved after a rebuild: the step is named with its `ResolveError`; `explode_auto` proposals from phase 3. Requires: MEC Exploded views |"
+   - Why: MEC's "Exploded views" row phases automatic proposals at 3 (MEC line 646). MEC moves ordered steps to phase 1 in its edit, which this entry then guards (see the rules on cross-tab `Requires:` entries).
+9. **[medium] Native accessibility adapters are phase 0 on Windows only.** `### Text and accessibility` capability table (line 579)
+   - Now: "A widget without name or role fails the build | UIX-O-A11Y-1 | 0; 1 (web) |"
+   - Must say: "A widget without name or role fails the build. Requires: PLT Accessibility | UIX-O-A11Y-1 | 0 (Windows); 1 (other desktops, web) |"
+   - Why: PLT's "Accessibility" row: "0 (Windows), 1 (desktop, web), 3 (tablets)" (PLT line 501).
+10. **[medium] Reports render HTML through the headless renderer.** `### Presentation files` (line 304)
+    - Now: "Reports render through MEC's drawing and document pipeline to PDF/A-2u, the archival profile MEC uses for release drawings, and to HTML ([MEC, Drawings](06-mechanical.md#drawings))."
+    - Must say: "Reports render to PDF/A-2u through MEC's drawing pipeline, the archival profile MEC uses for release drawings ([MEC, Drawings](06-mechanical.md#drawings)), and to HTML through `apps/headless-render`."
+    - Why: MEC's sheets output "PDF, SVG and PDF/A-2u" (MEC line 1126) and offers no HTML document pipeline; reports are this tab's parity-floor row (contract 13.4).
+11. **[medium] Interfaces rows to ECO and PLT.** `## Interfaces with other subsystems` (lines 1235, 1236)
+    - Now: "scene cameras for glTF and OpenUSD export | WIT `crucible:ui`, `ViewState` | 1; 2 (glTF); 3 (OpenUSD) |" → Must say: "scene cameras for glTF and OpenUSD export | WIT `crucible:ui`, `ViewState` | 1 (schemas, package pages, grants); 2 (marketplace, glTF); 3 (`crucible:ui` worlds, panel chrome, OpenUSD) |". This tab's rows 1034 and 1035 are phase 3; marketplace listings open in phase 2 (line 32; ECO line 655).
+    - Now: "| PLT | The AccessKit tree; device-loss and safe-mode behaviour; benchmark rows; telemetry fields; the copy budget; render-quality levels; the web-view viewer build | `ViewState` | 0 |" → Must say: "| PLT | The AccessKit tree; device-loss recovery and the G3 path for safe mode; frame budgets and capacity per tier; telemetry fields; the display-data copy budget; the web-view viewer build | `ViewState` | 0; 1 (web-view viewer); 2 (telemetry) |". "Copy budget" and "render-quality levels" are defined nowhere; this tab's terms are at lines 603 and 717 and D-UIX-22.
+12. **[medium] Five links name headings that do not exist.** `### The approval page` (line 242), `### Exploded views and motion` (line 324), `### Assemblies` (line 480), `## Field views` (line 768), `## Collaboration` (line 883)
+    - Now: "([KLN, Change orders](05-kiln-repo-plm.md#change-orders))" → Must say: "([KLN, Review routes and delegation](05-kiln-repo-plm.md#review-routes-and-delegation))"
+    - Now: "([MEC, Exploded views](06-mechanical.md#exploded-views-subassemblies-and-interfaces))" → Must say: "([MEC, Designing across parts](06-mechanical.md#designing-across-parts))"
+    - Now: "([MEC, Exploded views, subassemblies and interfaces](06-mechanical.md#exploded-views-subassemblies-and-interfaces))" → Must say: "([MEC, Designing across parts](06-mechanical.md#designing-across-parts))"
+    - Now: "([FLX, Post-processing and display](03-flux.md#post-processing-and-display))" → Must say: "([FLX, Display](03-flux.md#display))"
+    - Now: "([KLN, Live documents](05-kiln-repo-plm.md#live-documents))" → Must say: "([KLN, Live sessions](05-kiln-repo-plm.md#live-sessions))"
+    - Why: KLN's headings are `### Review routes and delegation` (line 715) and `### Live sessions` (line 508); `explode` and context pins are under MEC `### Designing across parts` (MEC lines 549 to 573); FLX's evaluators are under `### Display` (FLX line 1026). The broken link at line 239 goes with UIX 18.
+13. **[medium] Rows that use other tabs' capabilities carry `Requires:` entries.** Append ". Requires: <entry>" to the Failure cell of each row (every target exists at the same or an earlier phase):
+
+    | Line | Row | Entry |
+    | --- | --- | --- |
+    | 143 | Item place | KLN Items, numbering and labels |
+    | 218 | Electronics review diffs | ELX Electronics review diffs |
+    | 223 | Find similar | KLN Classification and shape-similarity search |
+    | 269 | Review-route progress | KLN Review routes and delegation |
+    | 384 | Animation of moving parts | MEC Kinematics and motion studies |
+    | 388 | Reports | FLX Reports; MEC Sheets, title blocks and standards |
+    | 515 | Feature dialogs | ING Dialogs from signatures |
+    | 517 | Drag preview | AGT Drag streams |
+    | 520 | Push-pull | ANV `anvil::offset_faces` |
+    | 521 | Insert Instance and Add mate | MEC Mate solve and diagnosis |
+    | 523 | Edit in context | MEC In-context design |
+    | 524 | Sketching and inference | MEC Sketch edits |
+    | 525 | Reference images | MEC Reference images |
+    | 527 | Family table editor | MEC Configurations and families |
+    | 529 | Code panel | ING Language service |
+    | 726 | Virtualized geometry | ANV `anvil::cluster_dag` |
+    | 727 | GPU device loss | PLT GPU device loss |
+    | 736 | Implicit display | ANV WGSL tape interpreter |
+    | 795 | Field colour, isolines and probes | FLX Display evaluators |
+    | 797 | Discretization view | FLX Discretization Fields |
+    | 852 | Study setup | FLX Remote points |
+    | 854 | Submodel template | FLX Submodeling |
+    | 856 | DfAM and build preview | MFG DfAM checks |
+    | 857 | Cost panel | MFG Parametric cost |
+    | 859 | Toolpath edit selection | MFG Toolpath editing |
+    | 860 | NC code panel | MFG Semantic NC diff and block map |
+    | 861 | Setup-sheet preview | MFG Setup sheet |
+    | 862 | EBOM and MBOM editor | MFG MBOM and routings |
+    | 864 | Automatic drawings and revision markers | MEC Revision markers |
+    | 866 | Schematic, layout and constraint-manager canvases | ELX Interactive routing |
+    | 889 | Presence and follow mode | KLN Presence and locks |
+    | 893 | Offline and rejoin | KLN Offline rejoin |
+    | 949 | 3D mice | PLT 6-DoF devices |
+    | 1029 | Telemetry | PLT Telemetry pipeline |
+
+    - Why: contract 13.4: "A capability row that names another tab's capability carries a `Requires:` entry naming that row." This tab has none. Rows 271, 382, 383, 579 and 892 get theirs in the edits above.
+14. **[low] The Item place shows quality records from phase 3.** `### Places and the workspace` (line 31)
+    - Now: "change orders and their review routes, compliance, cost, similar Items |"
+    - Must say: "change orders and their review routes, compliance, cost, similar Items; quality records from phase 3 |"
+    - Why: KLN provides "quality-record and route views" to this tab (KLN line 1313); its "Quality records" row is phase 3 (KLN line 779).
+15. **[low] The drag lane is PLT's.** `### Drag preview` (line 455)
+    - Now: "| Preview | While dragging, on Kiln's drag lane |"
+    - Must say: "| Preview | While dragging, on PLT's `Drag` lane |"
+    - Why: contract 12: `PoolLane { Drag, Foreground, Background }` is PLT's; line 460 of this tab already says so.
+16. **[low] A conventions table that does not exist.** `## Platform notes` (line 1219)
+    - Now: "native dialogs differ by OS, listed in one conventions table owned with PLT"
+    - Must say: "native dialogs differ by OS"
+    - Why: neither PLT nor this tab has such a table, and PLT's Interfaces row to UIX offers none.
+17. **[low] Abbreviations used before they are spelled out.** `### Approvals` (line 234) and `### Extending the interface` (line 1014)
+    - Now: "an in-app webview or an MCP host's viewer" → Must say: "an in-app webview or the viewer of an MCP (Model Context Protocol) host"
+    - Now: "Code-driven views are Wasm components in the `crucible:ui` WIT package" → Must say: "Code-driven views are Wasm components in the `crucible:ui` WIT (WebAssembly Interface Types) package"
+    - Why: contract 11.
+18. **[low] The approval sections copy AGT, KLN, PLT and contract 7.6.** `### The approval page` (lines 238 to 246), `### Credentials` (lines 250, 252), `### Phones, devices and exports` (lines 256, 258, 260)
+    - Now: the bullet beginning "- **Isolation.** The page renders only server-generated text under a strict content security policy" → Must say: "- **Origin.** The page lives on AGT's approval origin ([AGT, Plans and the approval page](09-agents.md#plans-and-the-approval-page)), opened through PLT's browser session."
+    - Now: the bullet beginning "- **Challenges.** Each WebAuthn challenge follows KLN's one definition" → Must say: delete the bullet.
+    - Now: the bullet beginning "- **Clients.** The web client opens the page as a top-level page." → Must say: delete the bullet.
+    - Now: the paragraph beginning "The page offers three outcomes. **Approve** signs." → Must say: "The page offers contract 7.6's three outcomes ([AGT, Three outcomes](09-agents.md#three-outcomes))."
+    - Now: the paragraph beginning "Delivery follows contract 7.6: only Cedar-assigned approvers' inboxes" → Must say: delete the paragraph.
+    - Now: the paragraph beginning "Only a device-bound credential enrolled for approval approves." → Must say: "Approval credentials are device-bound and never synced (contract 7.6)."
+    - Now: "The person's existing approval credential approves it; a first credential needs an `admin` plus a recorded identity check and takes effect after 24 h." → Must say: delete the sentence.
+    - Now: "In a phone browser on the approval origin, a person may approve release and change-notice Acts that carry no `controls` and no physical effect, with an allowlisted security key over NFC or USB. Physical-effect Acts, `controls` payloads and Part 11 signatures never appear as approvable on a phone." → Must say: "Which Acts a phone browser may approve is contract 7.6's rule; the others show read-only with the reason."
+    - Now: "The Manufacture preset offers the transfer Acts (`send_to_machine`, `send_robot_program`, `store_machine_job`, `send_print_job`) and," → Must say: "The Manufacture preset offers contract 7.6's transfer Acts and,"
+    - Now: the three sentences from "In a browser, the flash runs on the approval page after the ceremony." to "before any byte reaches the probe." → Must say: "It flashes only from code that verifies the Approval ([AGT, Physical effects](09-agents.md#physical-effects))."
+    - Why: AGT owns the approval origin and page (contract 7.6; AGT lines 963 to 987), KLN the challenge (D-KLN-58), PLT the client session (D-PLT-41), and contract 7.6 the outcomes, delivery, credentials, phones, the physical-effect list ("This is the only list") and client flashing. The cut also removes the broken `#electronic-signatures` link and "PLT's flashing service", which contract 7.6 places in `apps/platform-*` as ELX's service. Saves about 330 words in the tab closest to its ceiling.
 
 ## ECO
 
-1. **[high] An Act class that does not exist.** `### Enterprise connectors` (line 579)
-   - Now: "where the external system is the only approver, the Act is `publish_to_system_of_record` (KLN)."
-   - Must say: "where the external system is the only approver, the release Act's Approval covers only the publication, and the release record says "approved externally" (KLN)."
-   - Why: AGT owns Act classes, and its table has no such class. KLN owns the policy (D-KLN-39): "that Approval covers only the publication", and its open question 5 says "Applied without a new Act name".
-2. **[high] Release drawings are PDF/A-2u.** `### Mechanical CAD and product data` (line 171)
-   - Now: "PDF 2.0; SVG 1.1 Second Edition [SVG 1.1]; PDF/A-4, ISO 19005-4:2020 [PDF/A wiki]"
-   - Must say: "PDF 2.0; SVG 1.1 Second Edition [SVG 1.1]; PDF/A-2u (ISO 19005-2:2011) for release drawings and PDF/A-4 (ISO 19005-4:2020) as MEC's option [PDF/A wiki]"
-   - Why: ECO owns writers, but MEC's design section fixes the release format: "Release drawings are PDF/A-2, conformance level u (ISO 19005-2:2011) … PDF/A-4 … is an option". ECO's row names MEC as the format's owner, and GP1's phase 1 drawings need it.
-3. **[high] Operations that do not exist.** `## Interfaces with other subsystems` (lines 935, 937)
-   - Now: "`crucible:geom` and `anvil::measure_*`" → Must say: "`crucible:geom`; `anvil::mass_properties`, `distance` and `deviation`"
-   - Now: "`crucible:field` and `flux::sample`" → Must say: "`crucible:field` and `flux::field_sample`"
-   - Why: ANV's measures are `anvil::mass_properties`, `anvil::distance` and `anvil::deviation`; FLX's catalog names `field_sample`. Both are reached through `crucible:ops`, as ECO's own D-ECO-7 requires (see ANV 2 and FLX 2).
-4. **[medium] Netlist writers ELX needs.** `### Electronics` (lines 204, 208)
-   - Now: "| KiCad files | S-expression formats [KiCad formats] | R; W of libraries |" → Must say: "| KiCad files | S-expression formats [KiCad formats] | R; W of libraries and netlists |"
-   - Now: "| SPICE netlists and models; Verilog-A | The ngspice, PSpice and LTspice dialects ELX reads | R |" → Must say: "… | R; W of netlists |"
-   - Why: ECO owns every writer. ELX specifies "Netlists export as SPICE, KiCad netlist and EDIF 2 0 0" with a phase 3 row (ELX-O-SCH-3), and ECO lists only EDIF as written.
-5. **[medium] Memory is reserved as it grows.** `### Determinism and limits` (line 462)
-   - Now: "and PLT reserves declared memory before instantiation."
-   - Must say: "and PLT's limiter reserves budget as memory grows."
-   - Why: PLT owns the runtime: "its limiter reserves budget as memory grows (R3-33)". Contract 7.4's growth guards assume failures below the maximum.
-6. **[medium] Licence evidence is needed in phase 0.** `### Round trips, fuzzing and qualification` (line 312) and `## Interfaces with other subsystems` (line 935)
-   - Now: "| Corpora by hash list | No vendored third-party data; per-item licence evidence | An item without evidence is not fetched | ECO-O-31 | 1 |" → Must say: the same row ending "| ECO-O-31 | 0 |"
-   - Now: "| `crucible:ops` bindings from its catalog |" → Must say: "| `crucible:ops` bindings from its catalog; per-model licence evidence for the ABC subset (phase 0) |"
-   - Why: ANV builds its phase 0 re-fillet corpus and SSI cost spike "from the licence-filtered ABC subset" and requires the evidence from ECO. Contract 13.3 says models without it are not copied.
-7. **[medium] Release-data records and the standing-release decision.** `## Interfaces with other subsystems` (lines 941, 942) and `### Exit surfaces` (D-ECO-28, line 561)
-   - Now: "`release_data` commit records" → Must say: "release-data records"
-   - Now: "Act classes, `release_data` and `standing_release` (D-AGT-30)" → Must say: "Act classes, `release_data` and `standing_release` (D-AGT-30, D-AGT-33)"
-   - Now: "run under AGT's `standing_release` class (D-AGT-30)." → Must say: "run under AGT's `standing_release` class (D-AGT-33)."
-   - Why: KLN names the record: "writes the release-data record, watermark, expiry and audit entry". D-AGT-33 defines `standing_release`; D-AGT-30 defines the `release_data` family.
-8. **[medium] The standards namespace.** `### Licence and contributions` (D-ECO-36, line 763) and `## Interfaces with other subsystems` (line 936)
-   - Now: "ship in separate `standards::` Packages with a `DataLicence`" → Must say: "ship in separate `crucible::standards::` Packages with a `DataLicence` (D-MEC-31)"
-   - Now: "drawing writers; `standards::` Packages and their licence rule |" → Must say: "drawing writers; `crucible::standards::` Packages and their licence rule |"
-   - Why: contract 6: "First-party packages outside std use `crucible::`". MEC's package table uses `crucible::standards::*`.
-9. **[medium] `crucible:mfg` world names.** `### First-party WIT packages` (line 376) and `## Interfaces with other subsystems` (line 939)
-   - Now: "| `crucible:mfg` | `strategy`, `post`; strategy, post, nesting, packing, slicer and recognizer worlds | MFG |" → Must say: "| `crucible:mfg` | Worlds `toolpath-strategy`, `post-processor`, nesting, packing, slicer and recognizer | MFG |"
-   - Now: "strategy, post, nesting, slicer and recognizer worlds" → Must say: "`toolpath-strategy`, `post-processor`, nesting, packing, slicer and recognizer worlds"
-   - Why: MFG owns the package and names the worlds (`toolpath-strategy`, `post-processor`). Round 2's ruling: ECO lists "the `crucible:mfg` worlds MFG defines". ECO's own line 243 already says `post-processor`.
-10. **[low] `crucible:connect` names no worlds.** `### First-party WIT packages` (line 380) and `### Manifest, lockfile and compatibility` (line 624)
-    - Now: "| `crucible:connect` | `types`, `secrets`, `partner`, `erp`, `mes`, `plm`; one connector world each |" → Must say: "| `crucible:connect` | `types`, `secrets`, `partner`, `erp`, `mes`, `plm`; worlds `partner-connector`, `erp-connector`, `mes-connector`, `plm-connector` |"
-    - Now: "world   = "crucible:connect/connector@0.1.0"" → Must say: "world   = "crucible:connect/partner-connector@0.1.0""
-    - Why: ECO owns the package but names no worlds, while its manifest example uses a `connector` world the index does not define. MFG already writes `erp-connector` and `mes-connector`, so adopting those spellings changes no other tab.
-11. **[low] STEP-NC parts phased later by MFG.** `### Mechanical CAD and product data` (line 164)
-    - Now: "| STEP AP238 and ISO 14649 | ISO 10303-238:2022, as MFG states | R/W | Semantics: workingsteps | Build | 3 | MFG |"
-    - Must say: the same row with the Phase cell "3; parts 13, 14 and 17 at 5"
-    - Why: ECO owns the phase, and its row takes scope from MFG, whose STEP-NC row reads "parts 10, 11, 12, 111 and 121 and AP238 … (3); parts 13, 14 and 17 (5)".
-12. **[low] API method phases and a stale request.** `### Enterprise connectors` (line 584) and `### SDKs, methods and the CLI` (line 523)
-    - Now: "| ECO's API methods and CLI | Methods above; aliases, exit codes, offline mode | Typed errors; exit codes 1 to 5 | ECO-O-11 | 1 |" → Must say: the same row ending "| ECO-O-11 | 1, 2 (registry search and bundles) |"
-    - Now: "ECO asks AGT to add:" → Must say: "AGT's catalog holds ECO's methods:"
-    - Why: AGT's row is "`read.packages`, `read.package`, `read.registry_bundle` | … | 1 (`read.package`), 2". AGT already lists every method ECO asked for.
-13. **[low] Interface rows omit what other tabs require.** `## Interfaces with other subsystems`
-    - Now (line 936): "Board readers; AP242 and QIF translators; drawing writers;" → Must say: "Board readers; AP242 and QIF translators; drawing writers; GDSII and OASIS writers (phase 5);". MEC requires them.
-    - Now (line 944): "package metadata, capability descriptions and badges; licensed translators as external tools |" → Must say: "package metadata, capability descriptions and badges; `TranslationReport`s; font packages; licensed translators as external tools |". UIX requires them.
-    - Now (line 943): "`crucible:host/parallel`; LMS release signing" → Must say: "`crucible:host/parallel` and `crucible:tool/process`; LMS release signing". PLT specifies both interfaces, and ECO indexes them.
-14. **[medium] Change requests still written as pending.** `## Open questions` (line 1021) and `## Contract change requests` (lines 1028 to 1030)
-    - Now: "R11-45, R11-28, R9-47: applied here; the contract text they touch is CCR-ECO-12, CCR-ECO-10 and CCR-ECO-11." → Must say: "R11-45, R11-28, R9-47: applied here and in contract 13.1, 7.7 and 7.6 (CCR-ECO-12, CCR-ECO-10, CCR-ECO-11)."
-    - Now: the bullets beginning "- **CCR-ECO-10 (R11-28).**", "- **CCR-ECO-11 (R9-47).**" and "- **CCR-ECO-12 (R11-45).**" → Must say: "- CCR-ECO-10, support period: accepted with CCR-PLT-10 in contract v6.1 (section 7.7)." / "- CCR-ECO-11, error-code form: accepted with CCR-KLN-9 and CCR-AGT-12 in contract v6.1 (section 7.6)." / "- CCR-ECO-12, SDK names: accepted in contract v6.1 (section 13.1)."
+1. **[high] Import matching and the exchange form use ANV's names and rows.** `### Untrusted content in imported files` capability table (lines 147, 149)
+   - Now: "| Persistent ids or exact signatures; re-imports matched into a reviewed `import_map` (ANV) |" → Must say: "| Persistent ids or exact signatures; re-imports matched into a reviewed `import_map`. Requires: ANV Imported entity ids; ANV `anvil::match_bodies` |"
+   - Now: "`NotRepresentable { faces }` (ANV). Requires: ANV `anvil::exchange_form`" → Must say: "`NotRepresentable { entities, reason }` (ANV). Requires: ANV `anvil::exchange_form`"
+   - Why: ANV's rows "Imported entity ids" (ANV line 415, phase 1) and "`anvil::match_bodies`" (line 416, phase 1 for the same site) own matching; `anvil::exchange_form` fails with `NotRepresentable { entities, reason }` (ANV line 989), as this tab's own line 148 already writes.
+2. **[high] Deprecation is a mode of `yank_package`.** `### Scanning, advisories and removal` (line 616)
+   - Now: "| Deprecate | A notice and an optional successor | Publisher, as a publish Act |"
+   - Must say: "| Deprecate | A notice and an optional successor | Publisher, as a `yank_package` Act in its deprecation mode |"
+   - Why: D-AGT-36 (AGT line 937): "deprecation is a mode of `yank_package`"; AGT line 922: `yank_package` marks a version "yanked or deprecated".
+3. **[high] Archive import keeps span integrity only through a witnessing server.** `### Where tenant bytes leave` (line 480)
+   - Now: "On import, spans keep their integrity only if a device key of a principal in this organization signed the Change (KLN)."
+   - Must say: "On import, spans keep their integrity only when the server that witnessed each write signed its span-integrity record and this organization trusts that server (KLN)."
+   - Why: KLN owns span provenance (contract 7.1); KLN line 429: spans from archive import "keep their integrity only when the witnessing server signed their span-integrity record and the receiving domain trusts that server". AGT's `edit.import_archive` (AGT line 1198) agrees.
+4. **[high] The install-time determinizer re-run is phase 1.** `### Versioning` capability table (line 420) and `## Phasing` (line 1187)
+   - Now: "| Limit `Failure`s cached; a hash mismatch refuses the component | ECO-O-6, ECO-O-7 | 0 |" → Must say: "| Limit `Failure`s cached; a hash mismatch refuses the component | ECO-O-6, ECO-O-7 | 0; 1 (install-time re-run) |"
+   - Now: "ECO-O-6 and ECO-O-7 green in the determinism suite" → Must say: "ECO-O-6 and ECO-O-7's publish-time and build-time cases green in the determinism suite"
+   - Why: PLT's "Install-time determinizer check" row is phase 1 (PLT line 414).
+5. **[medium] The browser sandbox is PLT's.** D-ECO-10 (lines 344 to 346)
+   - Now: "until the asynchronous bridge passes PLT-O-WASM-1 there (contract section 7.4)." → Must say: "until the asynchronous bridge passes PLT-O-WASM-1, PLT-O-WASM-6 and PLT-O-WASM-7 there ([PLT, Isolation of third-party Wasm components](12-platform-performance.md#isolation-of-third-party-wasm-components))."
+   - Now: the sentences from "Then each runs in a dedicated worker started by an" to "An engine evaluates third-party components locally only after ECO-O-8's exfiltration cases pass in it." → Must say: "Then each runs in PLT's browser sandbox, and only after ECO-O-8's exfiltration cases pass in that engine."
+   - Now (*Why:*): "The sandbox drops storage and credentials, and `default-src 'none'` blocks `fetch` and WebSocket [MDN default-src]. The content security policy's fetch directives do not govern WebRTC, which has its own directive with the values `'allow'` and `'block'` [CSP3], and a worker exposes no `RTCPeerConnection` [unverified per engine]." → Must say: delete these sentences, keeping "generated glue would run beside every local repository and key."
+   - Now (*Rejected:*): "; an opaque-origin worker without a network policy; trusting `default-src` alone, which leaves a WebRTC channel to an attacker's STUN or TURN server" → Must say: delete it, so the line ends at "Pulley compiled to Wasm."
+   - Why: PLT owns the browser runtime and sandbox (contract 7.4); D-PLT-42 (PLT line 378) specifies the same iframe, sandbox site, policy string, COEP and CORP, names the three oracles, and argues the WebRTC point (PLT line 379). This decision keeps its own part: descriptions, never per-component JavaScript. Drop `[MDN default-src]` and `[CSP3]` from Sources if nothing else cites them.
+6. **[medium] `ProgramUnverified` exists nowhere.** `### Reconstruction and tooling` capability table (line 861)
+   - Now: "`ProgramUnverified` blocks any transfer Act (MFG)"
+   - Must say: "No transfer until the program Item's subject is approved, else MFG's `PlanUnapproved`. Requires: MFG External NC verification"
+   - Why: MFG line 451: legacy programs "release as program Items on the same approval path"; the transfer refusal is `PlanUnapproved` (MFG line 1037). MFG's "External NC verification" row is phase 2 (MFG line 459).
+7. **[medium] Add the quality connector KLN relies on.** `### WIT package index` (line 989) and `### ECO's WIT packages` (line 998)
+   - Now: "`partner`, `erp`, `mes`, `plm`; worlds `partner-connector`, `erp-connector`, `mes-connector`, `plm-connector`" → Must say: "`partner`, `erp`, `mes`, `plm`, `quality`; worlds `partner-connector`, `erp-connector`, `mes-connector`, `plm-connector`, `quality-connector`"
+   - Now: "`erp`, `mes`, `plm` (mapped records) | `partner-error`, `mapping-conflict` | 2 |" → Must say: "`erp`, `mes`, `plm` (mapped records); `quality` (KLN's quality records) | `partner-error`, `mapping-conflict` | 2; 3 (`quality`) |"
+   - Why: D-KLN-52 (KLN line 768): an organization with an external quality system "connects it through ECO's quality connector world instead"; KLN's row to ECO lists "the quality connector world's records" (KLN line 1312); contract 13.4's phase 3 parity row offers "a named connector to an external quality system".
+8. **[medium] A link names a heading that does not exist.** `### Exports the receiver can use` (line 127)
+   - Now: "([KLN, Data leaving a tenant](05-kiln-repo-plm.md#data-leaving-a-tenant))"
+   - Must say: "([KLN, Exits](05-kiln-repo-plm.md#exits))"
+   - Why: the watermark and release-data record paragraph is KLN line 973, under `### Exits` (line 961).
+9. **[medium] Rows that use other tabs' capabilities carry `Requires:` entries.** Capability tables (lines 225, 231, 860). Append to the Failure cell:
+   - Line 225, "Unmatched labels reported": ". Requires: MFG Results as Evidence records"
+   - Line 231, "`UnmappedCard { card, line }` | ECO-O-37": insert ". Requires: FLX Imported solver decks; FLX Solver deck export" after `UnmappedCard { card, line }`
+   - Line 860, "`UnresolvedReference { file }`": ". Requires: KLN Foreign native CAD files"
+   - Why: contract 13.4's `Requires:` rule; the targets are MFG phase 1, FLX phase 3 and KLN phase 3, none later than these rows.
+10. **[medium] Interfaces rows omit what ING and MEC use.** `## Interfaces with other subsystems` (lines 1127, 1131)
+    - Now: "receiver profiles for `export_resolution` | `Imported`; `File`; Package | 1, 2 (DWG), 5 (GDSII) |" → Must say: "receiver profiles for `export_resolution`; IDF and STEP board readers; IFC 4.3 | `Imported`; `File`; Package | 1, 2 (DWG, boards), 5 (GDSII, IFC) |". MEC reads boards in phase 2 (MEC line 547; this tab's row 229) and round-trips IFC 4.3 in phase 5 (MEC line 880).
+    - Now: "| ING | Registry and signing; interface diffs; determinized components; the RFC process |" → Must say: "| ING | Registry and signing; interface diffs; determinized components; the RFC process; PubGrub resolution with typed explanations |". ING line 1019: "Resolution uses PubGrub … through ECO's resolver"; this tab's "Resolution and lockfile" row is phase 0 (line 643).
+11. **[low] `crucible:host` includes `chunk-worker`, which PLT specifies.** `### WIT package index` (line 982)
+    - Now: "| `crucible:host` | `diagnostics`, `progress` (write-only), `cas` (handle reads), `parallel` | KLN; PLT implements `parallel` |"
+    - Must say: "| `crucible:host` | `diagnostics`, `progress` (write-only), `cas` (handle reads), `parallel`, `chunk-worker` | KLN; PLT specifies and implements `parallel` and `chunk-worker` |"
+    - Why: KLN line 173 ("`parallel` with `chunk-worker`"); PLT line 1105 ("PLT specifies and implements its `parallel` and `chunk-worker` interfaces").
+12. **[low] Agents read events through AGT's methods.** `### Events and webhooks` (line 468)
+    - Now: "Agents receive the same events as MCP (Model Context Protocol) resource subscriptions (AGT)."
+    - Must say: "Agents read events through `read.events` and MCP (Model Context Protocol) resource subscriptions to branch heads, Proposals and Evaluations (AGT)."
+    - Why: AGT's subscriptions cover "Branch-head, Proposal and Evaluation resources" (AGT line 1238), and `read.events` reads the feed (line 1179).
+13. **[low] PLT has no "translator host" component.** `### Where translators run` (line 67)
+    - Now: "An external tool on the vendor SDK, in PLT's translator host"
+    - Must say: "An external tool on the vendor SDK, in a translator host under PLT's sandbox"
+    - Why: PLT sandboxes translator hosts (D-PLT-43, PLT line 384) but designs no host; this tab specifies its signing (line 74).
+14. **[low] The product-liability assessment is a phase 1 gate item.** D-ECO-42 (line 739)
+    - Now: "**Decision D-ECO-42:** Before phase 1 general availability, counsel assesses"
+    - Must say: "**Decision D-ECO-42:** Before phase 1 general availability, as the phase 1 gate requires (contract 13.1), counsel assesses"
+    - Why: contract 13.1 now carries the assessment (ruling CCR-ECO-13); cite the section, not the request.
+15. **[medium] CCR-ECO-13 is accepted.** `## Contract change requests` (line 1202)
+    - Now: the bullet beginning "- **CCR-ECO-13, product-liability assessment at the phase 1 gate.**"
+    - Must say: "None."
+    - Why: contract 18 adds the item to 13.1's phase 1 gate.
+16. **[low] FMU spelled out.** `### Untrusted content in imported files` (line 137)
+    - Now: "Archives (3MF, USDZ, FMU packaged simulation models"
+    - Must say: "Archives (3MF, USDZ, Functional Mock-up Unit (FMU) packaged simulation models"
+    - Why: contract 11.
+17. **[medium] Every Change is already a commit.** `### Where tenant bytes leave` (line 478)
+    - Now: "- **Git mirror** (phase 2): Ingot sources, manifests and lockfiles, one Git commit per selected Change."
+    - Must say: "- **Git mirror** (phase 2): a push of selected branches, with their commits, to another party's Git host."
+    - Why: contract 7.1 (v7.2 and v7.3, ruling FD-5): each Change is a commit and any Git host can be home, so a mirror to another party is a push, still a `release_data` exit.
 
 ## PLT
 
-1. **[high] The wrong Abort for the fuel governor.** `### Worlds, calls and failures` (line 554)
-   - Now: "| Evaluation fuel or budget exhausted | Abort: `FuelCeilingExceeded` or `BudgetExhausted` | Never |"
-   - Must say: "| Evaluation fuel governor or work budget exhausted | Abort: `BudgetExhausted` | Never |" and a new row "| An organization ceiling below a source limit, at admission | Abort: `FuelCeilingExceeded` | Never |"
-   - Why: KLN owns the catalog, and PLT says outcomes "come from KLN's one catalog". KLN: `BudgetExhausted` is "A work budget or the Evaluation's fuel governor"; `FuelCeilingExceeded` is "An organization ceiling below a source limit, at admission".
-2. **[medium] The FIPS module's status.** `### OS services` (line 53) and `## Open questions` (line 992)
-   - Now: "whose FIPS 3.x build "has been submitted to NIST for certification" [certificate status unverified]." → Must say: "whose AWS-LC 3 module holds FIPS 140-3 certificate 5314 [NIST CMVP certificate 5314]."
-   - Now: the item beginning "1. **FIPS module certificate.**" → Must say: "1. **FIPS module certificate.** Closed: the AWS-LC 3 module holds FIPS 140-3 certificate 5314."
-   - Why: PLT owns the provider, but KLN states and cites the fact: "whose AWS-LC 3 module holds certificate 5314", with the NIST CMVP page in KLN's Sources. The auditing agent opened that page and found certificate 5314 active under FIPS 140-3. The PLT editor re-opens it before citing, as contract 11 requires.
-3. **[medium] IME and AccessKit hosting are needed in phase 0.** `### Paths, text and accessibility` (lines 78, 80)
-   - Now: "| No IME: plain input, with a notice | PLT-O-OS-2 | 1 |" → Must say: "| No IME: plain input, with a notice | PLT-O-OS-2 | 0 (Windows, Chrome), 1 |"
-   - Now: "| PLT-O-OS-3 | 1 (desktop, web), 3 (tablets) |" → Must say: "| PLT-O-OS-3 | 0 (Windows), 1 (desktop, web), 3 (tablets) |"
-   - Why: UIX's phase 0 "Toolkit risk spike" exercises "AccessKit on Windows; IME field on Windows and in Chrome", and PLT's own D-PLT-8 says the spike runs "with PLT's IME paths and Windows AccessKit hosting". Under 13.4 a capability is phased no later than what depends on it.
-4. **[medium] Rows omit the `Interactive` lane other tabs require (round 3 item).** `### Provided by PLT` (lines 893, 895, 896, 897)
-   - Now: "| ING | Executors, the determinizer, verification of generated modules, `detmath` and `det_sum` (Ingot's `sum`), text normalization, the browser memory table |" → Must say: "…, text normalization, the `Interactive` pool lane, the browser memory table |"
-   - Now: "| MEC, COV | `linalg`; for COV also `f64` availability per class, with no emulated `f64` on WebGPU, and the browser memory table |" → Must say: "| MEC, COV | `linalg`; for MEC also `detmath`, the `Interactive` pool lane and Parley shaping; for COV also `f64` availability per class, with no emulated `f64` on WebGPU, and the browser memory table |"
-   - Now: "| ELX | `detmath`; the browser memory table; serial and USB access (FLX owns circuit LU) |" → Must say: "| ELX | `detmath`; the `Interactive` pool lane; the browser memory table; serial and USB access; registry font packages (FLX owns circuit LU) |"
-   - Now: "| AGT | `api` transport, `cli` exit codes, `CredentialStore`, the approval session, `Usage` measurement, the stdio sandbox for external MCP servers |" → Must say: "| AGT | `api` transport, `CredentialStore`, the approval session, `Usage` measurement, the stdio sandbox for external MCP servers, the `Interactive` pool lane |"
-   - Why: ING, MEC, ELX and AGT each require "the `Interactive` pool lane" (and MEC `detmath` and Parley, ELX font packages) from PLT. PLT defines `PoolLane::Interactive`. ECO, not PLT, specifies CLI exit codes (AGT 10).
-5. **[low] The Linux 3D-mouse path.** `### Paths, text and accessibility` (line 79)
-   - Now: "| 6-DoF devices | `NavDeviceEvent` from HID; spacenavd on Linux |"
-   - Must say: "| 6-DoF devices | `NavDeviceEvent` from HID on every desktop OS, WebHID in Chromium; spacenavd optional on Linux |"
-   - Why: PLT owns the device path (contract 12, `platform-api`). D-UIX-31 reads HID "on every desktop OS", makes vendor drivers optional and rejects spacenavd "as the Linux path". The rewording satisfies both. This is judgment call 5 in the summary.
-6. **[low] WebUSB and Web Serial have no owner.** `### Paths, text and accessibility` (line 89)
-   - Now: "| Serial and USB | `DeviceIo` on native targets, outside evaluation |"
-   - Must say: "| Serial and USB | `DeviceIo` on native targets, WebUSB and Web Serial in Chromium, outside evaluation |"
-   - Why: contract 7.6: "Client flashing through `apps/platform` or WebUSB is the same Act". ELX: "Browsers use WebUSB and Web Serial". `apps/platform` is the only crate that binds web APIs.
-7. **[low] ECO's sector rule for update servers.** `### Consumed by PLT` (line 908) and `### Signed updates`
-   - Now: "| ECO | Worlds; browser Wasm component descriptions; declared memory limits; font packages; export classification and CRA reporting |"
-   - Must say: "| ECO | Worlds; browser Wasm component descriptions; declared memory limits; font packages; export classification, the sector rule for update servers and CRA reporting |". Also add to `### Signed updates`: "Update servers refuse the countries of ECO's sector rule (D-ECO-29)."
-   - Why: D-ECO-29: "update servers geo-restrict those countries". PLT runs the update servers and says nothing about it.
-8. **[low] `apps/tool-runner` is missing from PLT's crates.** `### Crates` (line 21)
-   - Now: "| `desktop`, `web`, `mobile`, `server`, `cli`, `ci-runner`, `attestation` |"
-   - Must say: "| `desktop`, `web`, `mobile`, `server`, `cli`, `ci-runner`, `attestation`, `tool-runner` (with ECO) |"
-   - Why: contract 12 lists "`tool-runner` (ECO, PLT)", and ECO runs its Tool context "In `apps/tool-runner`".
-9. **[low] Block-triangular LU is FLX's phase 2.** `### Canonical linear algebra` (line 387)
-   - Now: "| FLX's supernodal elimination and block-triangular LU, thread-count independent | As above | PLT-O-LA-1 | 1 (sequential), 2 (parallel) |"
-   - Must say: the same row ending "| PLT-O-LA-1 | 1 (sequential supernodal), 2 (parallel; block-triangular LU) |"
-   - Why: FLX owns sparse factorization (D-PLT-34), and its "Networks and circuits | Block-triangular LU …" row is phase 2.
-10. **[medium] Change requests still written as pending.** `## Contract change requests` (lines 1007, 1008)
-    - Now: the bullet beginning "- **CCR-PLT-9, tablet engine placement.**" → Must say: "- CCR-PLT-9, tablet engine placement: accepted in contract v6.1 (section 9)."
-    - Now: the bullet beginning "- **CCR-PLT-10, CRA support period.**" → Must say: "- CCR-PLT-10, CRA support period: accepted with CCR-ECO-10 in contract v6.1 (section 7.7)."
-    - Why: contract 17: "CCR-PLT-9 tablet engine | Accepted (9)" and "CCR-ECO-10, CCR-PLT-10 support period | Accepted together (7.7)".
+1. **[medium] `AccessibilityHost` is named but never defined.** `### OS services` (line 452)
+   - Now: "`SystemSignals`, `WallClock`, `Monotonic`, `Spawner`, `SharedRing`, `DeviceIo`, `CryptoProvider` and `Authenticator` (signatures in Reference)"
+   - Must say: "`SystemSignals`, `WallClock`, `Monotonic`, `Spawner`, `SharedRing`, `DeviceIo`, `CryptoProvider`, `AccessibilityHost` and `Authenticator` (signatures in Reference)"
+   - Why: this tab's Interfaces row gives UIX `AccessibilityHost` (line 1214); nothing else defines it. Add its signature to the Reference with the others.
+2. **[medium] Specify the webhook egress proxy ECO relies on.** `## Telemetry and label-aware egress` capability table (line 847) and `## Interfaces with other subsystems` (line 1216)
+   - Now: "| Egress allowlist | Policy-listed hosts only | Blocked host logged locally | PLT-O-PRIV-2 | 2 |" → Must say: "| Egress allowlist and webhook proxy | Policy-listed hosts only; webhook deliveries through a proxy that checks each resolved address against ECO's address rules at connect time | Blocked host or refused address logged | PLT-O-PRIV-2, ECO-O-14 | 1 (webhook proxy), 2 |"
+   - Now: "TUF and signature formats, release lines and support periods | `WasmComponentEngine`, `CallLimits` | 0 |" → Must say: "TUF and signature formats, release lines and support periods, the webhook egress proxy | `WasmComponentEngine`, `CallLimits` | 0; 1 (install-time re-runs, browser runtime, webhook proxy); 2 (sandbox site, `crucible:tool/process`, LTS lines); 3 (offline bundles, local External Op sandboxes) |"
+   - Why: ECO line 466: "Deliveries leave through PLT's egress proxy, which checks each resolved address at connect time against ECO's webhook rules", in phase 1 (ECO line 510); contract 7.8 makes PLT the egress enforcer. This tab's own rows give the phases (lines 414, 421, 423, 425, 430, 776, 931).
+3. **[low] The Interfaces row to UIX puts every item at phase 0.** `## Interfaces with other subsystems` (line 1214)
+   - Now: "renderer image, native-code register | `WindowHost`, `AccessibilityHost`, `SharedRing`, `Authenticator` | 0 |"
+   - Must say: "renderer image, native-code register | `WindowHost`, `AccessibilityHost`, `SharedRing`, `Authenticator` | 0; 1 (shared rings, approval session, device loss, safe mode); 2 (telemetry) |"
+   - Why: this tab's rows: shared display rings 1 (line 243), WebAuthn 1 (line 510), device loss 1 (line 821), safe mode 1 (line 823), telemetry pipeline 2 (line 846).
+4. **[medium] ELX's flashing service lives in `apps/platform-*`.** `### Crates` (line 987) and `## Interfaces with other subsystems` (line 1219)
+   - Now: "| The only crates that bind OS APIs; `platform-web` holds the browser `WasmComponentEngine` and WebCrypto | Allowed |" → Must say: "| The only crates that bind OS APIs; `platform-web` holds the browser `WasmComponentEngine` and WebCrypto; ELX's flashing service and bench adapters live here | Allowed |"
+   - Now: "| ELX | `detmath`, the `Drag` lane, the browser memory table, serial and USB access, local External Op sandboxes for vendor models, registry font packages (FLX owns circuit LU) | `DeviceIo` | 1 |" → Must say: "| ELX | `detmath`, the `Drag` lane, the browser memory table, serial and USB access, hosting of ELX's flashing service and bench adapters in `apps/platform-*`, local External Op sandboxes for vendor models, registry font packages (FLX owns circuit LU) | `DeviceIo` | 1; 2 (serial and USB); 3 (flashing service) |"
+   - Why: contract 7.6 puts desktop client flashing "in `apps/platform-*`'s flashing service"; ELX hands PLT "the flashing service and bench adapters in `apps/platform-*`" (ELX line 1235). This tab's "Serial and USB" row is phase 2 (line 511) and never mentions flashing.
+5. **[medium] The restricted-jurisdiction rule is ECO's dataset.** `### Signed updates` (line 754) and tenant onboarding (line 698)
+   - Now: "Update servers refuse the countries of ECO's sector rule." → Must say: "Update servers refuse the jurisdictions of ECO's restricted-jurisdiction dataset."
+   - Now: "Tenant onboarding applies ECO's sector rule." → Must say: "Tenant onboarding applies ECO's restricted-jurisdiction rule."
+   - Why: D-ECO-29 (ECO line 763) covers comprehensive embargoes and regions, not only sector rules; ECO provides "the restricted-jurisdiction dataset for update servers" (ECO line 1134).
+6. **[medium] The stack limit is set in bytes.** `### Rust surface` (line 1100)
+   - Now: "pub struct CallLimits { pub fuel: u64, pub stack_frames: u32, pub max_memory_bytes: u64 }"
+   - Must say: "pub struct CallLimits { pub fuel: u64, pub logical_stack_bytes: u32, pub max_memory_bytes: u64 }"
+   - Why: ECO's limits table is the only place that sets the figure, "Logical stack | 256 KiB" (ECO line 392); this tab's determinizer text says only "a logical stack-depth limit" (line 330).
+7. **[medium] `ResourceExhausted` is a unit Abort.** `### Memory` (line 213)
+   - Now: "Waits 2 s for eviction, then `ResourceExhausted { requested, available, fix }`"
+   - Must say: "Waits 2 s for eviction, then the `ResourceExhausted` Abort"
+   - Why: KLN owns `Abort` in `base-op` (contract 7.2: "a closed enum"); KLN line 1105 gives `ResourceExhausted` no fields, and this tab's line 404 writes "Abort: `ResourceExhausted`".
+8. **[low] The human-only method list is contract 7.6's.** `### Approvals and local credentials` (line 470)
+   - Now: "A human-only method (merge, text endorsement, waiver, declassification, a local write above `public`)"
+   - Must say: "A human-only method (contract 7.6's list, a local write above `public` included)"
+   - Why: contract 7.6 also lists `propose.policy` and recipient and clearance changes, which this copy drops.
+9. **[low] The approval-origin cookie rule is AGT's.** `### Approvals and local credentials` (lines 468, 472)
+   - Now: the bullet beginning "- **Cookies.** The approval origin sets only `__Host-` cookies" → Must say: delete the bullet.
+   - Now: "Three rules from contract 7.6 land here:" → Must say: "Two rules from contract 7.6 land here:"
+   - Why: AGT owns the approval origin (contract 7.6; AGT line 963 states the cookie rule); this tab's lead (line 460) says "AGT and UIX own the ceremony and the page". Drop `[MDN Set-Cookie]` from Sources if nothing else cites it.
+10. **[low] ECO's world rules restated.** `### Worlds, calls and failures` (line 394)
+    - Now: "ECO defines the worlds and PLT enforces them. Tool and connector worlds use WASI 0.3, and an import a world does not grant fails at install with `ForbiddenImport { import, fix }`. Evaluation worlds import no WASI, their `crucible:ops` imports are callback-ABI async functions, results never depend on completion order, and host time never counts as fuel."
+    - Must say: "ECO defines the worlds ([ECO, Determinism and limits](11-interop-ecosystem.md#determinism-and-limits)) and PLT enforces them: an import a world does not grant fails at install with `ForbiddenImport { import, fix }`."
+    - Why: contract 7.4 ("Worlds") and D-ECO-9 (ECO line 382) state the WASI, callback-ABI, ordering and fuel rules.
+11. **[low] Rows that use other tabs' capabilities carry `Requires:` entries.** Capability tables (lines 308, 770)
+    - Now: "| Canonical sparse factorization | FLX's supernodal elimination and block-triangular LU, thread-count independent | Divergence fails the suite |" → Must say: "| Canonical sparse factorization | FLX's supernodal elimination and block-triangular LU, thread-count independent | Divergence fails the suite. Requires: FLX Canonical direct solvers |"
+    - Now: "| No TPM: readings `data_untrusted` |" → Must say: "| No TPM: readings `data_untrusted`. Requires: MFG Gateway |"
+    - Why: contract 13.4's `Requires:` rule; FLX's row is phase 1 (FLX line 670) and MFG's phase 2 (MFG line 980).
+12. **[low] The `base-op` comment names the wrong crate owner.** `### Rust surface` (line 1085)
+    - Now: "// base-op, owned by PLT"
+    - Must say: "// base-op (KLN's crate); this type is PLT's"
+    - Why: contract 12: `base-op` is KLN's, "with every owner of a type".
+13. **[low] Fidelity and risk-class names.** `## State of the art` (line 1191) and `### Toolchain and dependencies` (line 861)
+    - Now: "Later on `f64` GPU sign-off solves" → Must say: "Later on `f64` GPU `SignOff` solves"
+    - Now: "records each core dependency's risk class, cadence and fork plan" → Must say: "records each core dependency's risk tier, cadence and fork plan"
+    - Why: contract 2 forbids "sign-off" for the fidelity; "risk class" names AGT's Proposal classes R0 to R4 (contract 7.6).
+14. **[low] "BOM" means bill of materials.** `### Paths, text, fonts and accessibility` (line 482)
+    - Now: "readers normalize CRLF, CR and a BOM on input"
+    - Must say: "readers normalize CRLF, CR and a byte-order mark on input"
+    - Why: BOM is KLN's bill of materials (contract 2, Service BOM).
+15. **[low] MCP spelled out.** `### Isolation of third-party Wasm components` (line 384)
+    - Now: "tool processes and stdio MCP servers; Windows"
+    - Must say: "tool processes and stdio MCP (Model Context Protocol) servers; Windows"
+    - Why: contract 11.
+
