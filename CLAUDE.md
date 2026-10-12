@@ -23,11 +23,15 @@ The spec has finished round 2: every subsystem tab was revised against the bindi
 - About a dozen open questions remain in the tabs, each waiting on an outside input.
 - The repository is public at github.com/JoziGila/crucible (`origin`). Commit with the personal identity already configured.
 
-## Next
+## Plan for round 4
 
-1. **Third adversarial review** of the v3 text (R13 to R18) on `docs/review/brief.md`. The spec is ready to build when a review finds no Critical findings and only Minor ones; otherwise run round 4 the way round 3 ran (packets, contract rulings, one revision per tab, an audited consistency pass, summary tabs, publish, tag).
-2. **Outside inputs** the open questions wait on: counsel's freedom-to-operate opinion on the SSI patent and the trademark clearance, phase 0 measurements, and the first calibration build. The founder arranges counsel and the partner agreements in contract 13.2.
-3. **Phase 0** then starts in this repository: the founder signs each golden product's pass/fail criteria, the oracle role writes and locks the tests, and builder agents work against them.
+Decided 2026-10-12: one final review-and-fix pass before phase 0. The spec must have every feature needed to surpass the incumbents (NX, CATIA, Creo, SolidWorks, Fusion, Onshape, Ansys, Abaqus, COMSOL, Altium, KiCad, Mastercam, hyperMILL, Teamcenter, Windchill) and the AI-built clones, be consistent and elegantly designed (design choices beyond the current spec are welcome), be implemented entirely in Rust, and read well for humans.
+
+1. **Third review.** Nine reviewers on `docs/review/brief.md`: R13 physics, R14 geometry, R15 architecture and elegance, R16 engineering practice, R17 security and legal, R18 feasibility and the Rust implementation, R19 competitive parity for design, manufacturing and PLM, R20 competitive parity for simulation and electronics, R21 editorial (human reading). Then `python3 docs/tools/findings.py`.
+2. **Contract v7** rules on findings that target CONTRACT, and the contract itself gets an editorial pass.
+3. **Packets and one revision per tab** on `docs/revision/brief.md`, including an editorial polish of the whole tab.
+4. **Audited consistency pass**, then the summary tabs (Overview, Adversarial review, Decisions log), publishing, and the tag `round-4`.
+5. **Then phase 0** starts in this repository; outside inputs (counsel, partner agreements) proceed in parallel.
 
 ## Running revisions with subagents
 
