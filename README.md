@@ -86,7 +86,7 @@ Agents do the authoring. People point, mark up, ask, review and present. The int
 ## How it fits together
 
 <p align="center">
-  <img src=".github/assets/architecture.svg" alt="Editors, api, Ingot and repo, Kiln, then Anvil, Flux and Wasm components, producing STEP, 3MF, Gerber and signed releases" width="100%">
+  <img src=".github/assets/architecture.svg" alt="Agents, viewer and review over one api, then Ingot and Git history, Kiln, and Anvil, Flux and Wasm components, producing STEP, 3MF, Gerber and signed releases" width="100%">
 </p>
 
 | Part | What it does |
