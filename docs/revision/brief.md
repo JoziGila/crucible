@@ -1,37 +1,38 @@
-# Round 3: revise a tab (brief for each tab's revision agent)
+# Round 4: revise a tab (brief for each tab's revision agent)
 
-A second adversarial review attacked the v2 tabs and found 278 problems, 16 of them Critical. Contract v6 rules on every finding that targets it (section 17) and is binding. Your job: revise your tab once so it conforms to contract v6, fixes every finding in your packet, closes its open questions and settles its `[unverified]` claims, while staying within its length and passing the spec check.
+This is the last revision before building starts. A third review by nine reviewers found 312 problems, 18 of them Critical, including two reviews that compared Crucible feature by feature with the incumbents and an editorial review for human reading. Contract v7 rules on every finding that targets it (section 18), simplifies the design and sets a new house style (sections 10 and 11). Your job: make your tab correct, complete against the incumbents, as simple as it can be, and a pleasure for an engineer to read from start to finish.
 
 ## 1. Read
 
-1. `docs/contract.md`: section 17 in full, then every section it changed, then anything your packet's findings touch.
-2. Your packet, `docs/revision/packets/<TAB>.md`: the findings that target your tab, the claims reviewers verified, every `[unverified]` line, your open questions and your known items.
-3. Your tab, `docs/spec/<file>.md` (v2, tag `round-2`). The review reports behind your findings are `docs/review/R7-physics.md` to `R12-feasibility.md`.
-4. For any fact another tab owns, that tab's committed text (`git show HEAD:docs/spec/<file>.md`); point to it in one line instead of restating it.
+1. `docs/contract.md`: sections 10 and 11 (the new style and skeleton), section 18 (rulings), 13.4 (shared phases and the parity floor), 7.7 (the adopt-or-study list and the clean-room insight protocol), then every section your packet's findings touch. `CLAUDE.md` lists the founder's directions for round 4.
+2. Your packet, `docs/revision/packets/<TAB>.md`: the third-review findings that target your tab, its open questions and known items.
+3. Your tab, `docs/spec/<file>.md` (v3, tag `round-3`), and the review reports behind your findings (`docs/review/R13-physics.md` to `R21-editorial.md`). R21 has rewritten leads and examples for several tabs.
+4. `docs/revision/digest.md`: software to adopt, run as oracles, or study for your tab.
+5. For any fact another tab owns, that tab's committed text (`git show HEAD:docs/spec/<file>.md`); link to it instead of restating it.
 
 ## 2. Revise
 
 Write parts under `docs/build/<tab>/` (ignored by git), each under about 4,000 words, and assemble the tab over `docs/spec/<file>.md`. Keep the title line `# <tab name> (<TAB>)`.
 
-- **Findings.** Apply each one unless you have a sound reason not to; where contract 17 already settles it, conform to the ruling. Record each declined or partly applied finding, with its id and reason, under Open questions.
-- **Open questions.** Close each one: decide it (as a decision, new or revised), turn it into a contract change request, or keep it with the reason it cannot be decided yet.
-- **Unverified claims.** Verify each with WebFetch on a primary source and drop the marker, correct the claim, or cut it. Cite only pages you opened, and keep every existing source.
-- **Known items.** Do each one in your packet, including one sentence under each drawn diagram that tells the reader how to read it. If a fix changes a diagram, update its file in `docs/spec/diagrams/` too.
-- **Shape.** Follow contract sections 10 and 11 exactly: a lead with no heading; design sections, each ending with one capability table (Capability · Contract · Failure · Oracle id · Phase); State of the art; Platform notes; Interfaces with other subsystems; Oracles; Phasing (cite 13.4 once); Open questions; Contract change requests; Sources.
-- **Decisions.** Numbers are stable and no decision is cut. A changed decision keeps its number, states the new decision and ends with "(revised in round 3)", replacing any earlier marker. New decisions take the next free number.
-- **Length.** 12,000 to 18,000 words excluding Sources (Ingot and Anvil up to 20,000). Your tab is near its ceiling, so make room by cutting repetition, restated rationale and anything another tab owns. Never cut a capability, decision, oracle or source.
-- **Program.** Crucible is built by agents with one founder (contract 13.2). Remove every staffing figure, hire, team size, engineer-year and calendar month; refer to milestones and gates in order instead.
-- **Voice.** Contract section 10: present tense, precise and calm; sentences under 25 words where possible; paragraphs of at most three sentences; specifics over adjectives.
-- Write only your own `docs/spec/<file>.md`, your diagram files and `docs/build/<tab>/`. Never edit another tab, the contract, a README or CLAUDE.md, and never commit; the orchestrator does that.
+- **Findings.** Apply each one, or conform to contract 18 where it settles one. You may choose a better design than a finding proposes when it is simpler or stronger; say so in your report. Declined parts go in your report, not in the tab.
+- **Better than everything.** Cover every capability contract 13.4's parity floor assigns to your tab, at its phase, and say plainly in the lead and the relevant sections what the engineer gains over the incumbents and over AI-built clones.
+- **Simplify.** Where two mechanisms in your tab do one job, merge them; where a mechanism no longer earns its place, delete it. Keep every capability the contract requires.
+- **Restructure to section 11.** A three-sentence lead in plain words; a first, guide-level design section that opens with a worked example (the canonical bracket or a golden product) and explains the model a user meets; later sections that build on it, each opening with why it exists and ending with its capability table; catalogs, grammars and code tables moved into `## Reference`; Interfaces as one provides table (To · What · Types · Phase); Oracles without a phase column; Open questions only for questions that wait on an outside input.
+- **No history in the prose.** Remove every review finding id, round number, "(revised in round N)", "formerly" and "replaces" above `## Open questions`. Decisions keep their numbers, in the three-line block (Decision, *Why:*, *Rejected:*); a changed decision simply states its new content.
+- **Write for a person.** Define every term and abbreviation at first use; one idea per paragraph; examples where they help; tables for comparisons; no wall of qualifications. Read your lead and first section aloud in your head: an engineer from outside your subsystem must follow them.
+- **Facts.** Cite only pages you opened with WebFetch; mark anything unverified with [unverified]; never invent numbers, dates or names. Keep every existing source unless the claim it supported is cut.
+- **Diagrams.** At most two. Update a diagram's file in `docs/spec/diagrams/` when its content changes, and keep one sentence under each that tells the reader how to read it.
+- **Length.** 9,000 to 15,000 words of prose (ING and ANV up to 17,000); tables, Reference, State of the art, Interfaces, Oracles and Sources do not count.
+- Write only your own `docs/spec/<file>.md`, your diagram files and `docs/build/<tab>/`. Never edit another tab, the contract, a README or CLAUDE.md, and never commit.
 
 ## 3. Check
 
 ```
-python3 docs/tools/check.py docs/spec/<file>.md --base round-2
+python3 docs/tools/check.py docs/spec/<file>.md --base round-3
 ```
 
-It must report zero errors; `--base round-2` also reports any decision, oracle or source cut since round 2. Then fix the warnings that read better fixed. A deliberate quotation of a forbidden term needs a line in `docs/tools/allow.txt`; say why in your report.
+It must report zero errors: the skeleton, tables, decision blocks, the history ban, the prose length, and nothing cut since round 3 (a capability, decision, oracle or source). Then fix the warnings that read better fixed.
 
 ## 4. Report
 
-Reply in at most 250 words: the word count excluding Sources; findings applied and declined (declined ids with one-line reasons); open questions closed and kept; unverified claims verified, corrected and cut; decisions added and revised; contract change requests filed; the check result; anything blocked.
+Reply in at most 250 words: prose word count; findings applied and declined (declined ids with one-line reasons); designs you changed beyond the findings and what you deleted; parity-floor capabilities added; open questions left; decisions added and changed; contract change requests; the check result.
