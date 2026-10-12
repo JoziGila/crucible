@@ -27,6 +27,8 @@ The spec has finished round 2: every subsystem tab was revised against the bindi
 
 Decided 2026-10-12: one final review-and-fix pass before phase 0. The spec must have every feature needed to surpass the incumbents (NX, CATIA, Creo, SolidWorks, Fusion, Onshape, Ansys, Abaqus, COMSOL, Altium, KiCad, Mastercam, hyperMILL, Teamcenter, Windchill) and the AI-built clones, be consistent and elegantly designed (design choices beyond the current spec are welcome), be implemented entirely in Rust, and read well for humans.
 
+Founder directions for round 4 (2026-10-12): agents author designs and nobody models by hand, so the human UI is a viewer first: fast, beautiful inspection of geometry and results, review of agent work, and presentation output (photoreal renders, animations, exploded views, simulation visuals, shareable web views, generated decks and reports); people steer by pointing, marking up and asking. Reverse engineering (REA) is for insight only: study how incumbents work to design something far better from the literature, never copy code.
+
 1. **Third review.** Nine reviewers on `docs/review/brief.md`: R13 physics, R14 geometry, R15 architecture and elegance, R16 engineering practice, R17 security and legal, R18 feasibility and the Rust implementation, R19 competitive parity for design, manufacturing and PLM, R20 competitive parity for simulation and electronics, R21 editorial (human reading). Then `python3 docs/tools/findings.py`.
 2. **Contract v7** rules on findings that target CONTRACT, and the contract itself gets an editorial pass.
 3. **Packets and one revision per tab** on `docs/revision/brief.md`, including an editorial polish of the whole tab.
