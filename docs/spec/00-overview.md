@@ -1,90 +1,101 @@
 # Crucible — Platform Spec
 
-Crucible is one Rust platform where people and agents design, simulate, manufacture and release physical products from a single typed model. This tab summarizes the binding architecture contract (v6.1) and the twelve subsystem tabs on one page, and points to the tab that owns each fact. Crucible, Ingot, Anvil, Kiln and Flux are working names, and Flux is renamed in phase 0.
+Crucible is one Rust platform in which agents write physical products as typed programs and people steer, review, approve and present them, from the first sketch through simulation, manufacture and release. An engineer who leaves NX, SOLIDWORKS, Ansys or Teamcenter, or an AI-built clone of them, gains a product whose every number says how far to trust it and whose every change arrives built, checked and open to review before anything reaches a machine or a customer. One mechanism delivers this: the design is a single program in Crucible's typed language, Ingot, evaluated deterministically and incrementally, so geometry, physics, manufacturing plans and product records are all computed from one source and pinned by one set of content hashes.
 
 ## What Crucible is
 
-Four hard requirements from the founder shape every tab (contract section 1):
+This section says what using Crucible looks like, what the founder requires of it, and how this specification is organized.
 
-1. **Anything physical.** Every major physics domain and every scale, from MEMS to ships and building products. No software validly simulates everything, so every model states its validity envelope, and the spec says plainly what is out of reach.
-2. **State-of-the-art methods** in every subsystem. Each tab names the best published method, the leading implementation to beat, Crucible's choice and how it is measured.
-3. **Every major operating system, identical features.** Tier 1 platforms share features and canonical results; only capacity and speed differ.
-4. **Coherence and taste.** One name per concept, the fewest concepts, typed errors that suggest a fix, and one calm voice.
+### A session
 
-"Fully specified" means every capability has a purpose, a contract (inputs, outputs, types), failure behavior, an oracle that verifies it, and a phase. The test is whether agent swarms working against oracles, directed by one founder, can build each subsystem without further design work.
+An engineer opens a bracket in a browser tab. An agent has proposed widening it from 60 mm to 80 mm, and the review opens on evidence: the stress check still passes at full accuracy, its margin and error bar are shown, and the mass went up by about 20 g. The engineer circles the fillet, asks what happens at a 5 mm wall, and gets a second study back on the agent's branch. She approves the merge with a security key and sends the machine shop a read-only link whose figures follow the model as it changes.
 
-The contract is binding. The twelve subsystem tabs follow one skeleton, in which every design section ends with a capability table, and a tab that disagrees with the contract files a change request instead of working around it. The [Adversarial review](13-adversarial-review.md) records how the spec was attacked and what changed, and the [Decisions log](14-decisions-log.md) lists every decision in one line.
+Nobody modelled the bracket by hand. The agent edited a short Ingot program; the engine rebuilt only what the edit touched; the simulation reported which errors it counted and which it did not; and the merge refused nothing because nothing got worse. The rest of this page explains each of those steps and links to the tab that specifies it.
 
-## Where the field stands
+### The mission and five requirements
 
-Each leading product wins one part of the problem; each tab's State of the art section has the detail.
+Crucible's mission is to be the one platform in which agents author physical products and people steer, review, approve and present them, specified completely enough that agents working against machine-checked tests, directed by one founder, can build it without further design work ([contract section 1](../contract.md#1-mission)). "Fully specified" means every capability has a purpose, a contract (inputs, outputs, types), failure behaviour, an oracle that verifies it, and a phase. An oracle is a machine-checkable test that the agents building the capability cannot edit.
 
-- **Features in the user's language.** Onshape writes its standard features in FeatureScript, the language its users get, and `std::mech` follows that model ([MEC](06-mechanical.md)).
-- **Code as the model.** Zoo's KCL programs drive Zoo's hosted engine, but KCL has no area or volume units, and FeatureScript checks dimensions only at run time. CadQuery and build123d are Python libraries on Open CASCADE, without units ([ING](01-ingot.md)).
-- **Geometry kernels.** Parasolid, ACIS and CGM lead on B-rep Booleans with local tolerances. Open CASCADE 8.0 is the open reference, and its fillet builder rejects contour ends where four or more edges meet. The Rust kernel Fornjot was archived in June 2026 without reaching its goals ([ANV](02-anvil.md)).
-- **Implicit geometry.** Fidget and nTop lead on implicit evaluation; Anvil measures itself against Prospero, Fidget and libfive ([ANV](02-anvil.md)).
-- **Agents.** Fusion and Onshape expose MCP servers, and Zoo's Zookeeper works in code and reviews four views of its own work. NX Copilot answers with sources but does not act ([AGT](09-agents.md)).
+The founder sets five hard requirements:
 
-Crucible's answer is the principles below: the typed program is the model, and every result states its error and its evidence.
+1. **Anything physical.** Every major physics domain and every scale, from MEMS (micro-electromechanical systems) to ships and building products, with every model stating where it is valid and the spec saying plainly what is out of reach.
+2. **State-of-the-art methods** in every component, each compared with the best published method and the leading implementation to beat.
+3. **Every major operating system, identical features,** with only capacity and speed allowed to differ.
+4. **Coherence and taste,** in the design and in text an engineer reads with pleasure.
+5. **Better than the incumbents and their clones:** nothing an incumbent's user relies on is missing by the phase the parity floor names, and the reasons to switch are ones a clone cannot copy in weeks.
+
+### How the spec is organized
+
+The [architecture contract](../contract.md) is binding. It fixes the names, principles, shared types, decided architecture, phases and performance targets, and a tab that disagrees with it is wrong. Twelve subsystem tabs specify the rest, each with the same skeleton: a guide-level walkthrough, design sections that each end in a capability table, then State of the art, Platform notes, Interfaces, Oracles, Phasing, Open questions and Sources. A tab that believes a contract rule is wrong files a change request; the contract changes only in a ruling.
+
+Two summary tabs complete the set. The [Adversarial review](13-adversarial-review.md) records how independent reviewers attacked the spec and what changed, and the [Decisions log](14-decisions-log.md) lists every numbered decision in one line. Crucible, Ingot, Anvil, Flux and Kiln are working names; Flux is renamed in phase 0 and Kiln is cleared or renamed there too.
+
+## Why Crucible, and why not a clone
+
+An engineer who switches tools needs reasons that hold up in daily work, and a reason that an AI-built clone could add in a few weeks of agent time is no reason at all. This section compares what the incumbents and the clones give with what Crucible's one typed model gives.
+
+### Where the field stands
+
+Each incumbent leads in one part of the problem. Parasolid and ACIS lead on solid modelling; Ansys, Abaqus and COMSOL on simulation; Mastercam, hyperMILL and NX CAM on machining; Altium and KiCad on boards; Teamcenter and Windchill on product records. Onshape writes its own standard features in FeatureScript, the language its users get, and checks units in it at run time [Onshape FeatureScript variables]. Zoo's KCL and the Python libraries CadQuery and build123d make code the model. Fusion exposes a Model Context Protocol (MCP) server, the standard through which AI applications call tools [Autodesk Fusion MCP]. Onshape serves FeatureScript to agents the same way [Onshape FeatureScript MCP], and Zoo's Zookeeper writes KCL and reviews snapshots of its own work [Zoo Zookeeper].
+
+AI-built clones now reproduce incumbent features quickly. SolidCraft, a Rust parametric CAD application, ships sketches with a solver, a feature timeline, sheet metal, assemblies with joints and motion studies, STEP and IGES exchange, and an MCP server [SolidCraft]. CADCraft, a clean-room reimplementation of AutoCAD, reads and writes DXF and DWG and edits sketches with trim, extend, fillet and chamfer [CADCraft]. Features alone, then, are not a moat.
+
+What none of them does is make one typed program the model, with units, tolerances and error checked by the compiler, every result stating its trust, and every edit reviewable as text and checked before it merges. That is the gap Crucible fills.
+
+### The comparison
+
+| What an engineer relies on | What the incumbents give | What the AI-built clones give | What Crucible's one typed model gives | Owner |
+| --- | --- | --- | --- | --- |
+| The model itself | A feature tree inside the tool; FeatureScript as the open exception, with units checked at run time | A feature timeline saved as JSON (SolidCraft) | A pure Ingot program in which units, dimensions and tolerances are types, checked before anything runs | [ING](01-ingot.md) |
+| Geometry that rebuilds | Local tolerances and a best guess near coincidence (Parasolid, ACIS) | Fillets, shells and Booleans on an open kernel without certified decisions (SolidCraft on Truck) | Every topological decision proved or refused, with the same faces, names and bits on every machine | [ANV](02-anvil.md) |
+| References to faces and edges | Toponaming mitigation and positional fallbacks (FreeCAD, KCL) | None cited in the tabs | Names derived from source text and roles, never from position, with typed errors whose fixes compile | [ANV](02-anvil.md), [ING](01-ingot.md) |
+| Simulation | The analyst meshes, defeatures and runs convergence studies (Ansys, Abaqus, COMSOL) | None cited in the tabs | A solve on the exact geometry with a stated bound on exactly the quantity each check reads | [FLX](03-flux.md) |
+| Trust in a model | Credibility left to the analyst's judgement | None cited in the tabs | A validity zone, a credibility level and a model-form bound attached to every result as data from physical tests | [COV](04-coverage.md) |
+| Branches and merges | Onshape merges whole tabs and cannot merge drawings [Onshape merging] | Undo and redo as the only recovery (SolidCraft) | Block-level merges, drawings included, that refuse a merge which worsens a check, adds interference or edits one entity from both sides | [KLN](05-kiln-repo-plm.md) |
+| Design rules and stack-ups | Separate tools run on demand (Tecnomatix Variation Analysis) | None cited in the tabs | Fits, stack-ups and design rules as checks on every merge, on the drawing's own tolerances | [MEC](06-mechanical.md) |
+| Agents | Copilots that answer questions or edit the open model; agents that review their own snapshots | An MCP command channel with no permission model described (SolidCraft) | The same typed `api` people use, work delivered as Proposals attacked by an independent verifier and classed by risk | [AGT](09-agents.md) |
+| Machines and outside effects | Program verification as a separate step (VERICUT); approval of agent effects not described | None cited in the tabs | Approvals signed over content digests, a machine gateway that refuses anything else, and no remote cycle starts | [MFG](07-manufacturing.md), [AGT](09-agents.md) |
+| Product records | Lifecycle records in a separate PLM system (Teamcenter, Windchill) | None cited in the tabs | Items, BOMs and change orders in the design repository; a release signs exactly the content its checks evaluated | [KLN](05-kiln-repo-plm.md) |
+| Same answer everywhere | Bit reproducibility only at a fixed thread count (oneMKL) [Intel oneMKL reproducibility]; x86 Windows and Linux first (Ansys) | None cited in the tabs | Identical bits on every Tier 1 CPU target and browser, at any thread count | [PLT](12-platform-performance.md) |
+| Presenting the product | Exploded views and reports built in a separate step (SOLIDWORKS Composer, Ansys Report Preview) | None cited in the tabs | Illustrations, animations, reports and web views computed from the live model, every number bound to it | [UIX](10-ui.md) |
+
+### Why a clone cannot copy it in weeks
+
+The right-hand column is not a list of features. Each entry rests on a mechanism with oracles and, for physics, on data from made and measured parts: certified geometric decisions, calibration corpora for error estimates, validation campaigns that set model-form bounds, a canonical arithmetic that every target reproduces, and a merge that evaluates checks. A clone can add a fillet dialog in a day; it cannot add a measured model-form bound without running the tests. Each tab's State of the art section holds a parity table that names the incumbent feature, Crucible's row and phase, and whether Crucible is ahead, equal or later, with a reason.
 
 ## Principles
 
-The contract states seven principles that no tab may break (section 3).
+Seven principles bind every tab ([contract section 3](../contract.md#3-principles-non-negotiable)); each is stated here in one line.
 
-1. **No privileged code.** Built-in features use only the public mechanisms anyone can use: Ingot for features, Wasm components for heavy algorithms, and versioned Anvil and Flux operations underneath. If a user or agent cannot build a feature, neither can the core team. The one permitted difference is process isolation of third-party Wasm components, within PLT's call-overhead targets.
-2. **One model, three editors.** The visual editor, the code editor and agents edit the same typed program. Nothing exists only in the GUI.
-3. **Two universal types.** `Body` carries geometry and `Field` carries physics data. Models (weak forms, Networks) describe how Fields are computed.
-4. **Determinism is a feature.** The same inputs and versions give identical outputs per platform class; other classes agree within declared tolerance, or in declared statistics for chaotic problems. Problems with several solutions declare how a branch is selected. Evaluation never depends on clocks, randomness, thread order or names.
-5. **The compiler checks physics.** Units, dimensions and tolerances are types, checked before anything runs. Every approximation carries its error, in a stated norm.
-6. **Every claim has an oracle.** No capability ships without a machine-checkable test that the agents building it cannot edit. Oracles that judge agent-built code also keep a held-out split outside the agent-readable tree, and a held-out failure fails the oracle.
-7. **Open core, interop first.** Kernel, language and standard library are open source. Open standards are first-class, and no design is ever trapped.
+1. **No privileged code.** Built-in features use only the public mechanisms anyone can use, so whatever Crucible's builders can make, a user or agent can make too.
+2. **Agents author; people steer, review and present.** Agents write the typed program; people point, mark up, ask, review every Proposal, approve every outside effect and present the result, and nothing exists only in the GUI.
+3. **Two universal types.** `Body` carries geometry and `Field` carries physics data.
+4. **Determinism is a feature.** The same inputs and versions give identical outputs per platform class, and evaluation never depends on clocks, randomness, thread order or names.
+5. **The compiler checks physics.** Units, dimensions and tolerances are types, and every approximation carries its error in a stated norm.
+6. **Every claim has an oracle,** with a held-out split the builders never see.
+7. **Open core, interop first.** Kernel, language and standard library are open source, and no design is ever trapped.
 
 ## Architecture
 
-### Three tiers: operations, Wasm components, features
-
-Every capability lives in one of three tiers (contract section 4, decision D-ARCH-1).
+Code sits in three tiers so that the core stays small and anyone can extend Crucible the way its own builders do ([contract section 4](../contract.md#4-layering-operations-wasm-components-features)).
 
 | Tier | Written in | What lives there | Rule |
 | --- | --- | --- | --- |
-| Operations | Native Rust, in Anvil and Flux | Geometry and physics primitives, a few hundred in all | A released version freezes its source closure by hash, and a design pins the versions it was built with |
-| Wasm components | Rust or another language, compiled to Wasm | Nesting, CAM strategies, slicers, placers and routers, importers, specialist solvers | Sandboxed and determinized; operations and engine data are reached only through the WIT package `crucible:ops`, each call a recorded Op dependency |
-| Features | Ingot | Design intent, orchestration, entity selection and naming, checks and UI metadata | The default tier |
+| Operations | Native Rust, in Anvil and Flux | A few hundred geometry and physics primitives behind versioned contracts | A released version is frozen by a hash of its source closure; a design pins the versions it was built with |
+| Wasm components | Rust or another language, compiled to WebAssembly (Wasm) | Nesting, CAM strategies, slicers, placers and routers, importers, specialist solvers | Sandboxed and determinized; they reach operations only through the WIT package `crucible:ops`, where WIT is WebAssembly Interface Types |
+| Features | Ingot | Design intent, orchestration, entity selection and naming, checks and dialog metadata | The default tier |
 
-The tier rule (D-ECO-6) keeps code in Ingot unless it needs more than about 10⁶ primitive steps per call, an existing codebase in another language, or a data structure Ingot cannot express efficiently. Code becomes an operation when three independent packages need it, it needs GPU or SIMD kernels, or it must be differentiable through Flux's form-level derivatives.
-
-A Wasm component never gets raw GPU, clock, file or network access, and reads engine data only through `crucible:ops` and handles derived from its inputs. Only first-party Wasm components run in the engine process. Every third-party Wasm component runs out of process on every target, and browsers evaluate third-party ones remotely until the asynchronous bridge passes PLT's executor oracle. Until the Ingot code generator ships, Ingot's reference interpreter, written in Rust, is its only executor on every target (contract 7.4).
-
-### How a design flows
+The tier rule keeps code in Ingot unless it needs more than about 10⁶ primitive steps per call, an existing codebase in another language, or a data structure Ingot cannot express. Code becomes an operation when three independent packages need it, it needs GPU or SIMD kernels, or it must be differentiable through Flux. Third-party Wasm components always run out of process, and they never get raw GPU, clock, file or network access.
 
 [[DIAGRAM diagrams/00-overview-architecture.jsx: Crucible architecture · clients, api, Kiln and the three tiers]]
 
-Read top to bottom: every editor reaches the design only through `api`, Kiln runs features, Wasm components and operations as nodes, Wasm components reach Anvil and Flux only through `crucible:ops`, and only Acts leave Crucible.
+Read the diagram top to bottom. People, agents, scripts and hardware CI reach the design only through `api`, the one API whose methods fall into eight groups. Edits become Changes in the design repository; an Evaluation asks Kiln, the incremental engine, to compute nodes; Kiln runs features, Wasm components and operations as memoized nodes and stores every result in the CAS, the content-addressed store where each object is named by the SHA-256 hash of its bytes. Data made outside evaluation, such as a supplier offer or a lab measurement, enters only as a signed, pinned External input, and an Act, such as a release or a transfer to a machine, leaves Crucible only after a named person approves its exact plan.
 
-People, agents and CI change a design only through `api`, whose methods fall into eight groups: Session, Read, Edit, Evaluate, Inspect, Compare, Propose and Act. Every edit becomes an immutable Change in the design repository, and an Evaluation asks Kiln to compute a set of nodes for a Change. Kiln runs features, Wasm components and operations as memoized nodes and stores every derived artifact in the CAS.
+The crates follow the same layering ([contract section 12](../contract.md#12-crate-map)): a platform row, the shared contract types in `base`, the engine core, geometry, physics, language, the product services `repo`, `plm` and `trust`, and the API surface. Domain crates never depend on Kiln, apps reach the engine only through `api`, and `cargo xtask check-layers` fails any other dependency.
 
-Anvil owns all mesh generation; Flux passes it sizing Fields and solves on the meshes it returns. Data made outside evaluation, such as a licensed translation or a supplier offer, enters only as a signed External input pinned in `ingot.lock`, and physical tests return as signed Evidence records. Hardware CI rebuilds every Change on a protected branch and evaluates its checks, and an Act, such as a release or a transfer to a machine, leaves Crucible only after an assigned human approves its exact plan.
+## The canonical bracket
 
-### Core types
-
-The contract fixes the types every subsystem shares (section 5); Rust names are canonical.
-
-| Type | What it carries | Owner |
-| --- | --- | --- |
-| `Body` | Geometry as `BRep`, `Implicit`, `Mesh` or `SubD`; mixed operations return the least representation that holds both operands without approximating | ANV |
-| `CallSite`, `EntityId`, `Query` | Call identity from source text alone; entity names hashed from call sites and roles; references resolved by provenance and role, never by position | ING, ANV |
-| `Field<D, V>` | Any quantity over a domain, from stresses to waveforms, mode sets and material curves, with an `ErrorBudget` on every result | FLX |
-| `Network` | A lumped model of domain-typed ports, compiled into a DAE | ELX, FLX |
-| `Material`, `ValidityEnvelope` | Property Fields with constitutive models, provenance and a `DataLicence`; the conditions where a model is trusted | COV |
-| `Quantity<D>`, `Tol<T>`, `Approx<T>`, `Truth` | Dimensioned numbers, toleranced values, values with error budgets, and three-valued comparisons | ING |
-| `ErrorBound`, `ErrorBudget` | A bound with a norm and a kind (`Guaranteed`, `Estimated` or `Indicator`); a budget with one part per error source | `base` |
-| `CheckId`, `CheckOutcome` | A check identity that survives edits to its limit; verdict, fidelity, evidence, value, limit, margin and severity | ING, in `base` |
-| `Labels` | A confidentiality part and an integrity part, joined through every derivation | `base`, KLN, AGT |
-| `ItemDefinition`, `ApprovalSubject` | The name-free definition of an Item revision, and what an Approval of a release or change order signs | KLN |
-
-## The canonical example
-
-The contract's bracket is the example every tab follows (section 6). ING owns refinements to the grammar and keeps this example valid.
+Every tab explains itself on one example, an L-shaped aluminium bracket with a stiffening web ([contract section 6](../contract.md#6-ingot-syntax-reference)). ING owns the grammar and keeps the example valid.
 
 ```
 use std::mech::{sketch, rect, extrude, rib, fillet, part}
@@ -92,11 +103,11 @@ use std::materials::alu_6061_t6
 use std::sim::quick::static_stress
 
 /// L-bracket with a stiffening web.
-#[feature(category: "Structure", icon: "bracket")]
+#[toolbox(category: "Structure", icon: "bracket")]
 pub feature bracket(
     #[ui(step: 5mm)]
     width: Length in 20mm..=400mm = 60mm,
-    thickness: Length = 4mm ± 0.1mm,
+    thickness: Length = 6mm ± 0.1mm,
     load: Force = 1.2kN,
 ) -> Part {
     let outline = rect(width, 40mm)
@@ -106,307 +117,393 @@ pub feature bracket(
     let solid = body |> fillet(body.edges(new), 2mm)
     let p = part(solid, name: "Bracket").material(alu_6061_t6)
     let clamp = base.face(role: start_cap)
-    let study = static_stress(p, fixed: clamp, force: load, on: web.face(role: end_cap))
-    let stress = study.von_mises.max(over: p.away_from([clamp, web.face(role: end_cap)], 2 * thickness))
-    p.require(stress < 0.6 * p.material.yield_strength(at: 20degC))
+    let tip = web.face(role: end_cap)
+    let study = static_stress(p, fixed: clamp, force: load * dir(-y), on: tip)
+    let stress = study.von_mises.max(over: study.regular())
+    p.require(stress < 0.6 * p.material.yield_strength(at: 20degC), name: "static_margin")
 }
-// width + load  →  error ING3001: cannot add Length and Force
+// width + load  →  error ing/3001: cannot add Length and Force
 ```
 
-The edge is selected by its role, `end(e)`: the edge the end cap gets from profile edge `outline.top`, never a rank. Every sweeping feature gives its faces, edges and vertices roles (ANV owns the vocabulary). The stress check reads a regularized maximum over a region that excludes the clamp and the loaded face by twice the wall thickness, because stress is singular where a clamped face meets a free face and may be singular at a loaded patch's edges (contract 7.1). The result is an `Approx<Stress>` with an `Estimated` bound, the check is three-valued, and an ING oracle shows that it decides at `SignOff`.
+Four things in it carry the whole platform.
 
-Weak forms:
+- **Types catch physics mistakes.** `width + load` does not compile, and the tolerance on `thickness` travels to two independent PMI sites, one on the plate and one on the web. PMI, product and manufacturing information, is the dimensions, tolerances and notes attached to the 3D model ([ING](01-ingot.md), [MEC](06-mechanical.md)).
+- **Nothing is picked by position.** The web stands on the edge whose role is `end(outline.top)`, so a dimension change never re-selects a different edge ([ANV](02-anvil.md)).
+- **The check knows where the model lies.** Stress is infinite in the model at the clamp's edges and the loaded patch's edges, though not in the real part, so the check reads `study.regular()`, the part minus Flux's flagged neighbourhoods, which keeps the web-root fillet where bending peaks ([FLX](03-flux.md)).
+- **The verdict is named and three-valued.** `static_margin` concludes `Pass`, `Fail` or `Undecided` with a reason, and its name keeps its identity when other checks are added. It passes at the default 6 mm and fails at 4 mm, where the web root's bending stress exceeds the limit.
 
-```
-let u = trial(Displacement, p)
-let v = test(u)
-let elasticity = inner(sigma(u, p.material), eps(v)) * dx(p)
-              == dot(traction, v) * ds(web.face(role: end_cap))
-let result = solve(elasticity, fixed: clamp)
-result.von_mises  // Field<Part, Stress>
-```
+## How far to trust a number
 
-Ingot adds no keywords for domain concepts: constraints are ordinary functions, interfaces are records marked `#[interface]`, and variants are parameters marked `#[configuration]`. An Instance's existence depends only on configuration parameters and constants, so Kiln computes the 150% BOM without enumeration, while an Instance set's member count may depend on any value. Builder blocks (`sketch { … }` and `network { … }`) are the only block sugar.
+Every result Crucible shows answers ten questions, and each answer has one type and one owner ([contract section 5.2](../contract.md#52-how-far-to-trust-a-number)). This section walks the bracket's `static_margin` check through them at the default 6 mm plate. The stress figures are COV's worked illustration, not measurements: a regularized peak of 118 MPa at the web-root fillet, where a regularized peak is a stress averaged over a small stated region because a raw maximum depends on the discretization.
+
+| Qualifier | Question it answers | What the bracket shows | Owner |
+| --- | --- | --- | --- |
+| Fidelity | How hard did we try? | `Preview` paints a picture and decides nothing. `Interactive` returns in about a second at polynomial degree 2 with a cheaper estimate, and its verdict is provisional. `SignOff` adapts until the bound is tight and confirms it by one further refinement | KLN |
+| Result status | Is the value here and current? | While the width is dragged, the stress shows as `Proxy`, extrapolated from its last value; it becomes `Ready(Interactive)`, stays `Pending` for the `SignOff` node, then `Ready(SignOff)` | `base` |
+| Error budget | Which errors were counted, and which were not? | Discretization ±1.5 MPa, plus small algebraic, regularization, floating-point and input parts. Model form is `NotQuantified` until the phase 1 validation campaign measures fillet strain; afterwards it is 10.2 MPa | `base`, FLX |
+| Bound kind | How sure is each error bar? | Discretization is `Estimated`, multiplied by a calibrated class factor so that it undershoots in at most α = 0.01 of held-out cases; regularization and floating point are `Guaranteed`; model form is `Estimated { Statistical }` from ASME V&V 20 at α = 0.05 | `base`, FLX |
+| Validity zone | Is the model inside the range where it was checked? | `Calibrated`: 20 °C and a stress ratio near 0.5 sit inside the tested range. At 120 °C the zone is `Extrapolated` and model form grows 1.6 times; at 3 kN the fillet yields and the envelope refuses the result | COV |
+| Model level | What form of physics produced it? | L3, full 3D: neither the 6 mm plate nor the web is slender enough for a shell, so the whole Part is a solid on an immersed octree | COV |
+| Credibility level | How well has this model been tested against reality? | C3, Validated, for the response quantity "regularized surface peak at a fillet, linear elastic"; the same model with an untested alloy is C2, Benchmarked | COV |
+| Platform class | Where would the same bits come out again? | The `SignOff` value comes from the canonical class, so the designer's laptop, a reviewer's browser and two release builders produce the same `ObjectId`; the drag-time value may come from a faster native path cached only under that machine's class | PLT |
+| Verdict | What does the check conclude? | `Pass`: 118 + 1.5 + 10.2 = 129.7 MPa against a limit of 144 MPa (0.6 × the 240 MPa specification minimum yield), at confidence at least 1 − (0.01 + 0.05) = 0.94. Before validation it is `Undecided { Unquantified([model form]) }` unless a pinned policy allowance covers model form. At 4 mm it is `Fail` | ING |
+| Gate | May it merge or release? | A non-provisional `Pass` in a platform class the gate accepts meets the gate predicate, so the Proposal may merge; the release then needs a person's Approval of its subject digest, and two independent trusted builders must agree on the result | ING, KLN |
+
+Two readings of this table matter. First, the numbers that decide come only from bounds that hold for the quantity the check reads: an error measured in one norm never certifies a peak, and a total with any uncounted part is `NotQuantified`, so the check says `Undecided` and names what is missing. Second, nothing switches silently: Crucible names a valid model or a missing test as a fix, and a person or agent edits the design.
+
+The owners' sections hold the rules: fidelity and status in [KLN](05-kiln-repo-plm.md), budgets and bound kinds in [FLX](03-flux.md), zones, levels and model form in [COV](04-coverage.md), platform classes in [PLT](12-platform-performance.md), and the decision rule and gate predicate in [ING](01-ingot.md).
+
+## The life of one change
+
+Every tab assumes one story: an edit travels through the engine to a check, a review, a release and a measured part. Here it is in order, on the bracket, with the tab that specifies each step.
+
+1. **Ask.** A designer asks an agent to widen the bracket to 80 mm. The agent opens a session on a new branch with a cost budget and scoped permissions, reads the bracket's typed outline, and sends one edit that sets `width` to 80 mm. The server turns it into a one-line source patch and records an immutable Change ([AGT](09-agents.md)).
+2. **Recompute.** Kiln re-runs only the nodes downstream of that literal: the extrusion, the rib, the Boolean, the fillet, the solve and the check. The clamp face and the loaded face keep their entity names, because names never depend on argument values, so the study and the check keep their identities and history ([KLN](05-kiln-repo-plm.md), [ANV](02-anvil.md)).
+3. **Simulate.** Flux warm-starts the solve. An `Interactive` value with an `Estimated` bound arrives in about a second; the `SignOff` node follows in the background ([FLX](03-flux.md)).
+4. **Propose.** The agent opens a Proposal: a branch plus rationale plus CI report, the unit of agent work and of human review. The server refuses it unless the head builds, every check meets its gate, and rendered Snapshots exist ([AGT](09-agents.md)).
+5. **Attack.** An independent verifier, which never sees the author's free text, thins the web and sees `static_margin` fail, so the check is not vacuous, then replays CI in a second platform class. The server computes the risk class from the semantic diff ([AGT](09-agents.md)).
+6. **Review.** The owner opens the Proposal on evidence first: changed verdicts, margins and mass, then the geometry overlay and the source diff. She marks up the fillet and asks a question that reaches the agent as a request, then approves the merge with her security key ([UIX](10-ui.md)).
+7. **Release.** A change order, which is a Proposal with lifecycle scope, prepares a release plan whose subject digests the Item's name-free definition, the verdicts and the cited records. The approver signs that digest; any later change to what is made voids the Approval, while a rebase that leaves it unchanged does not ([KLN](05-kiln-repo-plm.md)).
+8. **Make and measure.** The shop machines the part from the released STEP AP242 file with semantic PMI. The external lab's signed measurements return as Evidence records, which a bot Proposal pins against the checks they serve ([MFG](07-manufacturing.md), [KLN](05-kiln-repo-plm.md)).
+
+Everything the release depended on is pinned in `ingot.lock`: operation versions, packages, policy packages and Evidence records. One Change therefore fixes every outcome, on every machine, for as long as the records are kept.
+
+## Discretization chosen per region
+
+An incumbent analyst spends much of the day choosing elements, meshing and deciding which walls become shells. Flux makes that choice from the geometry and the study, records it as a pinned plan, and lets the engineer override any part in source ([contract section 7.1](../contract.md#71-engines), [FLX](03-flux.md)).
+
+| Region | Model | When it applies |
+| --- | --- | --- |
+| Thin walls | Reissner–Mindlin shells on Anvil's mid-surfaces | Where the wall thickness t and the local length L_local satisfy t / L_local ≤ 0.2 |
+| Members and struts | Timoshenko beams, with Vlasov warping for open thin-walled sections | Where a member is slender over its local length |
+| Lattices | Beam-lattice models with node corrections, or homogenization | Strut graphs from Anvil's lattice operation |
+| Solids | An immersed adaptive octree with aggregated CutFEM at `Interactive` and `SignOff`, at least four cells across any section | Everything the criteria above do not reduce |
+| Contact and turbulent boundary layers | Fitted meshes, which Anvil generates | Where the immersed grid cannot resolve the layer |
+| Revolved or prismatic bodies under matching loads | Axisymmetric or planar section models | When Anvil certifies the symmetry and the loads share it |
+
+CutFEM is the finite element method on a background grid that the geometry cuts through, so nobody builds a fitted mesh; "aggregated" means tiny cut cells merge with their neighbours for stability. L_local is the smallest of the span between supports, the radius of curvature, the distance to the nearest concentrated load, patch edge, opening or feature, and the length over which a distributed load varies; a load that covers the whole wall does not shorten it.
+
+Reduced regions join solid ones through rigid couplings at `Interactive` and Nitsche-based mixed-dimensional interfaces at `SignOff`, and junction zones stay solid. Every reduction by symmetry is checked: if a load or a face breaks the symmetry, the solve fails with `SymmetryBroken` instead of returning a confident wrong answer. The bracket itself is the simplest case, a solid on the octree, because neither its 6 mm plate nor its web is slender enough for a shell.
+
+## Viewer first: review and presentation
+
+Agents author, so the human interface is first a fast viewer, a review desk and a presentation studio, not a modelling workbench ([contract section 7.6](../contract.md#76-api-agents-acts-and-the-human-interface), [UIX](10-ui.md)). People inspect geometry and results, review agent Proposals, steer by pointing, marking up and asking, and present the product. Every product change still goes through `api`, so the UI holds no product state of its own.
+
+### Viewing and reviewing
+
+One Rust UI toolkit and one wgpu renderer serve every Tier 1 platform, native and in the browser, on three declared GPU tiers: G1 native, G2 WebGPU and G3 WebGL2. Display data are per-Body tessellations keyed by geometry identity and cached in the CAS, so equal geometry in two designs shares them. Fields paint on the true geometry with their stated error, and the legend names the fidelity.
+
+Review opens on evidence: the checks whose verdict or margin changed, then mass and cost deltas with their bounds, then a geometry overlay of both sides, then the source diff. A circle drawn on a fillet becomes a comment anchored to that fillet's entities and the current view; a typed question becomes a request to the agent. Review, Present, Design, Simulate, Manufacture and Electronics are presets over one workspace, and Review is the default.
+
+### Presenting
+
+The presentation studio makes, from the live model, technical illustrations, exploded views, Field and deformed-shape animations, a view of how Flux discretized the part, shareable read-only web views and generated reports in phase 1; photoreal path-traced renders, animation of moving parts from mates and motion studies, and generated decks follow in phase 2 ([contract section 13.4](../contract.md#134-shared-phases-and-the-parity-floor)). Every output is a Snapshot, a rendered image of a saved view under a pinned render profile, or an ordered set of them. A presentation is therefore a file in the design repository that an agent can write, a reviewer can diff and a release can pin.
+
+Every number in a figure or caption is a readout bound to the model, with its unit, bound and status. When a later Change edits the fillet, the report and the web view re-render and every number follows; a readout that is not current at the scene's fidelity carries a provisional badge, so a slide cannot quietly show a stale margin.
+
+### The polish bar
+
+The founder's reference for polish is Anatomy, an open project that builds explanatory figures of real objects and holds them to written rules [Anatomy skill]. Crucible meets that bar with its own Rust renderer, on real engineering geometry and simulation Fields: editorial serif typography on a calm canvas, fine-line isometric drawings with labelled callouts anchored to entities, real 3D motion with moving parts a viewer can rotate and inspect, and fluid, heat, flame and plasma effects drawn from computed Fields. An effect from an authored, not computed, Field is captioned "illustrative", so a viewer never mistakes decoration for a result, and every effect follows the reference's rule that nothing pops [Anatomy craft]. UIX's oracles measure the bar against path-traced references and the frame-time targets of contract 13.3.
 
 ## Subsystems
 
-Each paragraph restates the owning tab's lead and links to it.
+Each subsystem tab opens with a guide-level walkthrough on the bracket or a golden product; the paragraphs below say what each owns and link to it.
 
 ### Ingot language (ING)
 
-[Ingot](01-ingot.md) is Crucible's design language: pure, strict and statically typed, with units, tolerances, approximation error and geometric references as types. A canonical-class interpreter runs it on every target, and each operation call becomes a Kiln node named from source text alone. The visual editor, the code editor and agents edit one lossless syntax tree, so every edit is a minimal, mergeable source change.
+[Ingot](01-ingot.md) is the language every design is written in: a part is a short, pure, statically typed program whose dimensions carry units and tolerances and whose requirements are named checks that say how sure they are. A length added to a force fails before anything runs, each tolerance reaches the drawing, and each error bar reaches the verdict. Every geometry or physics call becomes a named, cached Kiln node, so an edit is a small text change that rebuilds identically everywhere.
 
 ### Anvil geometry kernel (ANV)
 
-[Anvil](02-anvil.md) is one kernel over four representations (exact B-rep, implicit, mesh and subdivision surface), with one tolerance model, one provenance model and one operation contract. Decisions use exact predicates on linear geometry and certified enclosures on curved geometry, in rounds against frozen tolerances, identically at every fidelity. Every operation is versioned, deterministic and label-invariant, returns history and error bounds, and never lets the GPU decide or prune.
+[Anvil](02-anvil.md) holds one `Body` type over four representations: exact boundary representation (B-rep), implicit, mesh and subdivision surface, and mixing them never silently approximates. Where other kernels settle near-coincidences with one global tolerance and a best guess, Anvil proves each topological decision or says it cannot. Every operation is versioned and returns the history that keeps face and edge names stable when dimensions change.
 
 ### Flux physics engine (FLX)
 
-[Flux](03-flux.md) compiles weak forms written in Ingot through the shared kernel IR and solves them per region with matrix-free multigrid. Solids use aggregated CutFEM on an immersed octree, slender walls and members use shells and beams, and contact uses fitted meshes. Every result is a Field whose `ErrorBudget` states each bound's norm, kind and confidence, so a check decides only on bounds that hold for its quantity.
-
-Contract section 7.1 fixes the discretization per region:
-
-| Region | Discretization |
-| --- | --- |
-| Members and struts | Timoshenko and Vlasov beams where a local slenderness criterion holds |
-| Thin walls | Reissner–Mindlin shells on Anvil mid-surfaces where t/L_local ≤ 0.2 |
-| Solids | An immersed adaptive octree: aggregated CutFEM at `Interactive` and `SignOff`, with at least four cells across any section; finite cells for voxel data; the shifted boundary method at most at `Preview` |
-| Contact and turbulent boundary layers | Fitted meshes |
-| Laminar thermal and frozen boundary layers | Octree wall refinement |
-| Lattices | Beam-lattice models with node corrections and homogenization |
-
-L_local is the smallest of the span between supports, the radius of curvature and the distance to the nearest concentrated condition or feature; loads that cover the wall do not shorten it. Peak and pointwise quantities are regularized goals with `Estimated` bounds, never a raw maximum. Near a flagged singular set, such as an edge where a clamped face meets a free face, a point quantity is `Undecided { SingularPoint }` unless the check's region excludes it by a stated distance.
-
-A `SignOff` `Pass` resting on an `Estimated` discretization part is confirmed by one further refinement, or becomes `Undecided`. A `SignOff` check uses a surrogate only with a per-prediction bound or a confirming solve.
+[Flux](03-flux.md) poses physics as weak forms written in Ingot, the integral equations that finite elements solve, or as ready-made studies such as `static_stress`. It solves on the exact design geometry with a discretization chosen per region, recomputes only what an edit touches, and returns Fields that name each error source and how sure each bound is. It also provides multibody dynamics, the solver for lumped Networks (domain-typed ports compiled into a DAE, a system of differential-algebraic equations), full-wave electromagnetics and the operations non-variational methods need.
 
 ### Physics coverage and materials (COV)
 
-[Crucible covers physics](04-coverage.md) through versioned physics packages whose models declare a model level, an evidence level and a `ValidityEnvelope` as data. Every result carries a validity-zone Field and an `ErrorBudget` whose model-form part comes from validation, and every gap is a named record. Materials are versioned records of property Fields over state domains, with statistical basis, typed uncertainty, provenance and a `DataLicence` that travels in the label lattice.
+[COV](04-coverage.md) decides which physics Crucible can honestly claim, as versioned physics packages, and keeps the versioned Material records every simulation reads. Each model carries a validity envelope, its record of where physical tests checked it, stored as data that compiles into checks on every result. Every gap is a named record, and Crucible names the valid model where one is needed but never switches models on its own.
 
 ### Kiln, repository and PLM (KLN)
 
-[Kiln](05-kiln-repo-plm.md) evaluates Ingot as a memoized graph keyed by content, call site and pinned operation versions, so an edit recomputes only what it affects. Each edit becomes an immutable Change in the CAS, a SHA-256 content-addressed store; a merge is clean only when source, checks, geometry and connectivity agree. Lifecycle, policy, signature and audit records live in the same signed store on a laptop, a team server, the cloud or an air-gapped site.
+[Kiln](05-kiln-repo-plm.md) re-runs only what an edit affects, and the product services `repo`, `plm` and `trust` keep history, Items, revisions, BOMs (bills of materials), change orders and signatures. A Crucible repository is an ordinary Git repository: every edit is an immutable Change stored as a commit on a cheap branch, people clone and push it with the tools they already use, and GitHub or GitLab can mirror it, with their pull requests arriving as Proposals ([contract section 7.1](../contract.md#71-engines)). Merges are by block, drawings included, and refuse a worse check, new interference or an entity edited from both sides; only Kiln's own Git server writes protected branches, so no mirror can skip a signature. Computed results stay out of Git in a content-addressed cache, and each commit carries Crucible's SHA-256 identity, so a cached result, a merge verdict and an Approval all name the same content, on a laptop, a team server, the cloud or an air-gapped site.
 
 ### Mechanical design (MEC)
 
-[`std::mech`](06-mechanical.md) is the Ingot library for mechanical, industrial and structural design, from sketches to drawings and design checks. Every feature orchestrates versioned Anvil operations and a few Wasm components, and returns a `Body`, `Part`, `Assembly` or `Field`. One constraint solver, one query vocabulary and one semantic tolerancing model serve sheet metal, weldments, composites, molded parts, routing and the rest.
+[`std::mech`](06-mechanical.md) is the Ingot library for mechanical design, from sketch to released drawing: parts, assemblies, surfacing, sheet metal, weldments, composites, moulded parts, routing, tolerancing and model-based definition. Every domain shares one constraint solver, one way of naming faces by how they were made, and one tolerancing model. Fits, stack-ups and design rules are therefore checks on every merge, and drawings, stack-ups and inspection read the same tolerances.
 
 ### Manufacturing (MFG)
 
-[`std::mfg`](07-manufacturing.md) turns a released design into made parts through one typed plan: Ingot intent, Wasm planning, Anvil geometry and Flux physics. Every toolpath, nest, mold, routing, cost and passport is a deterministic function of the design, checked by oracles. A person approves each program, the machine gateway checks that Approval, and a person at the device starts it.
+[`std::mfg`](07-manufacturing.md) turns a released design into made parts: machining, printing, moulding, welding, inspection, cost and factory records as one typed plan that regenerates when the design changes. A design change re-plans exactly the operations it touches and re-checks the posted program on a model of the real controller. A named person approves each program's digest with its setup sheet and simulation results, the machine gateway refuses anything else, and a person at the machine starts every cycle.
 
 ### Electronics and systems (ELX)
 
-[Electrical intent](08-electronics-systems.md) in Crucible is a typed Ingot program: connectivity is a `Network` in code, and a schematic is a drawing proved equal to it. A board is a Part whose copper is integer layout data, and analyses return Fields with error budgets and checks with stated validity envelopes. Schematic, board, enclosure, harness, firmware and requirements share one design repository, so no exchange step can go stale.
+[ELX](08-electronics-systems.md) covers circuits, printed circuit boards, harnesses, motors, batteries, controllers and firmware, simulated inside the product they power. Connectivity is typed code, a `Network` of parts joined at typed ports, and the drawn schematic and board are data that checks prove equal to it. Board, enclosure, harness and firmware share one design repository, so no exchange step can go stale.
 
 ### Agents (AGT)
 
-[Agents](09-agents.md) use the same typed `api` as people: one catalog of methods in eight groups, served over MCP 2026-07-28, native SDKs and WIT. Agents edit only branches and deliver Proposals that build, meet every check's gate, carry signed provenance and survive an independent verifier. The server, not the model, enforces safety: labels on every context, no authority for untrusted text, and human approval of every outside effect's exact plan.
+[Agents](09-agents.md) are colleagues on branches: they call the same typed `api` a person's clicks call and hand their work over as Proposals. Each agent Proposal arrives built, checked, attacked by an independent verifier and classed by risk, from R0 (no semantic change) to R4 (feeds an Act). Safety lives in the server, not the model: untrusted text never carries authority, and nothing leaves Crucible until a named person approves its exact plan.
 
 ### UI and interaction (UIX)
 
-[Crucible's interface](10-ui.md) is a GPU-rendered view of one typed Ingot program, and it changes the product only through `api`. One Rust toolkit and one wgpu renderer give every Tier 1 platform the same features on three declared GPU tiers. Every result shows its status and error, review puts evidence before diffs, and agents work visibly on their own branches.
+[UIX](10-ui.md) is where people inspect, review and present what agents design: a fast 3D viewer, a review desk and a studio for renders, animations, illustrations and reports. Every picture and number is computed from the live model with its status and error, so reviews, slides and reports stay checkable as the design changes. One Rust toolkit and one GPU renderer deliver it identically on every desktop system and browser.
 
 ### Interop and ecosystem (ECO)
 
-[Crucible reads and writes](11-interop-ecosystem.md) the open standards of every engineering domain through deterministic translators. Proprietary formats arrive only through licensed translators whose output is pinned. Everything anyone adds, the core team included, ships through one signed registry under an open licence and binding stewardship.
+[ECO](11-interop-ecosystem.md) owns everything that crosses Crucible's boundary: translators for other tools' files, sandboxed Wasm extensions, the registry, the SDKs (software development kits), connectors, licensing and compliance. Every translator and extension is a deterministic, signed package whose output is pinned like any input, and licensed translators that cannot be deterministic only hand the build signed, pinned files. Imports stay live in the design, and exports reproduce byte for byte years later.
 
 ### Platform and performance (PLT)
 
-[Crucible runs one Rust core](12-platform-performance.md) on every Tier 1 target behind one platform layer, so OS code lives in one crate. Correctly rounded math, no implicit fused multiply-add and fixed reduction orders make CPU results bit-identical everywhere; each GPU pipeline is verified alone. PLT also owns the Wasm runtime, packaging, reliability, CI, the build program and the performance targets of contract 13.3.
+[PLT](12-platform-performance.md) runs Crucible on every machine: deterministic numerics, the compute and Wasm runtimes, the OS and browser layer, deployment, packaging, the build program and the performance targets. Its mechanism is one canonical platform class, whose arithmetic (correctly rounded math, no implicit fused multiply-add, fixed reduction trees) leaves nothing to the processor, OS or thread count. A Windows laptop, a Mac, a Linux server and a browser tab therefore produce identical results, so one computation serves the whole team and every later audit.
 
 ## Guarantees across every tab
 
-### Fidelity, errors and checks
-
-Every demanded result has a fidelity. `Preview` is fastest and approximate and never enters the shared cache, `Interactive` is approximate with an error estimate, and `SignOff` is converged or exact. A consumer holds each result as `Pending`, `Proxy`, `Ready(Fidelity)`, `Stale`, `Failed` or `Aborted`, and the UI shows that status on every value.
-
-An error bound names its norm and its kind: `Guaranteed` needs a proof in the quantity's norm, `Estimated` names its calibration class and exceedance level α, and `Indicator` is the weakest. Bounds in the same norm add, bounds in different norms never combine, and calibrated parts combine by a union bound, so a total carries confidence 1 − Σαᵢ. Model form comes only from validation (COV), and it applies to a check only when the validation plan covers that quantity's response-quantity class.
-
-Comparisons on approximate values return `Truth`: `True`, `False` or `Undecided`, decided only by disjoint enclosures. Control flow on `Undecided` yields an `Undecided` value that is cached like any value and that `try` cannot catch. The Evaluation's fidelity ceiling changes only reporting: while a higher-fidelity node is demanded the consumer holds `Pending`, and at the ceiling the report states the margin and the accuracy needed.
-
-A check is a `require` predicate identified by its `CheckId`, which derives from its call site and never from its predicate text, so editing a limit keeps the check's history and evidence. Its verdict is `Pass`, `Fail`, `Undecided`, `Error` or `Skipped`. A `Pass` resting on unquantified parts, typically model form, counts only under a policy allowance: a signed record with a citation, such as a design-code partial factor, changed only through a Proposal with two signers.
-
-One gate predicate serves protected merges, Proposals and releases: a check meets a gate when its severity is below `Error`, its verdict is a non-provisional `Pass` in an accepted platform class, or a Waiver covers it. Only an authorized human signs a Waiver, with an expiry; agents never sign one, and protected checks and `Refuse` envelopes accept none. An Evaluation reads Evidence records up to its evidence watermark, so one Change at one watermark fixes every outcome.
-
-Each physics model declares a model level, an evidence level and a `ValidityEnvelope` whose zone Field and checks flag or refuse results outside it (COV). Crucible suggests a valid model but never switches models on its own.
+Some rules hold in every subsystem; the contract states them once and each tab applies them. This section gives each in a few lines with its owner.
 
 ### Determinism and caching
 
-Results are bit-identical within a platform class (contract section 7.3), and the operating system is never part of a CPU class. The determinism suite runs on every merge on a representative set and nightly on every other Tier 1 target and browser engine; a nightly divergence bisects automatically and blocks promotion to beta.
+Results are bit-identical within a platform class, and the operating system is never part of a CPU class ([contract section 7.3](../contract.md#73-determinism)). The canonical class covers every Tier 1 CPU target, browsers included, at any thread count; `CpuIsa` is a native fast path for one instruction-set level; `Gpu` is one compiled pipeline on one verified device class; `Unverified` covers everything else. Non-canonical results never substitute for canonical ones, except through a witness: a pinned GPU Field whose residual and error bound are computed canonically.
 
-| Platform class | What it covers |
-| --- | --- |
-| `CpuCanonical`, the canonical class | Every Tier 1 CPU target, browsers included, at any thread count and ISA level |
-| `CpuIsa` | A native fast path for one ISA level, which may use fused multiply-add and native widths |
-| `Gpu` | One compiled pipeline on one verified device class |
-| `Unverified` | Unlisted devices and external hosts |
+Kiln finds a result by its `NodeKey`, the hash of the code, arguments, input identities, platform class and fidelity that produced it, never of the lockfile as a whole ([contract section 7.2](../contract.md#72-keys-failures-and-aborts)). Geometric results are keyed by name-free geometry identities, so a standard feature called from two designs shares every geometric result. A `Failure`, such as a fillet radius too large, is a typed, cached value that `try` can catch; an Abort, such as a cancellation or a lost device, is environmental, never caught and never cached. The determinism suite runs on every merge on a representative set of targets and nightly on the rest, and a nightly divergence blocks promotion to beta ([PLT](12-platform-performance.md)).
 
-Each operation version declares a determinism grade: `Portable` (bit-identical across the canonical class, the only grade for geometry and oracle references), `ClassExact` or `Certified`. Non-canonical results never substitute for canonical ones, but a check may rest on a pinned GPU Field whose residual and bound are computed canonically. Operations are label-invariant: renaming every input entity and call site changes no geometry, Field value or statistic.
+### Trust in the shared cache
 
-An `OpKey` hashes the operation version, the canonical arguments, the input identities, the platform class, the effective fidelity and, for External Ops, the host image digest, but never the lockfile as a whole (section 7.2). Entity-naming Ops cache in two stages, so a geometric result is shared across designs and only the relabeling stage sees names. A deterministic `Failure` is a catchable, cached value; an Abort, such as a cancellation, an exhausted budget or a lost device, is environmental and is never caught or cached.
-
-### Trust and the shared cache
-
-Untrusted-evaluation workers run Proposal CI from agent and external branches, and every External Op, in single-use microVMs that hold no attestation key (section 7.8). Trusted builders evaluate only merged Changes of protected branches, and run third-party code only in single-use microVMs. Release gates and `SignOff` checks accept a cached result only when two independent trusted builders produced the same `ObjectId`.
-
-An External Op result counts at a gate when two single-use runs on different hosts agree, each recorded in a signed execution receipt. Spawned tools and External Op hosts run with network egress denied unless an administrator grants a named endpoint. The phase 1 single-node team server serves both pools, offers no External Ops and records "single host" in every release's provenance.
+Proposal CI from agent and external branches, and every External Op, runs on untrusted-evaluation workers in single-use microVMs that hold no signing key ([contract section 7.8](../contract.md#78-trust-and-the-shared-cache)). Trusted builders evaluate only merged Changes of protected branches. Release gates and `SignOff` checks accept a cached result only when two independent trusted builders produced the same `ObjectId`; other cache hits are spot-checked, and every released revision is re-verified after a toolchain or math-library upgrade. Tool processes and External Op hosts run with network egress denied unless an administrator grants a named endpoint.
 
 ### Labels and agents
 
-`Labels` have two parts, joined through every derivation and carried by every model context (sections 5 and 7.6). The confidentiality part, a lattice of level, export controls, scopes and data licences, decides who may read a value; a control is satisfied only through a `ControlAuthorization` that an export officer creates with a second person. The integrity part, `instruction_tainted` and `data_untrusted`, never blocks anything; it sets risk classes and auto-merge eligibility.
+Every artifact, API response and model context carries labels with three parts, joined through every derivation ([contract section 5.3](../contract.md#53-labels)). Confidentiality (level, export controls, scopes) decides who may read; usage (data licences) is compared at exits; integrity (`instruction_tainted`, `data_untrusted`) never blocks anything but sets risk classes and auto-merge eligibility. Reading untrusted free text taints a model context, and every write carries at least the context's label, so a write to a lower confidentiality fails with `label/write_down` unless a declassification record signed by two people names it ([AGT](09-agents.md), [KLN](05-kiln-repo-plm.md)).
 
-Reading untrusted free text marks a model context `instruction_tainted`, and every write carries at least the context's label. Writing to a lower confidentiality label fails with `label/write_down` unless a declassification record signed by two people, one an export officer, names it. A human merge endorses structure and typed values, never free text, which needs a per-span endorsement.
+Agents work only on branches, with scoped permissions, cost budgets and clearances. A credential held on a device authenticates as a device agent, never as the person, so an agent with a shell cannot merge, endorse, waive or export as its human.
 
-Agents work only on branches, with scoped permissions, cost budgets and clearances, and propose only after building, meeting the gate on every check and attaching Snapshots. An independent verifier attacks every agent Proposal with the author's free text elided, and auto-merge applies only to the two lowest risk classes.
+### Signatures, Acts and physical safety
 
-### Acts and physical safety
+Every human signature is one detached record whose meaning comes from one signature table, evaluated by Cedar policies; no agent signs any record in it ([contract section 5.4](../contract.md#54-signature-records-and-the-signature-table)). An Act is two-phase: `act.prepare` produces a plan with a digest, and `act.commit` runs only after an assigned person approves that digest with phishing-resistant WebAuthn and a device-bound credential. Synced passkeys sign in but never approve, and on a phone a person may approve only release and change-notice Acts that carry no export controls and no physical effect, in the browser, with a roaming security key.
 
-An Act is two-phase: `act.prepare` produces a plan with a digest, and `act.commit` runs only after an assigned human approves that digest. One plan may carry several effects under one Approval, and a human's export of an uncontrolled `public` or `internal` payload to a local folder is an audited local write, not an Act. Approvals need phishing-resistant WebAuthn with a device-bound credential, synced passkeys never approve, and phones offer no approval.
-
-Crucible never issues a start, resume or jog to a device it transfers to; a person starts it at the device. The one exception is the restricted `start_print`, for material-extrusion printers under a safety officer's site policy, with a confirmation at the printer. Device programs pass through the machine gateway, whose core enforces each connector's allowlist, and `flash_device` leaves its board halted or held in reset.
-
-A manufacturing program is approved over its posted text and simulation evidence and bound to a machine class, never to a serial. Test rigs run unattended only under an `unattended_safe` site policy that a named safety officer signs, and production equipment never receives one.
+Crucible never issues a cycle start, resume or jog to a device it transfers to; a person starts the machine at the machine ([contract section 7.6](../contract.md#76-api-agents-acts-and-the-human-interface)). The one restricted exception is `start_print` for material-extrusion printers covered by a site safety record, a record signed by a named safety officer, with a confirmation at the printer. Firmware flashing leaves the board halted or held in reset, and test rigs run unattended only under a site safety record backed by an ISO 12100 risk assessment; production equipment never receives one ([MFG](07-manufacturing.md), [ELX](08-electronics-systems.md)).
 
 ### Platforms
 
 | Tier | Targets | What it gets |
 | --- | --- | --- |
-| Tier 1 | Windows 11 on x86-64 and ARM64; macOS on Apple silicon (current release and two prior); Linux on x86-64 and ARM64; Chrome, Edge, Safari and Firefox through Wasm with WebGPU and a WebGL2 fallback | The full product, identical features, every golden product passing |
-| Tier 2 | iPadOS and Android tablets; ChromeOS through the browser; phones | Viewing, review and light editing; phones are viewers and offer no approval |
-| Tier 3 | FreeBSD and other Unix systems | Community support; a target joins the canonical class only after it passes the determinism suite |
+| Tier 1 | Windows 11 on x86-64 and ARM64; macOS on Apple silicon (current and two prior); Linux on x86-64 and ARM64; Chrome, Edge, Safari and Firefox through Wasm with WebGPU and a WebGL2 fallback | The full product, identical features, every golden product passing |
+| Tier 2 | iPadOS and Android tablets; ChromeOS through the browser; phones as viewers | Viewing, review, presentation and light editing |
+| Tier 3 | FreeBSD and other Unix systems | Community support; joins the canonical class only after passing the determinism suite |
 | Servers | Linux containers on x86-64 and ARM64 | Team servers and cloud workers, with optional GPU acceleration |
 
-Phase 1 ships generally on Windows 11 x86-64, macOS, Linux x86-64, Chrome and Edge. Windows 11 ARM64, Linux ARM64 desktop, Safari and Firefox are Tier 1 preview targets in phase 1, generally available at the phase 2 gate.
-
-Parity (contract section 9) means identical features and canonical results on every Tier 1 platform, local or remote; capacity and speed may differ and are declared.
+Parity means identical features and identical canonical results on every Tier 1 platform, computed locally or remotely; capacity and speed differ and are declared ([contract section 9](../contract.md#9-platforms)). Phase 1 ships generally on Windows 11 x86-64, macOS, Linux x86-64, Chrome and Edge; the ARM64 desktops, Safari and Firefox are preview targets in phase 1 and generally available at the phase 2 gate.
 
 ### Openness, licensing and releases
 
-Code is licensed Apache-2.0 WITH LLVM-exception, documentation CC-BY-4.0, and examples MIT-0, with contributions under the DCO (section 7.7). LGPL, GPL and AGPL code is never linked; it runs only as an external tool, an External Op or a test oracle. The founding company stewards the project until a fixed trigger, then transfers it to an existing foundation that holds a trademark option from phase 0 ([ECO](11-interop-ecosystem.md)).
-
-One EXPRESS code generator builds the translators for every STEP application protocol and IFC. Licensed translators run outside evaluation, so anyone can rebuild without the licence, and Crucible never replays proprietary feature history. The registry admits verified publishers through trusted publishing, with Sigstore signatures and SLSA provenance.
-
-Releases ride a 6-week train, with one LTS release a year supported for 24 months. Every stable release line gets security fixes for at least five years, and one LTS line every two years gets 10 years of regulated support. A regulated cloud mode serves defence and ITAR customers, and medical customers receive a Computer Software Assurance package.
+Code is licensed Apache-2.0 WITH LLVM-exception, documentation CC-BY-4.0, and examples and templates MIT-0; external contributions come under the Developer Certificate of Origin ([contract section 7.7](../contract.md#77-interop-ecosystem-and-support)). GPL-family code is never linked: it runs only as an external tool, an External Op or a test oracle. Open formats are built in Rust from their schemas, licensed translators run outside evaluation so anyone can rebuild without the licence, and Crucible never replays proprietary feature history. Releases ride a 6-week train with a yearly LTS release, every stable line gets security fixes for at least five years, and one LTS line every two years gets 10 years of regulated support ([ECO](11-interop-ecosystem.md)).
 
 ## Roadmap
 
-Phases close on gates, never on dates (contract section 13.1). From phase 1, each gate is a set of golden products: reference products whose checks must pass and whose physical articles are made and measured.
+Crucible ships in phases, and each phase ends at a gate that real, made and measured products must pass, never on a date ([contract section 13.1](../contract.md#131-phases-and-golden-products)). A golden product is a reference product whose checks must pass and whose physical articles are made and measured to close a phase.
 
 [[DIAGRAM diagrams/00-overview-roadmap.jsx: Roadmap · eight phases, gated by golden products]]
 
-Read top to bottom: each band is a phase and what it adds, each diamond is the gate that closes it with its golden products, and the dashed phases 5 to 7 are proposals.
+Read the diagram top to bottom: each band is a phase and what it adds, each diamond is the gate that closes it, and the dashed phases 5 to 7 are proposals.
 
-| Phase | Theme | Gate |
+| Phase | Theme | Golden products that close it |
 | --- | --- | --- |
-| 0 | Foundations | Determinism suite green; unit errors fail to compile; Crucible cleared, Flux replaced and the SDK names reserved before any operation version or WIT package freezes; counsel's opinion on US 12,229,885 B1 delivered and chains A and B searched; GP2's alloy, machine, bureau and build-preparation software fixed; kernel IR v0 frozen |
-| 1 | Wedge: code-CAD and 3D printing | GP1 machined bracket: designed, toleranced, simulated and released in Crucible; made by a reference shop from Crucible's STEP AP242 with semantic PMI and drawing; measured by external metrology; proof-loaded. GP2 topology-optimized lattice bracket in metal laser powder bed fusion: built from Crucible's 3MF with the bureau's build-preparation software; measured externally; proof-loaded |
-| 2 | Mechanical depth | GP3 gearbox, including machined parts cut from Crucible-generated programs; GP4 welded frame with sheet-metal guards, including measured weld distortion; one material-extrusion part sliced by Crucible and sent through `send_print_job` to an open-firmware printer |
-| 3 | Product breadth | GP5 molded enclosure with its PCB, including measured warpage and drop response; the board fabricated and assembled from Crucible outputs alone |
-| 4 | Full multiphysics | GP6 drone, validated against flight, dynamometer and thermal test data |
-| 5 | Scale | GP7 MEMS accelerometer; GP8 bolted steel platform round-tripped through IFC 4.3 with a structural check; GP9 crash box |
-| 6 | Aerospace and electrification | GP10 composite wing box; GP11 CubeSat; GP12 EV battery sub-pack with BMS, harness and charger |
-| 7 | Marine, buildings, medical and soft goods | GP13 workboat hull; GP14 timber pavilion (building product, IFC export); GP15 bone plate (ASME V&V 40 credibility); GP16 sewn pack (soft goods) |
+| 0 | Foundations | None; the phase 0 gate list below |
+| 1 | Wedge: code-CAD and 3D printing | GP1 machined bracket; GP2 topology-optimized lattice bracket in metal laser powder bed fusion |
+| 2 | Mechanical depth | GP3 gearbox with machined parts cut from Crucible's programs; GP4 welded frame with sheet-metal guards and measured weld distortion; one printed part sent to an open-firmware printer |
+| 3 | Product breadth | GP5 moulded enclosure with its PCB, with measured warpage and drop response |
+| 4 | Full multiphysics | GP6 drone, validated against flight, dynamometer and thermal data |
+| 5 | Scale | GP7 MEMS accelerometer; GP8 bolted steel platform through IFC 4.3; GP9 crash box |
+| 6 | Aerospace and electrification | GP10 composite wing box; GP11 CubeSat; GP12 EV battery sub-pack |
+| 7 | Marine, buildings, medical and soft goods | GP13 workboat hull; GP14 timber pavilion; GP15 bone plate; GP16 sewn pack |
 
-Golden products 7 to 16 are proposals, each a separately funded program started only with a physical test partner and an approved plan. Each physical gate states its replicates, measures as-built geometry and same-lot coupons, keeps validation data out of calibration, and places sensors on the quantities its checks decide. GP1 and GP2 add a strain-gauged proof-load test on every article. The phase 1 gate release must reproduce the tagged run build's STEP and 3MF exports, or show equal geometry and definitional attributes; otherwise the physical run repeats.
+Contract 13.1 holds each gate's full text. Golden products 7 to 16 are proposals, each a separately funded program started only with a physical test partner and an approved plan.
 
-**Shared phases.** A capability that several tabs phase, such as modal analysis, inherent strain or battery cell models, has one phase and one owner in contract section 13.4, set by the first gate that needs it; every other tab cites that row.
+### Gates, not dates
 
-**Scope.** In: products made of parts, assemblies, boards, cables and software items, from MEMS to ships; building products and structures exchanged with BIM tools through IFC 4.3; MEMS layout and chip-package design through GDSII and OASIS. Out: whole-building authoring, integrated-circuit logic layout, film and animation, and classified information (contract section 13.1).
+The phase 0 gate needs no physical article. It needs the determinism suite green, unit errors failing to compile, and the kernel intermediate representation (IR) frozen; every user-visible name cleared or replaced before any operation or interface name freezes; counsel's written opinions on the patent, authorship, standards-table and reverse-engineering questions; a freedom-to-operate search over every phase 1 code path; and GP2's alloy, machine, print bureau and build-preparation software fixed. The phase 1 gate adds counsel's product-liability assessment before general availability.
 
-## Program plan
+From phase 1, a gate is physical. GP1 is designed, toleranced, simulated and released in Crucible, machined by a reference shop from Crucible's STEP AP242 with semantic PMI, measured by an external lab and proof-loaded. GP2 is optimized and verified in Crucible, built from Crucible's 3MF by a bureau, measured and proof-loaded. Every physical gate states its replicate count, measures as-built geometry and same-lot coupons, keeps validation data out of calibration, and places sensors on exactly the quantities its checks decide.
 
-Crucible is built by agents (contract section 13.2). One human, the founder, directs the program; Claude orchestrates agent work against the oracles; and outside firms make, measure and advise where the physical or legal world requires a person. Phases end at their gates, never on a date, and no plan figure counts people or engineer-years.
+Before the phase 1 run build is tagged, a validation campaign on separate specimens measures surface strain at fillets and in printed struts; its bounds govern the GP1 and GP2 releases, and the proof loads on every article then serve as held-out confirmation. The gate release must reproduce its STEP and 3MF exports bit for bit, or show equal geometry identities and definitional attributes with a reviewed diff; otherwise the physical run repeats.
 
-| Role | What it does |
-| --- | --- |
-| Founder | Approves each phase's scope and budget at the previous gate, signs each golden product's pass/fail criteria before builders start on it, approves every Act and Waiver, and decides anything that changes money or scope |
-| Orchestrator | Claude plans the work, opens work items, runs reviews and rulings, and keeps the contract and the tabs current |
-| Oracle role | Writes and locks a phase's oracles before any builder works on the capabilities they verify |
-| Builders | Build against locked oracles and never write or edit `oracles/` |
-| Verifier role | Independent of both: checks every oracle against its capability row and an independent source, and attacks every builder Proposal |
-| Outside firms | Counsel for freedom-to-operate and trademark work; a reference machine shop, a metrology lab, a metal powder bed fusion bureau and a proof-load test lab, under signed phase 0 agreements |
+### The parity floor
 
-An adversarial review of the spec runs before each gate. Each phase carries one budget, approved by the founder at the previous gate: agent compute, cloud CI, rented GPU and device-farm time, physical runs with replicates and one re-run, metrology, proof loads and counsel.
+A capability an incumbent's user relies on has a latest phase, and a tab may phase it earlier but never later ([contract section 13.4](../contract.md#134-shared-phases-and-the-parity-floor)). Phase 1 already carries standard thread and clearance-hole designations computed from their formulas, DXF write and IGES read, sketch edits as source rewrites, Insert Instance and Add mate as generated dialogs, generative design for additive and unrestricted methods, analyst idealizations such as remote points and springs, and the presentation floor. Phase 2 brings photoreal rendering, motion studies and sheet metal, DXF and DWG read and write, toolpath editing, review routing and delegation, shape search, and bushings, connectors and submodeling. Later phases close the rest, from imported Nastran and Abaqus decks in phase 3 to ply optimization in phase 6.
 
-### Build program
-
-PLT owns how Crucible itself is built against its oracles ([PLT](12-platform-performance.md), D-PLT-45).
-
-1. **Oracle first.** A work item opens only when its oracle ids exist in `oracles/` as executable checks written by the oracle role and passed by the verifier; each gate reports oracle coverage per crate.
-2. **Runner classes.** Every oracle declares `cpu-ci`, `browser-ci`, `gpu-lab`, `device-farm`, `physical` or `founder`. Agents run every class except `physical` (outside firms) and `founder` (the founder's signatures), the GPU lab and device farm on rented hardware.
-3. **Corpora.** Agent-built corpora enter `oracles/` only through a Proposal the verifier passes, and must agree with an independent source such as MPFR, Open CASCADE, lib3mf, MFEM or libCEED.
-4. **Work items.** A work item names its crate, capability row, oracle ids, held-out split and budget. It runs through AGT's Proposal machinery, and until that machinery ships in phase 2, through the same `WorkItem` record over Git.
-
-### Phase 1 scope
-
-Phase 1 builds what GP1 and GP2 need. The rest is deferred to phase 2 or 1.x release trains, with contracts and oracles unchanged.
-
-| Area | Deferred | Phase 1 ships instead |
-| --- | --- | --- |
-| Language | The Ingot code generator | The interpreter executes Ingot |
-| Rendering | Cluster-DAG streaming, visibility buffer, compute rasterization, the variant grid, presence | One forward renderer on every tier |
-| Services | Cloud SaaS, live CRDT documents, encryption domains, transparency logs, the hardware runner | A single-node team server with branches, merge, Proposals, Cedar policies and a signed audit log |
-| Manufacturing | CAM, posts, stock simulation, slicing and nesting | DfAM checks, 3MF production output and cost |
-| Ecosystem | The public registry and trusted publishing | A signed first-party package index |
-| Agents | Bayesian exploration, the hosted crew, the TypeScript SDK | `api` over MCP, Rust and Python SDKs, Propose with a CI report, and three roles: detail designer, simulation engineer and verifier |
-| Physics | Cut-cell guaranteed estimators, GPU `SignOff`, CUDA, inherent strain, the shifted boundary method | Aggregated CutFEM with calibrated DWR on CPU paths |
-| Geometry | SubD, general NURBS–NURBS SSI, GPU sampling for SSI, free-form offsets | Certified SSI without sampling for GP1 and the prismatic ABC subset |
-| Wasm and recipients | The browser sandbox for third-party Wasm components; screening of recipients inside the organization | Remote evaluation of those Wasm components; screening of other organizations |
-
-Electronics before the phase 1 gate is a circuit-simulation research track. A desktop install without a team server designs, simulates, evaluates and exports locally; Proposals, releases and every Act need a team server.
-
-### Critical path and milestones
-
-Four chains set the phase 1 critical path, each run in order:
-
-1. **Chain A, geometry:** exact predicates, certified SSI on GP1's surface set, Booleans, fillets and shells, GP1 features and drawing, STEP AP242, shop machining, metrology and proof load.
-2. **Chain B, physics:** kernel IR, CPU back ends, immersed elasticity with DWR, topology optimization, implicit lattice, strut calibration coupons, 3MF, build, measurement and proof load.
-3. **Chain C, interface:** toolkit, forward renderer and picking, feature dialogs and drag preview, drawing editor and review diffs, keyboard-complete workflows with accessibility oracles green.
-4. **Chain D, release:** single-node team server with Cedar and the audit log, microVM Proposal CI, the approval page with WebAuthn and the release Acts, used end to end in the physical dry run.
-
-The milestones are ordered, not dated: foundations and the phase 0 gate; phase 1 features, physics and the release path; a physical dry run of both gates; hardening and Tier 1 preview targets; a tagged run build whose exports make the GP1 and GP2 articles; the physical runs with one re-run budgeted; and the phase 1 gate.
+A capability several tabs phase, such as modal analysis, inherent-strain distortion or battery cell models, has one phase and one owner in the same section, set by the first gate that needs it, and `check.py` fails a capability row phased earlier than a row it requires.
 
 ### Performance targets
 
-PLT owns the targets in contract section 13.3, and every figure is a target. They are measured on one reference laptop with an Intel Core Ultra 7 258V and 32 GB, on Windows 11 and Ubuntu LTS, at 1920×1080; PLT names the exact model and its measurement conditions at the phase 0 gate. A row blocks beta promotion from the phase in its last column.
+PLT owns the targets, measured on one fixed reference laptop (Intel Core Ultra 7 258V, 32 GB, Windows 11 and Ubuntu LTS, at 1920×1080), and every figure is a target ([contract section 13.3](../contract.md#133-performance-targets)). A row blocks beta promotion from the phase in its last column. A few rows show the bar.
 
 | Row | Native | Browser | Phase |
 | --- | --- | --- | --- |
-| Selection highlight | 16 ms | 33 ms with WebGPU | 1 |
-| Orbit | 60 fps at 5M visible triangles | WebGPU 30 fps at 5M visible triangles | 1 |
-| Rebuild after an early edit | `SignOff`: 2 s on a GP1-class benchmark | 3× native | 1 |
-| Interactive simulation update | 1 s for linear elasticity up to 100,000 DOFs at p = 2 | 2 s with WebGPU | 1 |
-| Open a 1,000-part assembly from warm cache | 10 s | 20 s | 2 |
+| Drag preview | The dragged feature and the dependents that fit, within 100 ms | Within 200 ms | 1 |
+| Interactive simulation update | 1 s for linear elasticity up to 100,000 degrees of freedom, including the error estimates of up to five checked goals | 2 s with WebGPU | 1 |
+| Orbit | 60 fps at 5M visible triangles | 30 fps at 5M with WebGPU | 1 |
+| Shareable web view | None | A read-only GP1 view shades its first frame in 3 s at 50 Mbit/s | 1 |
+| Photoreal still | Mean ꟻLIP error at most 0.05 against a converged reference within 30 s on G1 | Within 90 s with WebGPU | 2 |
+
+## Program plan
+
+Crucible is built by agents ([contract section 13.2](../contract.md#132-program-plan)). One human, the founder, directs the program; Claude orchestrates agent work against the oracles; outside firms make, measure and advise where the physical or legal world requires a person. Phases end at their gates, never on a date, and no plan figure counts people or engineer-years.
+
+### Roles
+
+| Role | What it does |
+| --- | --- |
+| Founder | Approves each phase's scope and budget at the previous gate, signs each golden product's pass and fail criteria before builders start on it, approves every Act and Waiver, and decides anything that changes money or scope |
+| Orchestrator | Claude plans the work, opens work items, runs reviews and rulings, and keeps the contract and the tabs current |
+| Oracle role | Writes a phase's contract crates and oracles and locks them before any builder works on what they verify |
+| Builders | Implement against locked oracles and never write or edit `oracles/` or contract crates |
+| Verifier | Independent of both: checks every oracle against its capability row and an independent source, and attacks every builder Proposal |
+| Observer | Studies incumbents under the clean-room insight protocol, in a workspace builders never see |
+| Outside firms | Counsel for freedom to operate, trademarks, authorship and reverse-engineering clearance; a reference machine shop, a metrology lab, a metal powder bed fusion bureau and a proof-load lab under signed phase 0 agreements |
+
+Each phase carries one budget, approved by the founder at the previous gate: agent compute, cloud CI, rented GPU and device-farm time, physical runs with replicates and one re-run, validation specimens, metrology, proof loads and counsel. An adversarial review of the spec runs before each gate.
+
+### How agents build against oracles
+
+PLT owns the build program, and the contract fixes its rules ([PLT](12-platform-performance.md)).
+
+1. **Interface first.** The oracle role writes a contract crate with the public types and signatures the oracles call; builders implement it and may not change it.
+2. **Oracle first.** A work item opens only when its oracles exist as executable checks passed by the verifier, and each gate reports oracle coverage per crate.
+3. **Held-out splits.** Every oracle that judges agent-built code keeps a split outside the agent-readable tree, chosen by a keyed hash or a seed drawn at CI time, and builders see held-out results only as one aggregate verdict per work item per day.
+4. **Runner classes.** Each oracle names where it runs: CPU or browser CI, a rented GPU lab or device farm, a physical test by an outside firm, or a founder sign-off.
+5. **Taint.** An agent context that reads third-party source, a web page or a paper is marked tainted, and its changes to core code, oracles, dependencies or CI need the founder's Approval with the taint sources listed.
+
+Crucible's own repository runs in single-person mode: the founder signs each two-person record alone with the strongest credential and approves protected merges after the verifier's attested review, and each such record takes effect after 72 hours with notice to an out-of-band contact ([contract section 5.4](../contract.md#54-signature-records-and-the-signature-table)).
+
+### Phase 1 and its critical path
+
+Phase 1 builds only what GP1 and GP2 need, plus the presentation floor. It defers, with contracts and oracles unchanged, the Ingot code generator (the interpreter runs Ingot), the advanced renderer features and the GUI's own sketch tools, cloud SaaS and live sessions, CAM and slicing, the public registry, the hosted agent crew, guaranteed estimators on cut cells and GPU `SignOff` paths, and subdivision surfaces, lofts and other surfaces that need general NURBS (non-uniform rational B-spline) intersection. A desktop install without a team server designs, simulates, evaluates, presents and exports locally; Proposals, releases and every Act need a team server.
+
+Four chains of work run in order:
+
+1. **Chain A, geometry:** exact predicates, certified surface–surface intersection (SSI, computing the curves where two surfaces meet), Booleans, fillets and shells, GP1's features and drawing, STEP AP242, shop machining, metrology and proof load.
+2. **Chain B, physics:** the kernel IR and its CPU back ends, immersed elasticity with dual-weighted residual (DWR) error estimation, topology optimization, implicit lattices, printed strut coupons, 3MF, the build, measurement and proof load.
+3. **Chain C, interface:** the toolkit and renderer, then review (semantic diffs, anchored markup, sections and Field colour), then presentation (illustrations, exploded views, web views, reports), then steering, the drawing editor and keyboard-complete, accessible workflows.
+4. **Chain D, release:** a single-node team server with Cedar policies and an audit log, microVM Proposal CI, the approval page and the release and export Acts.
+
+The milestones are ordered, not dated: foundations and the phase 0 gate; phase 1 geometry, physics, interface and release; a physical dry run of both gates and the validation campaign; hardening; a tagged run build whose exports make the GP1 and GP2 articles; the physical runs with one re-run budgeted; and the phase 1 gate.
+
+## The clean-room insight protocol
+
+Crucible studies the incumbents to design something far better, never to copy them ([contract section 7.7](../contract.md#77-interop-ecosystem-and-support)). Its methods come from the published literature and first principles, and its code never reproduces an incumbent's code.
+
+1. **Two roles.** An observer agent may study software the founder holds a licence to examine, including with the reverse-engineering tool REA [REA], in an isolated workspace with no network access. It writes only behavioural specifications of formats and protocols, test vectors made from Crucible-authored inputs, and analyses of what an incumbent does and where it falls short; never code, pseudocode or decompiled names. Implementers never see the observer's workspace.
+2. **A gate between them.** The verifier reads each specification before release and rejects anything that copies expression. Released material enters the oracles or the spec through a Proposal with a signed provenance record, including counsel's clearance.
+3. **An order of methods.** Published specifications first, then open readers, then analysis of sample files, then black-box observation of the running program. Decompilation serves only interoperability with a file format or protocol, never an incumbent's kernel, solver, mesher or CAM strategy, and licence checks are never circumvented.
+4. **A legal boundary.** The EU Software Directive permits observing and testing a program to learn its ideas and decompiling only for interoperability; elsewhere, enforceable licence terms are respected. Counsel decides the governing jurisdiction and clears each engagement, and every resulting reader passes a freedom-to-operate review, because clean rooms do not avoid patents.
 
 ## Risks
 
+Each risk below has a plain statement of how the plan contains it, then the mechanism and the owner that specifies it.
+
 | Risk | Why it is hard | How the plan contains it | Owner |
 | --- | --- | --- | --- |
-| Certified intersection and Booleans | SSI topology is open research, and the Rust kernel Fornjot was archived without reaching its goals | Phase 1 certifies only GP1's surface set and the prismatic ABC subset; chain A heads the critical path; Open CASCADE is a differential oracle | ANV |
-| Blends | Corners of valence four and above, Field-driven radii and G2 and G3 sections are research | A staged program with re-fillet targets of 95% of stage-1 cases at phase 1 and 97% of all cases at phase 2 | ANV, MEC |
-| Error bounds | Guaranteed estimators on cut cells are research, and a calibrated bound can undershoot | Calibration classes with envelopes and held-out samples, refinement confirmation at `SignOff`, cut-cell totals kept `Estimated` | FLX |
-| Cross-platform determinism | Fused multiply-add, vector widths, browser engines and GPU drivers all change bits | `detmath`, fixed reduction trees, a known-answer test per GPU pipeline, and the determinism suite on every merge | PLT |
-| Agent-built code | Builders see every visible input and can special-case it, and an oracle can be wrong | Oracles locked before builders start, held-out splits, an independent verifier, corpora checked against independent sources | Contract section 13.2, PLT |
-| Physical validation | Gates need replicates, as-built measurement and proof loads, and GP7 to GP16 need test partners | Signed phase 0 agreements with a shop, a metrology lab, a bureau and a proof-load lab; a physical dry run; one re-run budgeted | Contract section 13, COV |
-| Freedom to operate | SSI, adaptive clearing, placement and routing sit near active patent families | Opinions and searches before the work they cover, starting at the phase 0 gate | ANV, MFG, ELX |
-| Agent and physical safety | Models read untrusted text, and transfers reach machines that cut, move or heat | Labels and write-down, two-phase Acts with assigned Approvals, no device starts, allowlists in the gateway's core | AGT, MFG |
-| Data and tool licences | Standards tables, material databases and translators carry their own terms | Counsel's reviews before std's tables and each material connector ship; licences travel as `DataLicence` labels | MEC, COV, ECO |
+| Certified intersections and Booleans | SSI topology is open research, and the Rust kernel Fornjot was archived without reaching its goals [Fornjot repository] | Start narrow and measure against the kernel users leave: phase 1 certifies only the surface classes its operations create, and whole parts rebuilt from public models must match their Parasolid originals at 98% at the phase 1 gate and 99.5% at phase 2 (targets) | ANV |
+| Blends | Corners where four or more edges meet, variable radii and higher-continuity sections are research | Ship in stages: stage 1 covers sequential fillets, rolling overflow and mixed corners that GP1 needs, later stages add the rest, and an approximate fallback runs only when asked for, with its deviation stated | ANV, MEC |
+| Error bounds | A calibrated bound can undershoot, and guaranteed bounds on cut cells are unsolved | Measure how often estimates undershoot on held-out cases and inflate them to cover all but 1%; re-check every `SignOff` pass with one finer solve; keep cut-cell bounds `Estimated` until a proof exists | FLX |
+| Model form | No solver can say how wrong its equations are; only tests can | A check stays `Undecided` until a validation campaign or a cited policy allowance quantifies model form, and the phase 1 campaign runs before the run build | COV |
+| Cross-platform determinism | Fused multiply-add, vector widths, browser engines and GPU drivers all change bits | One canonical arithmetic: correctly rounded math, fixed reduction trees, a known-answer test per GPU pipeline, and the determinism suite on every merge | PLT |
+| Agent-built code | Builders see their inputs and can special-case them, and an oracle can be wrong | Oracles locked before builders start, held-out splits, an independent verifier, and corpora checked against independent sources | PLT, contract 13.2 |
+| Physical validation | Gates need replicates, measured articles and proof loads, and later golden products need test partners | Signed phase 0 agreements with a shop, a lab, a bureau and a proof-load lab; a physical dry run; one re-run budgeted | COV, contract 13.1 |
+| Agent and machine safety | Models read untrusted text, and transfers reach machines that cut, move or heat | Labels and write-down, two-phase Acts with assigned Approvals, no remote starts, allowlists inside the machine gateway | AGT, MFG |
+| One approver | Every Act, Waiver and protected-path change in Crucible's own repository waits for the founder | Oracles and the verifier filter work before it reaches the founder, and single-person mode delays each record 72 hours with out-of-band notice | Contract 13.2 |
+| Legal exposure | Patents, trademarks, standards tables, data licences and product liability each carry their own terms | Counsel's opinions before the work they cover, starting at the phase 0 gate; licences travel with data as labels | ECO, MEC, COV |
 
 ## Patents, trademarks and freedom to operate
 
-Counsel's opinion on US 12,229,885 B1, a freedom-to-operate search of chains A and B, and cleared names are phase 0 gate items (contract section 13.1).
+Freedom to operate means the right to make and sell a product without infringing someone else's patent. Counsel's opinions and searches arrive before the work they cover, starting at the phase 0 gate ([contract section 13.1](../contract.md#131-phases-and-golden-products)).
 
 | Item | What it covers | Crucible's position | Owner |
 | --- | --- | --- | --- |
-| US 12,229,885 B1 (inventor Alyn Rockwood) | Intersection points formed from points of one surface within a threshold distance of the other | Counsel's opinion covers claims 1, 6, 11 and 16 and pending continuations. Every intersection point is a certified root of the exact equations; phase 1 SSI has no sampling stage, and GPU sampling joins in phase 2 only after a favourable opinion (D-ANV-17) | ANV |
-| US 9,164,503 (Boeing) | A pre-roughing slot with curves spiraling out of it | A clean-room spiral seeded by the medial axis (D-MFG-7); adaptive clearing ships only after counsel's opinion | MFG |
-| Placement and routing | An active patent area | Placer and autorouter work opens only after counsel's search of their code paths (D-ELX-31) | ELX |
-| The name Crucible | Clearance in classes 9 and 42 in the US, EU, UK, China and Japan, assuming Atlassian's mark persists | A phase 0 gate | ECO |
-| The name Flux | Collides with Siemens Simcenter Flux and with flux.ai | Renamed in phase 0, before any operation name or WIT package freezes | ECO |
+| US 12,229,885 B1 (inventor Alyn Rockwood) [US12229885B1] | Intersection points formed from points of one surface within a threshold distance of the other | Counsel's opinion on claims 1, 6, 11 and 16 is a phase 0 gate item. Every intersection point is a certified root of the exact equations; phase 1 SSI has no sampling stage, and GPU sampling joins in phase 2 only after a favourable opinion | ANV |
+| US 9,164,503 (Boeing) [US 9,164,503] | Adaptive clearing that starts from a pre-roughing slot | A design-around spiral without that slot; counsel's opinion is a phase 1 gate item, and engagement-limited roughing ships in phase 2 whatever it says | MFG |
+| Placement and routing | An active patent area | Placer and autorouter work opens only after counsel's search of its code paths | ELX |
+| History and merge | Per-Change history and merge by provenance | Covered by the phase 0 search; a claim that reads on them changes the design before the phase 1 freeze | KLN |
+| The name Crucible | Atlassian's Crucible code-review product [Atlassian Crucible] | Cleared in classes 9 and 42, or replaced, at the phase 0 gate | ECO |
+| The name Flux | Siemens Simcenter Flux [Simcenter Flux] and flux.ai [flux.ai] | Renamed in phase 0, before any operation name or interface package freezes | ECO |
+| The name Kiln | At risk | Cleared or replaced in phase 0 | ECO |
+| Clean-room readers | Readers of proprietary formats built under the insight protocol | Each passes counsel's freedom-to-operate review and names formats only by what they are, with a non-affiliation line | ECO |
+
+## Reading paths
+
+The spec is long, and no reader needs all of it.
+
+- **Mechanical engineer:** this page, ING's guide-level walkthrough, MEC through Tolerancing, then MFG's milling and inspection sections.
+- **Simulation analyst:** this page, FLX's first study and weak-form language, COV's walkthrough of the bracket, then FLX's error budgets.
+- **Security and compliance reviewer:** contract sections 5.3, 5.4, 7.6 and 7.8, then AGT's labels and Acts sections and KLN's signatures, identity and labels sections.
+- **Builder agent:** the contract, then the owning tab's capability tables, Interfaces and Oracles.
 
 ## Open questions
 
-Each tab's Open questions section holds the detail.
+About a dozen questions remain, each waiting on an outside input; the owning tab's Open questions section holds the detail.
 
-1. **Flux's new name.** Until it is chosen, no `flux::` operation name or WIT package freezes, and this spec keeps "Flux" (contract section 2).
-2. **Freedom-to-operate opinions.** Counsel's opinions on US 12,229,885 B1 and on the adaptive-clearing families are outstanding ([ANV](02-anvil.md), [MFG](07-manufacturing.md)).
-3. **GP2's details.** The phase 0 gate fixes the bureau's build-preparation software and 3MF extensions, and sheet cells would bring sheet-lattice shells into phase 1 ([MFG](07-manufacturing.md), [COV](04-coverage.md)).
-4. **Strut waviness threshold.** It comes from the first as-built calibration build ([COV](04-coverage.md)).
-5. **Guaranteed bounds on cut cells.** Research deferred past phase 1 ([FLX](03-flux.md)).
-6. **Mesh Boolean method.** Chosen by the phase 0 bake-off (D-ANV-20).
-7. **Licensed standards data.** Which terms let std package tabulated values, and the licensed editions that gear and bearing envelopes need ([MEC](06-mechanical.md), [COV](04-coverage.md)).
-8. **Translator vendor.** CAD Exchanger, HOOPS Exchange or Datakit, signed by the founder before the phase 2 gate ([ECO](11-interop-ecosystem.md)).
-9. **Verilog-A front end.** Whether a clean-room front end fits phase 3 ([ELX](08-electronics-systems.md)).
-10. **GPU back ends.** CUDA or HIP is reconsidered at the phase 4 gate (contract section 7.5).
-11. **Auto-merge thresholds.** Defaults until phase 2 review data can set them ([AGT](09-agents.md)).
+1. **Flux's new name.** "Flux" collides with existing products, so no `flux::` operation name or WIT package freezes until the phase 0 rename; this spec keeps "Flux" until then ([FLX](03-flux.md), contract section 2).
+2. **Freedom-to-operate opinions.** Counsel's opinions on US 12,229,885 B1 (GPU sampling for SSI), on adaptive clearing and trochoidal slotting, and the phase 0 search over history and merge are outstanding ([ANV](02-anvil.md), [MFG](07-manufacturing.md), [KLN](05-kiln-repo-plm.md)).
+3. **GP2's process details.** The phase 0 gate fixes the bureau's build-preparation software and 3MF extensions, and whether GP2 uses sheet cells, which would bring shells for sheet lattices into phase 1 ([MFG](07-manufacturing.md), [COV](04-coverage.md)).
+4. **GP1's receiver profile.** The tolerance and minimum feature of the shop's CAM and measuring software wait on the shop agreement ([ANV](02-anvil.md)).
+5. **Strut waviness threshold.** It comes from the first as-built calibration build ([COV](04-coverage.md)).
+6. **Guaranteed bounds on cut cells.** They wait on the research literature ([FLX](03-flux.md)).
+7. **Standards content.** Which thread, hole and fastener tables std may ship, and the licensed editions that gear and bearing limits need, wait on counsel and the standards bodies ([MEC](06-mechanical.md), [COV](04-coverage.md)).
+8. **Vendor controller kernels.** Whether a controller vendor licenses its virtual NC kernel for a customer-licensed host ([MFG](07-manufacturing.md)).
+9. **Verilog-A front end.** Whether a clean-room front end covers the main transistor models in phase 3 waits on the research track's measurement ([ELX](08-electronics-systems.md)).
+10. **Auto-merge thresholds.** The low-risk class defaults wait on review data from phase 2 ([AGT](09-agents.md)).
+11. **Translator vendor, export-control and partnership terms.** The licensed translator vendor, the EU sector rules for open-source downloads, and the ODB++ partnership terms wait on negotiation and counsel ([ECO](11-interop-ecosystem.md)).
+12. **Preset names and the iPadOS shell.** Counsel's review of "-like" preset names, and App Review of the iPadOS shell ([UIX](10-ui.md), [PLT](12-platform-performance.md)).
+13. **Paywalled definitions.** A crash-test filter standard and the critical-distance definitions wait on an accessible primary source ([FLX](03-flux.md)).
+
+## Glossary
+
+Contract section 2 is the vocabulary of the whole spec: one name per component and one definition per shared concept, with the names never to use ([contract section 2](../contract.md#2-names-and-glossary)). The terms below are those this page uses; each tab spells out its own abbreviations at first use.
+
+| Term | Meaning | Owner |
+| --- | --- | --- |
+| Act | An API method whose effect needs a person's Approval of an exact plan, because it reaches outside Crucible | AGT |
+| Approval | A person's signature over the identity of an exact plan or release subject | KLN |
+| B-rep | Boundary representation: a solid described by its faces, edges and vertices | ANV |
+| BOM | Bill of materials | KLN |
+| CAS | The content-addressed store, where each object is named by the hash of its bytes | KLN |
+| Change | One immutable, fine-grained edit | KLN |
+| Check | A predicate declared with `require`, concluded by a verdict | ING |
+| CutFEM | Finite elements on a background grid that the geometry cuts through | FLX |
+| DAE | Differential-algebraic equations, the form a Network compiles to | FLX |
+| DWR | Dual-weighted residual: an error estimate for one goal quantity, computed with an adjoint solve | FLX |
+| Evidence record | A signed measurement from a physical test, pinned against the check it serves | KLN |
+| Fidelity | The accuracy demanded of a result: `Preview`, `Interactive` or `SignOff` | KLN |
+| Field | A physical quantity distributed over a domain, carrying an error budget | FLX |
+| Golden product | A reference product, GP1 to GP16, whose made and measured articles close a phase | Contract 13.1 |
+| MCP | Model Context Protocol, the standard through which AI applications call tools | AGT |
+| Oracle | A machine-checkable test that the agents building a capability cannot edit | Contract 3, 13.2 |
+| PMI | Product and manufacturing information: dimensions, tolerances and notes on the 3D model | MEC |
+| Proposal | A branch plus rationale plus CI report; the unit of agent work and human review | AGT |
+| SSI | Surface–surface intersection: computing the curves where two surfaces meet | ANV |
+| Waiver | A signed record that lets one named check count at a gate for named Items, with a reason and an expiry | KLN |
+| WIT | WebAssembly Interface Types, the interface language of Wasm components | ECO |
 
 ## Sources
 
-This tab cites only the contract and the subsystem tabs; the pages their research opened are listed in each tab's Sources section.
+This page summarizes the [contract](../contract.md) and the twelve subsystem tabs, whose Sources sections list the pages their research opened. The pages below are cited here, each already cited by the contract or a tab.
 
-- Crucible architecture contract v6.1, `docs/contract.md`: mission (1), names (2), principles (3), layering (4), core types (5), the canonical example (6), decided architecture (7), platforms (9), crate map (12), roadmap, program plan, performance targets and shared phases (13), and the ruling logs (14 to 17).
-- [Ingot language (ING)](01-ingot.md) · [Anvil geometry kernel (ANV)](02-anvil.md) · [Flux physics engine (FLX)](03-flux.md) · [Physics coverage and materials (COV)](04-coverage.md)
-- [Kiln, repository and PLM (KLN)](05-kiln-repo-plm.md) · [Mechanical design (MEC)](06-mechanical.md) · [Manufacturing (MFG)](07-manufacturing.md) · [Electronics and systems (ELX)](08-electronics-systems.md)
-- [Agents (AGT)](09-agents.md) · [UI and interaction (UIX)](10-ui.md) · [Interop and ecosystem (ECO)](11-interop-ecosystem.md) · [Platform and performance (PLT)](12-platform-performance.md)
-- [Adversarial review](13-adversarial-review.md) · [Decisions log](14-decisions-log.md)
+| Key | Title | URL | Date opened |
+| --- | --- | --- | --- |
+| [Anatomy craft] | Anatomy, `references/craft.md` (MIT) | https://raw.githubusercontent.com/wheresryan22/anatomy/main/references/craft.md | 2026-10-12 |
+| [Anatomy skill] | Anatomy, `SKILL.md` (MIT) | https://raw.githubusercontent.com/wheresryan22/anatomy/main/SKILL.md | 2026-10-12 |
+| [Atlassian Crucible] | Atlassian Crucible product page | https://www.atlassian.com/software/crucible | 2026-10-11 |
+| [Autodesk Fusion MCP] | Autodesk, "Introducing the Fusion MCP" | https://www.autodesk.com/products/fusion-360/blog/introducing-the-fusion-mcp-opening-fusion-to-ai-powered-workflows/ | By 2026-10-11 |
+| [CADCraft] | CADCraft repository README | https://github.com/storytold/cadcraft | 2026-10-12 |
+| [Fornjot repository] | Fornjot repository | https://github.com/hannobraun/fornjot | 2026-10-11 |
+| [flux.ai] | Flux home page | https://www.flux.ai/ | 2026-10-12 |
+| [Intel oneMKL reproducibility] | Intel oneMKL reproducibility conditions | https://www.intel.com/content/www/us/en/docs/onemkl/developer-guide-linux/2025-2/reproducibility-conditions.html | 2026-10-11 |
+| [Onshape FeatureScript MCP] | Onshape, "FeatureScript MCP Server Enables Text Code CAD" | https://www.onshape.com/en/blog/featurescript-mcp-server-enables-text-code-cad | 2026-10-12 |
+| [Onshape FeatureScript variables] | Onshape, FeatureScript variables and value semantics | https://cad.onshape.com/FsDoc/variables.html | 2026-10-11 |
+| [Onshape merging] | Onshape Help, "Merging" | https://cad.onshape.com/help/Content/merge.htm | 2026-10-12 |
+| [REA] | REA ("Reverse Engineer Anything") repository | https://github.com/morluto/rea | 2026-10-12 |
+| [Simcenter Flux] | Siemens Simcenter Flux product page | https://www.siemens.com/en-us/products/simcenter/electromagnetics-simulation/flux/ | 2026-10-11 |
+| [SolidCraft] | SolidCraft repository README | https://github.com/bherbruck/solvecraft | 2026-10-12 |
+| [US 9,164,503] | Google Patents, US 9,164,503 B2 (The Boeing Company) | https://patents.google.com/patent/US9164503 | 2026-10-11 |
+| [US12229885B1] | US 12,229,885 B1, Google Patents | https://patents.google.com/patent/US12229885 | 2026-10-11 |
+| [Zoo Zookeeper] | Zoo, "Announcing Zookeeper, Our Conversational CAD Agent" | https://zoo.dev/blog/announcing-zookeeper | 2026-10-12 |
