@@ -2,38 +2,31 @@
 
 Crucible is a Rust platform where people and agents design, simulate, manufacture and release physical products from one typed model. We specify it in full detail first, in `docs/`, and then build it in this repository from that spec. `docs/README.md` has the reading order and the status table.
 
-The spec has finished round 2: every subsystem tab was revised against the binding contract and an adversarial review, then the contract, the tabs, the summary tabs and the published doc were brought into agreement.
+The spec has finished round 4: three adversarial reviews, each followed by a revision of every tab, a contract ruling and a consistency pass. Phase 0 (the build) starts next in this repository.
 
 ## Rules that always apply
 
 - `docs/` holds the whole spec: contract, tabs, reviews, revision work and the spec tools. The repository root is kept for the build.
 - `docs/contract.md` is binding; a tab that disagrees with it is wrong. Never edit the contract while revising a tab: file a request under that tab's "Contract change requests". The contract changes only in a ruling step, which edits it, adds a row to its newest ruling log and bumps the version in its title and lead.
 - Names follow contract section 2, including the "Never call it" column. Fidelity names are only `Preview`, `Interactive` and `SignOff`.
-- Every tab follows contract sections 10 and 11: the skeleton, one capability table at the end of each design section, inline decisions with stable numbers, 12,000 to 18,000 words excluding Sources (ING and ANV up to 20,000), and a calm present-tense voice.
+- Every tab follows contract sections 10 and 11: the skeleton, one capability table at the end of each design section, inline decisions with stable numbers, 9,000 to 15,000 words of prose with tables, Reference and Sources excluded (ING and ANV up to 17,000), and a calm present-tense voice.
 - Each fact lives in the tab that owns it. Other tabs state the consequence in one line and point to the owner.
 - Research: cite only pages you opened, mark unverified claims [unverified], and never invent version numbers, dates, statistics or customer names.
 - After editing a tab, `python3 docs/tools/check.py docs/spec/<file>.md --base round-3` must report zero errors before the commit.
 - The Claude Doc is a published view of committed text (`docs/revision/publish.md`). `docs/build/` is scratch and ignored by git.
 
-## Where things stand (2026-10-11)
+## Where things stand (2026-10-12)
 
-- Round 3 is closed (tag `round-3`). Contract v6.1 is binding: rulings on round 1 (section 14), the first review (15), round 2's change requests (16), and the second review and round 3's change requests (17), with one shared phase table (13.4).
+- Round 4 is closed (tag `round-4`). Contract v7.4 is binding: rulings on round 1 (section 14), the first review (15), round 2 (16), the second review and round 3 (17), and the third review, the founder's directions and round 4's change requests (18), with one shared phase table and parity floor (13.4).
+- Founder directions in force: agents author and people steer, review and present, so the UI is a viewer and presentation studio first (polish reference: Anatomy, github.com/wheresryan22/anatomy); reverse engineering is for insight only under the clean-room protocol (7.7); history is Git-native, any Git host can be home and Kiln guards protected branches as a required check and at release (7.1).
 - Crucible is built by agents with one founder (contract 13.2): no staffing, hires, engineer-years or calendar months anywhere in the spec.
-- All twelve subsystem tabs are v3, consistent with each other, and pass the check; every `[unverified]` claim is checked or cut. The Overview, Adversarial review and Decisions log are current. Every tab is published in the Claude Doc.
-- About a dozen open questions remain in the tabs, each waiting on an outside input.
+- All twelve subsystem tabs are v4, consistent, and pass the check; the Overview, Adversarial review and Decisions log are current; every tab is published in the Claude Doc.
+- A few open questions remain in the tabs, each waiting on an outside input (counsel's opinions, partner agreements).
 - The repository is public at github.com/JoziGila/crucible (`origin`). Commit with the personal identity already configured.
 
-## Plan for round 4
+## Next: phase 0
 
-Decided 2026-10-12: one final review-and-fix pass before phase 0. The spec must have every feature needed to surpass the incumbents (NX, CATIA, Creo, SolidWorks, Fusion, Onshape, Ansys, Abaqus, COMSOL, Altium, KiCad, Mastercam, hyperMILL, Teamcenter, Windchill) and the AI-built clones, be consistent and elegantly designed (design choices beyond the current spec are welcome), be implemented entirely in Rust, and read well for humans.
-
-Founder directions for round 4 (2026-10-12): agents author designs and nobody models by hand, so the human UI is a viewer first: fast, beautiful inspection of geometry and results, review of agent work, and presentation output (photoreal renders, animations, exploded views, simulation visuals, shareable web views, generated decks and reports); people steer by pointing, marking up and asking. The polish reference is "Anatomy" (github.com/wheresryan22/anatomy, MIT; read its `SKILL.md` and `references/craft.md`): editorial serif typography on a calm canvas, fine-line isometric technical drawings with labelled callouts, real 3D motion with moving parts you can rotate and inspect, and physically convincing effects (fire, fluid, plasma) from shaders; Crucible delivers that level through its own Rust renderer, applied to real engineering geometry and simulation results. Reverse engineering (REA) is for insight only: study how incumbents work to design something far better from the literature, never copy code.
-
-1. **Third review.** Nine reviewers on `docs/review/brief.md`: R13 physics, R14 geometry, R15 architecture and elegance, R16 engineering practice, R17 security and legal, R18 feasibility and the Rust implementation, R19 competitive parity for design, manufacturing and PLM, R20 competitive parity for simulation and electronics, R21 editorial (human reading). Then `python3 docs/tools/findings.py`.
-2. **Contract v7** rules on findings that target CONTRACT, and the contract itself gets an editorial pass.
-3. **Packets and one revision per tab** on `docs/revision/brief.md`, including an editorial polish of the whole tab.
-4. **Audited consistency pass**, then the summary tabs (Overview, Adversarial review, Decisions log), publishing, and the tag `round-4`.
-5. **Then phase 0** starts in this repository; outside inputs (counsel, partner agreements) proceed in parallel.
+Phase 0 builds the foundations that contract 13.1's phase 0 gate names (determinism suite, units, kernel IR v0, interface-first oracle crates) by the agent roles of 13.2: the oracle role writes contract crates and oracles first, builders implement, the verifier attacks. Outside inputs (counsel, name clearance, ISO's answer on STEP schemas, GP2's print bureau) proceed in parallel. A spec change after round 4 goes through a contract change request and a ruling, never a silent edit.
 
 ## Running revisions with subagents
 
@@ -56,6 +49,6 @@ git diff round-1 -- docs/spec/02-anvil.md                                 # what
 
 ## Commits
 
-- One commit per tab revision: `<TAB> v2: revise against contract v4.x and <n> review findings`. The body lists declined findings with reasons, decisions added and revised, and the word count.
+- One commit per tab revision: `<TAB> v<n>: revise against contract v<x> and <n> review findings`. The body lists declined findings with reasons, decisions added and revised, and the word count.
 - Contract commits: `Contract v<x>: <what was ruled>`.
 - Push each commit to `origin` after the check passes. Never rewrite published history.

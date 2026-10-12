@@ -28,13 +28,13 @@ And in the darkness bind them.
 </p>
 
 > [!NOTE]
-> Crucible is being specified in the open, in full detail, before it is built. This repository holds the binding architecture contract, twelve subsystem specs and a six-reviewer adversarial review. The Rust code will grow beside `docs/`, built against that spec. Nothing runs yet.
+> Crucible is being specified in the open, in full detail, before it is built. This repository holds the binding architecture contract, twelve subsystem specs and three adversarial reviews by twenty-one reviewers. The Rust code will grow beside `docs/`, built against that spec. Nothing runs yet.
 
 ## The idea
 
 A physical product today lives in separate tools for CAD, simulation, CAM, electronics and PLM, joined by file exports and handoffs. Crucible puts the whole product in **one typed program**. Geometry, physics, manufacturing data and the bill of materials are all computed from that program, so one edit reaches the stress check, the drawing, the toolpath and the BOM in the same evaluation.
 
-- **One model, three editors.** The visual editor, the code editor and AI agents edit the same program. Nothing exists only in the GUI.
+- **Agents author, people steer.** Agents write and check the design; people point, mark up, review and present in a fast viewer with photoreal renders, exploded views and reports bound to the live model. Nothing exists only in the GUI.
 - **The compiler checks physics.** Units, dimensions and tolerances are types. Every approximation carries its error, in a stated norm.
 - **Every claim has an oracle.** No capability ships without a machine-checkable test that agents cannot edit.
 - **Determinism is a feature.** Same inputs and versions give identical outputs. Nothing depends on clocks, randomness or thread order.
@@ -59,11 +59,11 @@ use std::materials::alu_6061_t6
 use std::sim::quick::static_stress
 
 /// L-bracket with a stiffening web.
-#[feature(category: "Structure", icon: "bracket")]
+#[toolbox(category: "Structure", icon: "bracket")]
 pub feature bracket(
     #[ui(step: 5mm)]
     width: Length in 20mm..=400mm = 60mm,
-    thickness: Length = 4mm ± 0.1mm,
+    thickness: Length = 6mm ± 0.1mm,
     load: Force = 1.2kN,
 ) -> Part {
     let outline = rect(width, 40mm)
@@ -73,11 +73,12 @@ pub feature bracket(
     let solid = body |> fillet(body.edges(new), 2mm)
     let p = part(solid, name: "Bracket").material(alu_6061_t6)
     let clamp = base.face(role: start_cap)
-    let study = static_stress(p, fixed: clamp, force: load, on: web.face(role: end_cap))
-    let stress = study.von_mises.max(over: p.away_from([clamp, web.face(role: end_cap)], 2 * thickness))
-    p.require(stress < 0.6 * p.material.yield_strength(at: 20degC))
+    let tip = web.face(role: end_cap)
+    let study = static_stress(p, fixed: clamp, force: load * dir(-y), on: tip)
+    let stress = study.von_mises.max(over: study.regular())
+    p.require(stress < 0.6 * p.material.yield_strength(at: 20degC), name: "static_margin")
 }
-// width + load  →  error ING3001: cannot add Length and Force
+// width + load  →  error ing/3001: cannot add Length and Force
 ```
 
 <p align="center">
@@ -88,7 +89,7 @@ The `#[ui(...)]` annotation and the `20mm..=400mm` range give the visual editor 
 
 ```text
 width + load
-error ING3001: cannot add Length and Force
+error ing/3001: cannot add Length and Force
 ```
 
 The stress check reads a regularized maximum away from the clamp and the loaded face, where stress can be singular. It returns **Pass**, **Fail** or **Undecided**, with its error bound, and never a silent guess.
@@ -104,7 +105,7 @@ The stress check reads a regularized maximum away from the clamp and the loaded 
 | **Ingot** | The design language: pure, strict and statically typed, with units and tolerances as types |
 | **Anvil** | The geometry kernel: exact B-rep, meshes and implicit shapes |
 | **Flux** | The physics engine: weak forms compiled through one kernel IR, with error budgets (working name) |
-| **Kiln** | Incremental evaluation over a content-addressed cache |
+| **Kiln** | Incremental evaluation over a content-addressed cache, with history in plain Git: clone it, branch it, open pull requests on GitHub |
 | **`api`** | One API for the UI, agents, the CLI and CI, served over MCP and native SDKs |
 
 Agents work on branches and deliver **Proposals**: a branch, a rationale and a CI report. Anything that leaves Crucible, such as a release, an export or a print job, is prepared as a plan and runs only after a person approves that exact plan. Crucible sends programs to machines but never starts a machine tool itself.
@@ -134,7 +135,7 @@ The most valuable contribution right now is a hard look at the spec.
 - **Editing a spec?** Run the check before opening a pull request:
 
   ```bash
-  python3 docs/tools/check.py docs/spec/06-mechanical.md --base round-1
+  python3 docs/tools/check.py docs/spec/06-mechanical.md --base round-3
   ```
 
 - **Sign off your commits** under the [Developer Certificate of Origin](https://developercertificate.org/) with `git commit -s`.

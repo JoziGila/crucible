@@ -27,35 +27,35 @@ The published view is the Claude Doc [Crucible — Platform Spec](https://claude
 
 ## Status
 
-Round 3 is closed (tag `round-3`). Contract v6.1 is binding. Every subsystem tab is v3: revised against both adversarial reviews, consistent with the other tabs, with every `[unverified]` claim checked or cut, and published in the Claude Doc. About a dozen open questions remain, each waiting on an outside input such as counsel's opinion, the first calibration build or later-phase data.
+Round 4 is closed (tag `round-4`). Contract v7.4 is binding. Every subsystem tab is v4: revised against all three adversarial reviews, held to the parity floor of contract 13.4, consistent with the other tabs, written teach-first for a human reader, and published in the Claude Doc. Phase 0 starts next in this repository. A few open questions remain in the tabs, each waiting on an outside input such as counsel's opinions.
 
-| Tab | Version | Words excluding Sources | Findings (Critical): first review · second review | In the doc |
+| Tab | Version | Words of prose | Findings (Critical): first · second · third review | In the doc |
 | --- | --- | --- | --- | --- |
-| Overview | v3 | 7,000 | n/a | v3 |
-| ING | v3 | 19,900 | 47 (6) · 47 (5) | v3 |
-| ANV | v3 | 19,900 | 61 (8) · 55 (4) | v3 |
-| FLX | v3 | 18,000 | 66 (7) · 58 (4) | v3 |
-| COV | v3 | 17,700 | 33 (5) · 37 (1) | v3 |
-| KLN | v3 | 18,000 | 79 (12) · 96 (6) | v3 |
-| MEC | v3 | 18,000 | 45 (2) · 64 (2) | v3 |
-| MFG | v3 | 17,900 | 41 (3) · 56 (3) | v3 |
-| ELX | v3 | 18,000 | 36 (4) · 23 (1) | v3 |
-| AGT | v3 | 17,900 | 42 (7) · 56 (7) | v3 |
-| UIX | v3 | 17,900 | 42 (3) · 32 (1) | v3 |
-| ECO | v3 | 17,700 | 48 (1) · 51 (2) | v3 |
-| PLT | v3 | 17,800 | 61 (2) · 58 (3) | v3 |
-| Adversarial review | v2 | 10,700 | n/a | v2 |
-| Decisions log | v2 | 441 decisions | n/a | v2 |
+| Overview | v4 | 6,646 | n/a | v4 |
+| ING | v4 | 14,339 | 47 (6) · 47 (5) · 42 (5) | v4 |
+| ANV | v4 | 15,770 | 61 (8) · 55 (4) · 63 (6) | v4 |
+| FLX | v4 | 14,653 | 66 (7) · 58 (4) · 82 (7) | v4 |
+| COV | v4 | 11,902 | 33 (5) · 37 (1) · 53 (5) | v4 |
+| KLN | v4 | 14,597 | 79 (12) · 96 (6) · 99 (11) | v4 |
+| MEC | v4 | 13,896 | 45 (2) · 64 (2) · 80 (5) | v4 |
+| MFG | v4 | 12,247 | 41 (3) · 56 (3) · 46 (3) | v4 |
+| ELX | v4 | 12,926 | 36 (4) · 23 (1) · 35 (0) | v4 |
+| AGT | v4 | 12,816 | 42 (7) · 56 (7) · 53 (5) | v4 |
+| UIX | v4 | 14,301 | 42 (3) · 32 (1) · 54 (6) | v4 |
+| ECO | v4 | 13,105 | 48 (1) · 51 (2) · 40 (0) | v4 |
+| PLT | v4 | 13,675 | 61 (2) · 58 (3) · 51 (6) | v4 |
+| Adversarial review | v3 | 16,700 with tables | n/a | v3 |
+| Decisions log | v3 | 506 decisions | n/a | v3 |
 
-A finding can target several tabs, so the columns sum to more than the 295 and 278 findings.
+Words of prose exclude tables, Reference and Sources (contract 11). A finding can target several tabs, so the columns sum to more than the 295, 278 and 312 findings.
 
 ## Layout
 
 ```
 contract.md              binding architecture contract (v7.4)
 spec/                    the doc's tabs, one file each; diagrams/ holds widget sources
-review/                  twelve adversarial reviews (two rounds of six), the current brief and findings.json
-revision/                round 2 brief, one findings packet per tab, publishing notes, work in progress
+review/                  twenty-one adversarial reviews (rounds of six, six and nine), the current brief and findings.json
+revision/                revision brief, one findings packet per tab, consistency brief, software digest, publishing notes
 tools/                   check.py (spec check), extract.py (cross-tab extracts), findings.py
 ```
 
@@ -69,13 +69,15 @@ tools/                   check.py (spec check), extract.py (cross-tab extracts),
 | `round-2` | Contract v5, all twelve tabs revised and consistent, the overview, the adversarial review and the decisions log, all published |
 | `second-review` | Second adversarial review of the v2 spec: 278 findings, 16 of them Critical |
 | `round-3` | Contract v6.1 with an agent-built program, all twelve tabs at v3 and consistent, every claim verified or cut, the summary tabs updated, all published |
+| `third-review` | Third adversarial review of the v3 spec by nine reviewers, including competitive parity and human readability: 312 findings, 18 of them Critical |
+| `round-4` | Contract v7.4 (agents author and people view, parity floor, clean-room insight protocol, Git-native history), all twelve tabs at v4 and consistent, the summary tabs rewritten, all published |
 
 `git show round-1:docs/spec/<file>.md` prints a tab's first draft.
 
 ## Tools
 
 ```
-python3 docs/tools/check.py docs/spec/06-mechanical.md --base round-1   # contract rules, skeleton, oracles, decisions, cuts
+python3 docs/tools/check.py docs/spec/06-mechanical.md --base round-3   # contract rules, skeleton, oracles, decisions, cuts
 python3 docs/tools/check.py --all -q                                      # every tab
 python3 docs/tools/extract.py                                             # decisions, change requests, interfaces, open questions
 python3 docs/tools/findings.py                                            # re-parse docs/review/ into docs/review/findings.json
